@@ -1,0 +1,7 @@
+/build/
+/dist/
+/artifacts/
+/CMakeUserPresets.json
+/.qt/
+*.user
+.env

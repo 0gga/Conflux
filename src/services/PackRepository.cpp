@@ -1,0 +1,146 @@
+#include "PackRepository.h"
+#include <QDir>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QProcess>
+#include <QProcessEnvironment>
+#include <QRegularExpression>
+#include <QSaveFile>
+#include <QUuid>
+
+namespace studio {
+static QString git(const QString& path, const QStringList& arguments, bool* ok = nullptr) {
+    QProcess process;
+    process.setWorkingDirectory(path);
+    process.setProgram("git");
+    // No shell interpolation, no interactive credential prompts in a worker.
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.insert("GIT_TERMINAL_PROMPT", "0");
+    process.setProcessEnvironment(environment);
+    process.setArguments(arguments);
+    process.start();
+    if (!process.waitForStarted(3000)) {
+        if (ok) *ok = false;
+        return "Git could not start. Install Git and restart the app.";
+    }
+    if (!process.waitForFinished(15000)) {
+        process.kill(); process.waitForFinished(3000);
+        if (ok) *ok = false;
+        return "Git timed out.";
+    }
+    const bool success = process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
+    if (ok) *ok = success;
+    return QString::fromUtf8(success ? process.readAllStandardOutput() : process.readAllStandardError()).trimmed();
+}
+QString PackRepository::slug(const QString& name) {
+    auto value = name.trimmed().toLower();
+    value.replace(QRegularExpression("[^a-z0-9]+"), "-");
+    value.remove(QRegularExpression("^-+|-+$"));
+    if (value.isEmpty()) value = "modpack";
+    // Avoid Windows device names as directory names.
+    if (QRegularExpression("^(con|prn|aux|nul|com[1-9]|lpt[1-9])$").match(value).hasMatch()) value.prepend("pack-");
+    return value.left(72);
+}
+RepositoryResult PackRepository::write(const QString& path, const QJsonObject& manifest) {
+    QSaveFile file(QDir(path).filePath("pack.json"));
+    const auto bytes = QJsonDocument(manifest).toJson(QJsonDocument::Indented);
+    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
+        return {false, "Could not save pack.json: " + file.errorString(), path};
+    return inspect(path);
+}
+RepositoryResult PackRepository::create(const QString& root, const QString& name, const QString& game, const QString& loader) {
+    if (name.trimmed().isEmpty() || !QRegularExpression("^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?$").match(game).hasMatch()
+        || !QStringList{"fabric", "forge", "neoforge", "quilt", "vanilla"}.contains(loader))
+        return {false, "Enter a pack name, a Minecraft release (for example 1.21.1), and a supported loader."};
+    QDir parent(root);
+    if (!parent.exists() && !QDir().mkpath(root)) return {false, "Could not create the packs directory."};
+    const auto directory = slug(name);
+    const auto path = parent.absoluteFilePath(directory);
+    // mkdir is exclusive: a collision never overwrites an existing pack or arbitrary directory.
+    if (!parent.mkdir(directory)) return {false, "A folder with this pack name already exists. Choose another name.", path};
+    bool ok = false;
+    const auto output = git(path, {"init", "--initial-branch=main"}, &ok);
+    if (!ok) return {false, output, path};
+    QFile ignore(QDir(path).filePath(".gitignore"));
+    if (!ignore.open(QIODevice::WriteOnly) || ignore.write("mods/\n.minecraft/\nworlds/\nsaves/\nlogs/\ncache/\n.env\n*.jar\n") < 0)
+        return {false, "Could not create the pack's .gitignore.", path};
+    ignore.close();
+    return write(path, {{"schemaVersion", 1}, {"id", QUuid::createUuid().toString(QUuid::WithoutBraces)},
+        {"name", name.trimmed()}, {"minecraft", game}, {"loader", loader},
+        {"loaderVersion", QJsonValue::Null}, {"mods", QJsonArray{}}});
+}
+RepositoryResult PackRepository::inspect(const QString& path) {
+    QFile file(QDir(path).filePath("pack.json"));
+    if (!file.open(QIODevice::ReadOnly)) return {false, "This folder does not contain a readable pack.json.", path};
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(file.readAll(), &error);
+    const auto manifest = document.object();
+    if (error.error != QJsonParseError::NoError || manifest.value("schemaVersion").toInt() != 1
+        || manifest.value("name").toString().isEmpty() || !manifest.value("mods").isArray())
+        return {false, "The pack manifest is invalid or uses an unsupported schema.", path};
+    if (!QFileInfo::exists(QDir(path).filePath(".git")))
+        return {false, "The pack folder is not a Git repository.", path};
+    bool ok;
+    const auto status = git(path, {"status", "--short"}, &ok);
+    if (!ok) return {false, status, path};
+    bool hasHead;
+    git(path, {"rev-parse", "--verify", "HEAD"}, &hasHead);
+    const auto history = hasHead ? git(path, {"log", "-8", "--format=%h  %s"}) : "No saved changes yet. Your first save creates the initial commit.";
+    return {true, {}, path, status, history, manifest};
+}
+RepositoryResult PackRepository::pin(const QString& path, const QJsonObject& reference) {
+    auto current = inspect(path);
+    if (!current.ok) return current;
+    const auto provider = reference.value("provider").toString();
+    if (!QStringList{"modrinth", "curseforge"}.contains(provider) || reference.value("projectId").toString().isEmpty()
+        || reference.value("id").toString().isEmpty()
+        || !QRegularExpression("^[a-fA-F0-9]{40}$").match(reference.value("sha1").toString()).hasMatch()
+        || !reference.value("url").toString().startsWith("https://"))
+        return {false, "This release has no verified downloadable file reference.", path};
+    if (!reference.value("gameVersions").toArray().contains(current.manifest.value("minecraft"))
+        || !reference.value("loaders").toArray().contains(current.manifest.value("loader")))
+        return {false, "This release does not match the pack's Minecraft version and loader.", path};
+    auto mods = current.manifest.value("mods").toArray();
+    const auto projectId = reference.value("projectId").toString();
+    for (qsizetype i = mods.size(); i > 0; --i) {
+        const auto mod = mods.at(i - 1).toObject();
+        // Compare all mapped project identities to prevent cross-provider duplicate pins.
+        const auto ids = reference.value("projectSourceIds").toObject();
+        if ((mod.value("provider").toString() == provider && mod.value("projectId").toString() == projectId)
+            || ids.value(mod.value("provider").toString()).toString() == mod.value("projectId").toString()) mods.removeAt(i - 1);
+    }
+    mods.append(reference);
+    current.manifest.insert("mods", mods);
+    return write(path, current.manifest);
+}
+RepositoryResult PackRepository::remove(const QString& path, const QString& provider, const QString& projectId) {
+    auto current = inspect(path);
+    if (!current.ok) return current;
+    auto mods = current.manifest.value("mods").toArray();
+    for (qsizetype i = mods.size(); i > 0; --i) {
+        const auto mod = mods.at(i - 1).toObject();
+        if (mod.value("provider").toString() == provider && mod.value("projectId").toString() == projectId) mods.removeAt(i - 1);
+    }
+    current.manifest.insert("mods", mods);
+    return write(path, current.manifest);
+}
+RepositoryResult PackRepository::commit(const QString& path, const QString& message) {
+    auto current = inspect(path);
+    if (!current.ok) return current;
+    if (message.trimmed().isEmpty()) return {false, "Describe this change before saving.", path};
+    bool ok;
+    const auto staged = git(path, {"diff", "--cached", "--name-only", "-z"}, &ok);
+    if (!ok) return {false, staged, path};
+    for (const auto& file : staged.split(QChar::Null, Qt::SkipEmptyParts)) {
+        if (file != "pack.json" && file != ".gitignore")
+            return {false, "Other files are already staged in this repository. Review them in your Git client before saving this pack.", path};
+    }
+    // Only stage the files this foundation owns; never stage arbitrary files or credentials.
+    auto output = git(path, {"add", "--", "pack.json", ".gitignore"}, &ok);
+    if (!ok) return {false, output, path};
+    output = git(path, {"commit", "-m", message.trimmed()}, &ok);
+    if (!ok) return {false, output, path};
+    return inspect(path);
+}
+}

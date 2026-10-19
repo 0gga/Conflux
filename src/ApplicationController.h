@@ -1,0 +1,92 @@
+#pragma once
+#include "services/CatalogueClient.h"
+#include "services/PackRepository.h"
+#include <QObject>
+#include <QSettings>
+#include <QVariantList>
+#include <functional>
+
+namespace studio {
+class ApplicationController : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(QVariantList installations READ installations NOTIFY stateChanged)
+    Q_PROPERTY(QVariantList packs READ packs NOTIFY stateChanged)
+    Q_PROPERTY(QVariantList projects READ projects NOTIFY stateChanged)
+    Q_PROPERTY(QVariantMap selectedProject READ selectedProject NOTIFY stateChanged)
+    Q_PROPERTY(QVariantList releases READ releases NOTIFY stateChanged)
+    Q_PROPERTY(QString description READ description NOTIFY stateChanged)
+    Q_PROPERTY(QStringList gallery READ gallery NOTIFY stateChanged)
+    Q_PROPERTY(QVariantMap activePack READ activePack NOTIFY stateChanged)
+    Q_PROPERTY(QVariantList activeMods READ activeMods NOTIFY stateChanged)
+    Q_PROPERTY(QString gitStatus READ gitStatus NOTIFY stateChanged)
+    Q_PROPERTY(QString history READ history NOTIFY stateChanged)
+    Q_PROPERTY(QString notice READ notice NOTIFY stateChanged)
+    Q_PROPERTY(QString catalogueNotice READ catalogueNotice NOTIFY stateChanged)
+    Q_PROPERTY(QString detailNotice READ detailNotice NOTIFY stateChanged)
+    Q_PROPERTY(bool libraryBusy READ libraryBusy NOTIFY stateChanged)
+    Q_PROPERTY(bool catalogueBusy READ catalogueBusy NOTIFY stateChanged)
+    Q_PROPERTY(bool detailBusy READ detailBusy NOTIFY stateChanged)
+    Q_PROPERTY(bool repositoryBusy READ repositoryBusy NOTIFY stateChanged)
+    Q_PROPERTY(bool curseforgeEnabled READ curseforgeEnabled NOTIFY stateChanged)
+    Q_PROPERTY(QString modrinthRoot READ modrinthRoot NOTIFY stateChanged)
+    Q_PROPERTY(QString curseforgeRoot READ curseforgeRoot NOTIFY stateChanged)
+    Q_PROPERTY(QString packsRoot READ packsRoot CONSTANT)
+public:
+    explicit ApplicationController(QObject* parent = nullptr, QString packsRootOverride = {});
+    QVariantList installations() const { return m_installations; }
+    QVariantList packs() const { return m_packs; }
+    QVariantList projects() const { return m_projects; }
+    QVariantMap selectedProject() const { return m_selectedProject; }
+    QVariantList releases() const { return m_releases; }
+    QString description() const { return m_description; }
+    QStringList gallery() const { return m_gallery; }
+    QVariantMap activePack() const { return m_activePack; }
+    QVariantList activeMods() const { return m_activeMods; }
+    QString gitStatus() const { return m_gitStatus; }
+    QString history() const { return m_history; }
+    QString notice() const { return m_notice; }
+    QString catalogueNotice() const { return m_catalogueNotice; }
+    QString detailNotice() const { return m_detailNotice; }
+    bool libraryBusy() const { return m_libraryBusy; }
+    bool catalogueBusy() const { return m_catalogueBusy; }
+    bool detailBusy() const { return m_detailBusy; }
+    bool repositoryBusy() const { return m_repositoryBusy; }
+    bool curseforgeEnabled() const { return m_client.hasCurseforgeKey(); }
+    QString modrinthRoot() const;
+    QString curseforgeRoot() const;
+    QString packsRoot() const;
+    Q_INVOKABLE void refreshLibrary();
+    Q_INVOKABLE void search(const QString& query, const QString& source, const QString& game, const QString& loader);
+    Q_INVOKABLE void selectProject(int index);
+    Q_INVOKABLE void closeProject();
+    Q_INVOKABLE void createPack(const QString& name, const QString& game, const QString& loader);
+    Q_INVOKABLE void openPack(const QString& path);
+    Q_INVOKABLE void pinRelease(int index);
+    Q_INVOKABLE void removeMod(const QString& provider, const QString& projectId);
+    Q_INVOKABLE void saveChanges(const QString& message);
+    Q_INVOKABLE void setInstallationRoots(const QString& modrinth, const QString& curseforge);
+    Q_INVOKABLE void configureCurseforge(const QString& key);
+    Q_INVOKABLE void openFolder(const QString& path);
+    Q_INVOKABLE void openWeb(const QString& url);
+    Q_INVOKABLE void clearNotice();
+signals:
+    void stateChanged();
+    void packOpened();
+private:
+    CatalogueClient m_client;
+    QSettings m_settings;
+    QString m_packsRootOverride;
+    QVariantList m_installations, m_packs, m_projects, m_releases, m_activeMods;
+    QVariantMap m_selectedProject, m_activePack;
+    QVector<Project> m_projectData;
+    QVector<Release> m_releaseData;
+    QHash<QString, QString> m_identities;
+    QString m_description, m_history, m_gitStatus, m_notice, m_catalogueNotice, m_detailNotice;
+    QStringList m_gallery;
+    QString m_searchGame, m_searchLoader;
+    int m_searchGeneration = 0, m_detailGeneration = 0;
+    bool m_libraryBusy = false, m_catalogueBusy = false, m_detailBusy = false, m_repositoryBusy = false;
+    void refreshPacks();
+    void runRepository(std::function<RepositoryResult()> operation, bool navigate = false);
+};
+}

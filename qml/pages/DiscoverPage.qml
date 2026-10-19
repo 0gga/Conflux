@@ -1,0 +1,175 @@
+pragma ComponentBehavior: Bound
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import "../components"
+
+Item {
+    id: root
+    required property var app
+    property string source: "merged"
+    signal createRequested()
+    signal workspaceRequested()
+    function runSearch() { app.search(query.text, source, game.text, loader.currentIndex === 0 ? "" : loader.currentText) }
+    function focusSearch() { query.forceActiveFocus() }
+    Component.onCompleted: runSearch()
+    Connections {
+        target: root.app
+        function onPackOpened() {
+            game.text = root.app.activePack.minecraft || ""
+            loader.currentIndex = Math.max(0, loader.model.indexOf(root.app.activePack.loader))
+            root.runSearch()
+        }
+    }
+    Timer { id: debounce; interval: 450; onTriggered: root.runSearch() }
+    ColumnLayout {
+        anchors.fill: parent; anchors.margins: 32; spacing: 20
+        RowLayout {
+            Layout.fillWidth: true
+            ColumnLayout {
+                spacing: 7
+                Text { text: "Find your next addition."; color: "#eef4ef"; font.pixelSize: 30; font.weight: Font.DemiBold; font.letterSpacing: -0.7 }
+                Text { text: "One catalogue. More possibilities."; color: "#96ac9e"; font.pixelSize: 14 }
+            }
+            Item { Layout.fillWidth: true }
+            Text { visible: !!root.app.activePack.name; text: "Adding to  " + (root.app.activePack.name || ""); color: "#9cceb0"; font.pixelSize: 12 }
+        }
+        RowLayout {
+            Layout.fillWidth: true; spacing: 12
+            TextField {
+                id: query; objectName: "modSearchInput"; Layout.fillWidth: true; implicitHeight: 44
+                placeholderText: "Search mods, discover something new…"; font.pixelSize: 14; leftPadding: 16
+                onTextEdited: debounce.restart(); onAccepted: root.runSearch()
+                background: Rectangle { color: "#1c2820"; border.color: query.activeFocus ? "#73c796" : "#34483a"; radius: 9 }
+            }
+            TextField {
+                id: game; Layout.preferredWidth: 130; implicitHeight: 44; placeholderText: "Any MC version"
+                text: root.app.activePack.minecraft || ""; onTextEdited: debounce.restart(); onAccepted: root.runSearch()
+                background: Rectangle { color: "#1c2820"; border.color: "#34483a"; radius: 9 }
+            }
+            ComboBox { id: loader; Layout.preferredWidth: 135; implicitHeight: 44; model: ["Any loader", "fabric", "neoforge", "forge", "quilt"]; onActivated: root.runSearch() }
+            ActionButton { text: "Search"; primary: true; onClicked: root.runSearch() }
+        }
+        RowLayout {
+            Layout.fillWidth: true; spacing: 7
+            Repeater {
+                model: [{key:"merged",label:"All sources"}, {key:"modrinth",label:"Modrinth"}, {key:"curseforge",label:"CurseForge"}]
+                delegate: ActionButton {
+                    required property var modelData
+                    text: modelData.label; subtle: root.source !== modelData.key
+                    onClicked: { root.source = modelData.key; root.runSearch() }
+                }
+            }
+            Item { Layout.fillWidth: true }
+            BusyIndicator { running: root.app.catalogueBusy; visible: running; Layout.preferredWidth: 24; Layout.preferredHeight: 24 }
+            Text { text: root.app.catalogueBusy ? "Searching…" : root.app.projects.length + " results"; color: "#8ca594"; font.pixelSize: 12 }
+        }
+        Text { visible: root.app.catalogueNotice.length > 0; Layout.fillWidth: true; text: root.app.catalogueNotice; wrapMode: Text.WordWrap; color: "#c9b991"; font.pixelSize: 12 }
+        RowLayout {
+            Layout.fillWidth: true; Layout.fillHeight: true; spacing: 20
+            Item {
+                Layout.fillWidth: true; Layout.fillHeight: true
+                ListView {
+                    id: results
+                    anchors.fill: parent; clip: true; spacing: 10; model: root.app.projects
+                    ScrollBar.vertical: ScrollBar {}
+                    delegate: Rectangle {
+                        id: resultCard
+                        required property var modelData
+                        required property int index
+                        width: results.width - 12; height: root.app.selectedProject.id ? 124 : 116; radius: 10
+                        color: root.app.selectedProject.id === modelData.id && root.app.selectedProject.provider === modelData.provider ? "#233c2b" : (resultMouse.containsMouse ? "#223127" : "#1a251e")
+                        border.color: root.app.selectedProject.id === modelData.id && root.app.selectedProject.provider === modelData.provider ? "#609d74" : "#2f4135"
+                        RowLayout {
+                            anchors.fill: parent; anchors.margins: 16; spacing: 16
+                            Rectangle {
+                                Layout.alignment: Qt.AlignTop; implicitWidth: 52; implicitHeight: 52; radius: 11; color: "#304a37"; clip: true
+                                Text { anchors.centerIn: parent; text: resultCard.modelData.title.substring(0,1); color: "#c3e5ce"; font.pixelSize: 25; font.weight: Font.DemiBold }
+                                Image { anchors.fill: parent; source: resultCard.modelData.icon; fillMode: Image.PreserveAspectFit; asynchronous: true; visible: status === Image.Ready }
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true; Layout.fillHeight: true; spacing: 5
+                                RowLayout {
+                                    Layout.fillWidth: true; spacing: 10
+                                    Text { text: resultCard.modelData.title; Layout.fillWidth: true; elide: Text.ElideRight; color: "#e5efe8"; font.pixelSize: 16; font.weight: Font.DemiBold }
+                                    Text { visible: !root.app.selectedProject.id; text: "↓ " + resultCard.modelData.downloads; color: "#7e9e89"; font.pixelSize: 11 }
+                                }
+                                Text { text: "by " + resultCard.modelData.author; color: "#86a693"; font.pixelSize: 11 }
+                                Text { Layout.fillWidth: true; Layout.fillHeight: true; text: resultCard.modelData.summary; color: "#a9bbb0"; font.pixelSize: 12; wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight }
+                                RowLayout {
+                                    spacing: 6
+                                    Repeater { model: resultCard.modelData.sources; delegate: SourceBadge { required property string modelData; source: modelData } }
+                                }
+                            }
+                        }
+                        MouseArea { id: resultMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.app.selectProject(resultCard.index) }
+                    }
+                }
+                EmptyState {
+                    anchors.centerIn: parent; width: parent.width - 40
+                    visible: !root.app.catalogueBusy && root.app.projects.length === 0
+                    symbol: "⌕"; title: "Nothing here yet"
+                    message: root.source === "curseforge" && !root.app.curseforgeEnabled ? "Add your approved CurseForge API key in Settings to search this source." : "Try another search, Minecraft version, or loader."
+                }
+            }
+            Rectangle {
+                visible: !!root.app.selectedProject.id
+                Layout.preferredWidth: 390; Layout.fillHeight: true; radius: 12; color: "#1a251e"; border.color: "#3a5342"
+                ColumnLayout {
+                    anchors.fill: parent; anchors.margins: 20; spacing: 14
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text { text: "PROJECT"; color: "#85a690"; font.pixelSize: 10; font.letterSpacing: 1.6 }
+                        Item { Layout.fillWidth: true }
+                        ActionButton { text: "Close  ×"; subtle: true; implicitHeight: 28; onClicked: root.app.closeProject() }
+                    }
+                    Text { Layout.fillWidth: true; text: root.app.selectedProject.title || ""; color: "#eaf5ed"; font.pixelSize: 25; font.weight: Font.DemiBold; wrapMode: Text.WordWrap }
+                    RowLayout {
+                        Repeater { model: root.app.selectedProject.sources || []; delegate: SourceBadge { required property string modelData; source: modelData } }
+                        Item { Layout.fillWidth: true }
+                        ActionButton { text: "View page ↗"; subtle: true; implicitHeight: 30; onClicked: root.app.openWeb(root.app.selectedProject.url) }
+                    }
+                    BusyIndicator { visible: root.app.detailBusy; running: visible; Layout.alignment: Qt.AlignHCenter }
+                    ScrollView {
+                        id: detailScroll; Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+                        ColumnLayout {
+                            width: detailScroll.availableWidth; spacing: 16
+                            Text { Layout.fillWidth: true; text: root.app.selectedProject.summary || ""; color: "#b3c8b9"; wrapMode: Text.WordWrap; font.pixelSize: 13; lineHeight: 1.3 }
+                            Text { visible: root.app.detailNotice.length > 0; Layout.fillWidth: true; text: root.app.detailNotice; color: "#e3b288"; font.pixelSize: 12; wrapMode: Text.WordWrap }
+                            Text { text: "RELEASES"; color: "#8caa96"; font.pixelSize: 10; font.letterSpacing: 1.8; Layout.topMargin: 8 }
+                            Text { Layout.fillWidth: true; text: root.app.activePack.name ? "Pin a release to " + root.app.activePack.name + "." : "Create or open a modpack to pin releases."; color: "#92ad9c"; font.pixelSize: 12; wrapMode: Text.WordWrap }
+                            Repeater {
+                                model: root.app.releases.slice(0, 30)
+                                delegate: Rectangle {
+                                    id: releaseRow
+                                    required property var modelData
+                                    required property int index
+                                    Layout.fillWidth: true; implicitHeight: 88; color: "#202f25"; border.color: "#374d3e"; radius: 8
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.margins: 12; spacing: 8
+                                        ColumnLayout {
+                                            Layout.fillWidth: true; spacing: 6
+                                            Text { Layout.fillWidth: true; text: releaseRow.modelData.version; color: "#dcece1"; elide: Text.ElideRight; font.pixelSize: 13; font.weight: Font.DemiBold }
+                                            Text { Layout.fillWidth: true; text: releaseRow.modelData.loaders.join(" / ") + "  ·  " + releaseRow.modelData.gameVersions.slice(-3).join(", "); color: "#90ae9a"; font.pixelSize: 10; elide: Text.ElideRight }
+                                            Text { text: releaseRow.modelData.published + (releaseRow.modelData.dependencies.length ? "  ·  " + releaseRow.modelData.dependencies.length + " required dependencies" : ""); color: "#789a85"; font.pixelSize: 10 }
+                                        }
+                                        ActionButton { text: "Pin +"; implicitWidth: 58; enabled: !!root.app.activePack.name && !root.app.repositoryBusy && !!releaseRow.modelData.url; onClicked: root.app.pinRelease(releaseRow.index) }
+                                    }
+                                }
+                            }
+                            Text { visible: !root.app.detailBusy && root.app.releases.length === 0; text: "No releases match these filters."; color: "#a3b9ab"; font.pixelSize: 12 }
+                            Text { visible: root.app.releases.length > 30; text: "Showing the latest 30 releases. Narrow your filters to find another."; Layout.fillWidth: true; color: "#86a290"; font.pixelSize: 11; wrapMode: Text.WordWrap }
+                            Text { text: "ABOUT"; color: "#8caa96"; font.pixelSize: 10; font.letterSpacing: 1.8; Layout.topMargin: 8 }
+                            Text { Layout.fillWidth: true; text: root.app.description || "Description will appear here."; color: "#a9c0b1"; font.pixelSize: 12; wrapMode: Text.Wrap; lineHeight: 1.35; maximumLineCount: 60; elide: Text.ElideRight; textFormat: Text.PlainText }
+                            Text { visible: root.app.gallery.length > 0; text: "GALLERY"; color: "#8caa96"; font.pixelSize: 10; font.letterSpacing: 1.8 }
+                            Repeater { model: root.app.gallery.slice(0, 6); delegate: Image { required property string modelData; Layout.fillWidth: true; Layout.preferredHeight: 170; source: modelData; asynchronous: true; fillMode: Image.PreserveAspectFit } }
+                            Text { Layout.fillWidth: true; text: "Public comments are not available through the supported APIs."; color: "#799683"; font.pixelSize: 11; wrapMode: Text.WordWrap }
+                        }
+                    }
+                    ActionButton { visible: !root.app.activePack.name; Layout.fillWidth: true; text: "+ Create a modpack"; primary: true; onClicked: root.createRequested() }
+                    ActionButton { visible: !!root.app.activePack.name; Layout.fillWidth: true; text: "Open modpack  →"; onClicked: root.workspaceRequested() }
+                }
+            }
+        }
+    }
+}

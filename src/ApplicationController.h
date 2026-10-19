@@ -6,12 +6,20 @@
 #include <QSettings>
 #include <QVariantList>
 #include <functional>
+#include <memory>
 
 namespace studio {
 class ApplicationController : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantList installations READ installations NOTIFY stateChanged)
     Q_PROPERTY(QVariantList packs READ packs NOTIFY stateChanged)
+    Q_PROPERTY(QVariantList libraryPacks READ libraryPacks NOTIFY stateChanged)
+    Q_PROPERTY(int visiblePackCount READ visiblePackCount NOTIFY stateChanged)
+    Q_PROPERTY(int hiddenPackCount READ hiddenPackCount NOTIFY stateChanged)
+    Q_PROPERTY(QVariantList contentFiles READ contentFiles NOTIFY stateChanged)
+    Q_PROPERTY(QStringList diagnostics READ diagnostics NOTIFY stateChanged)
+    Q_PROPERTY(QString scanCoverage READ scanCoverage NOTIFY stateChanged)
+    Q_PROPERTY(bool contentBusy READ contentBusy NOTIFY stateChanged)
     Q_PROPERTY(QVariantList projects READ projects NOTIFY stateChanged)
     Q_PROPERTY(QVariantMap selectedProject READ selectedProject NOTIFY stateChanged)
     Q_PROPERTY(QVariantList releases READ releases NOTIFY stateChanged)
@@ -36,9 +44,16 @@ class ApplicationController : public QObject {
     Q_PROPERTY(QString curseforgeRoot READ curseforgeRoot NOTIFY stateChanged)
     Q_PROPERTY(QString packsRoot READ packsRoot CONSTANT)
 public:
-    explicit ApplicationController(QObject* parent = nullptr, QString packsRootOverride = {});
+    explicit ApplicationController(QObject* parent = nullptr, QString packsRootOverride = {}, QString settingsFileOverride = {});
     QVariantList installations() const { return m_installations; }
     QVariantList packs() const { return m_packs; }
+    QVariantList libraryPacks() const;
+    int visiblePackCount() const;
+    int hiddenPackCount() const;
+    QVariantList contentFiles() const { return m_contentFiles; }
+    QStringList diagnostics() const { return m_diagnostics; }
+    QString scanCoverage() const { return m_scanCoverage; }
+    bool contentBusy() const { return m_contentBusy; }
     QVariantList projects() const { return m_projects; }
     QVariantMap selectedProject() const { return m_selectedProject; }
     QVariantList releases() const { return m_releases; }
@@ -68,6 +83,10 @@ public:
     Q_INVOKABLE void closeProject();
     Q_INVOKABLE void createPack(const QString& name, const QString& game, const QString& loader);
     Q_INVOKABLE void openPack(const QString& path);
+    Q_INVOKABLE void setPackHidden(const QString& path, bool hidden);
+    Q_INVOKABLE void openLibraryPack(const QString& path, bool explore = false);
+    Q_INVOKABLE void refreshContent();
+    Q_INVOKABLE void openContentFolder(const QString& relativePath);
     Q_INVOKABLE void pinRelease(int index);
     Q_INVOKABLE void cancelInstallation();
     Q_INVOKABLE void removeMod(const QString& provider, const QString& projectId);
@@ -80,12 +99,18 @@ public:
 signals:
     void stateChanged();
     void packOpened();
+    void exploreRequested();
 private:
     CatalogueClient m_client;
     ModInstaller m_installer;
-    QSettings m_settings;
+    std::unique_ptr<QSettings> m_settings;
     QString m_packsRootOverride;
     QVariantList m_installations, m_packs, m_projects, m_releases, m_activeMods;
+    QVariantList m_contentFiles;
+    QStringList m_diagnostics;
+    QString m_scanCoverage;
+    bool m_contentBusy = false, m_exploreAfterOpen = false;
+    int m_contentGeneration = 0;
     QVariantMap m_selectedProject, m_activePack;
     QVector<Project> m_projectData;
     QVector<Release> m_releaseData;

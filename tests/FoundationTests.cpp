@@ -128,6 +128,23 @@ private slots:
         QCOMPARE(found.installations.last().toMap().value("modCount").toInt(), 1);
         QFile after(cfProfile + "/minecraftinstance.json"); QVERIFY(after.open(QIODevice::ReadOnly)); QCOMPARE(after.readAll(), metadata);
     }
+    void discoveryReadsAppliedContentSetWithoutWrites() {
+        QTemporaryDir temp; const auto mr=temp.path()+"/ModrinthApp";
+        QVERIFY(QDir().mkpath(mr+"/profiles/A"));
+        {
+            auto db=QSqlDatabase::addDatabase("QSQLITE","current-schema"); db.setDatabaseName(mr+"/app.db"); QVERIFY(db.open()); QSqlQuery q(db);
+            QVERIFY(q.exec("CREATE TABLE instances(name TEXT,path TEXT,icon_path TEXT,applied_content_set_id TEXT)"));
+            QVERIFY(q.exec("CREATE TABLE instance_content_sets(id TEXT,game_version TEXT,loader TEXT,loader_version TEXT)"));
+            QVERIFY(q.exec("INSERT INTO instances VALUES('Current schema','A','','set')"));
+            QVERIFY(q.exec("INSERT INTO instance_content_sets VALUES('set','1.21.1','neoforge','21.1.248')"));
+        }
+        QSqlDatabase::removeDatabase("current-schema");
+        QFile before(mr+"/app.db"); QVERIFY(before.open(QIODevice::ReadOnly)); const auto bytes=before.readAll(); before.close();
+        const auto result=InstallationDiscovery::scan(mr,temp.path()+"/empty"); QCOMPARE(result.installations.size(),1);
+        const auto row=result.installations.first().toMap(); QCOMPARE(row.value("gameVersion").toString(),QString("1.21.1"));
+        QCOMPARE(row.value("loader").toString(),QString("neoforge")); QCOMPARE(row.value("loaderVersion").toString(),QString("21.1.248"));
+        QVERIFY(before.open(QIODevice::ReadOnly)); QCOMPARE(before.readAll(),bytes);
+    }
     void liveModrinthSearchAndReleases() {
         if (!qEnvironmentVariableIsSet("MODPACK_STUDIO_LIVE_TEST")) QSKIP("Set MODPACK_STUDIO_LIVE_TEST=1 for live provider verification.");
         CatalogueClient client; bool searched = false, loaded = false; QVector<Project> projects; ProjectDetail detail;

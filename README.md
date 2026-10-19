@@ -18,7 +18,11 @@ ctest --test-dir build --output-on-failure
 
 ## Working in this foundation
 
-- Dark Qt Quick interface with Library, Discover, My modpack and Settings.
+- Dark grey Qt Quick interface with a unified Library, Discover, pack content workspace and Settings.
+- Every pack is tagged Conflux, Modrinth or CurseForge. Persistent hiding, a Hidden tab, source/search filters and onboarding only when no visible packs remain.
+- Configure opens Mods, Shaders, Resource packs and Configs with search and read-only launcher inspection. Explore mods preserves pack context.
+- Review banners for identified loader mismatches, duplicate mod IDs, missing managed pins/dependencies and possible orphan config names. Ownership suggestions are uncertain; nothing is deleted.
+- Simple JSON themes with four semantic color groups, validation, reload and theme selection in Settings.
 - Read-only discovery of Modrinth and CurseForge installation folders; configurable paths.
 - Live Modrinth mod search, Minecraft/loader filters, descriptions, gallery and release browsing.
 - CurseForge search, descriptions and files adapter, enabled only with a session API key (or `CURSEFORGE_API_KEY`). No key is included or saved.
@@ -44,6 +48,14 @@ The current browser requests at most 40 search hits per provider and 50 CurseFor
 
 `scripts/build.ps1` builds and runs CTest, including loopback HTTP installer tests and a library-row alignment regression check at three widths. Set `MODPACK_STUDIO_LIVE_TEST=1` to also verify real Modrinth search/details and an Iris installation with required dependencies in temporary storage. Set `CONFLUX_UI_ARTIFACTS` to a folder to capture the row comparison renders.
 
-`modpack-studio.exe --smoke-test <absolute-output-folder>` verifies live browsing, creates a temporary pack, pins a compatible release, commits it to Git, renders five screens to PNG, and exits. Test repositories are isolated in an automatically removed temporary folder; real launcher installations are read only.
+`modpack-studio.exe --smoke-test <absolute-output-folder>` verifies live browsing, creates a temporary pack, pins a compatible release, commits it to Git, renders the catalogue, library, managed workspace, launcher content and settings to PNG, and exits. Test repositories are isolated in an automatically removed temporary folder; real launcher installations are read only.
 
 See [architecture](docs/ARCHITECTURE.md) and [owner requirements](docs/REQUIREMENTS.md).
+
+## Themes and pack inspection
+
+Open **Settings / Appearance / Open themes folder**, copy `dark-grey.json` under a new filename, change `name` and colors, then select it. Use **Reload theme** after editing. `surfaces` controls backgrounds, inputs, selections and borders; `text`, `actions` and `status` cover the remaining shared colors. Invalid files keep the last good palette. The built-in theme always remains available. Theme selection and hidden packs persist locally.
+
+Launcher packs stay read-only. Configure inventories files without importing or rewriting their manifests. Mod archive metadata is read in a worker with a 1 MiB per-entry limit; config listing skips linked directories, stops at depth five and limits the combined file list to 5,000 entries. Fabric/Quilt JSON and basic Forge-family TOML identity are recognized. Forge-family metadata alone cannot prove Forge vs NeoForge compatibility; full dependency ranges, bundled mod conflicts and runtime behavior are not validated. An enabled [Sinytra Connector](https://connector.sinytra.org/) identity or its JarJar component metadata changes Fabric-on-Forge-family warnings into an unverified bridge notice. Missing game/loader metadata stays unknown. Possible stale config ownership uses filename matching and always requires review. Config file contents are not read or modified; **Show files** opens their containing folder.
+
+Archive metadata uses vendored [miniz 3.1.0](https://github.com/richgel999/miniz/tree/174573d60290f447c13a2b1b3405de2b96e27d6c), pinned at commit `174573d60290f447c13a2b1b3405de2b96e27d6c` under its retained MIT license in `third_party/LICENSE.miniz`. `miniz_export.h` is a local static-build export definition. Theme registration uses Qt's [QML module and singleton support](https://doc.qt.io/qt-6/qt-add-qml-module.html).

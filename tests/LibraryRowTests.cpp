@@ -6,6 +6,8 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QtTest>
+#include <QtQml/qqmlextensionplugin.h>
+Q_IMPORT_QML_PLUGIN(Conflux_StylePlugin)
 
 class LibraryRowTests : public QObject {
     Q_OBJECT
@@ -23,7 +25,7 @@ private slots:
         QQuickWindow window; window.setHeight(300); window.setColor(QColor("#111613"));
         QList<QQuickItem*> rows;
         const QStringList titles{"Fabric Perfection", "Create: Takeoff", "A very long modpack title that should be elided instead of moving the other columns"};
-        const QStringList sources{"modrinth", "modrinth", "curseforge"};
+        const QStringList sources{"modrinth", "conflux", "curseforge"};
         for (int index = 0; index < titles.size(); ++index) {
             auto* row = qobject_cast<QQuickItem*>(component.create()); QVERIFY(row);
             row->setParentItem(window.contentItem()); row->setParent(&window); row->setY(8 + index * 94); row->setX(8); row->setHeight(84);
@@ -41,11 +43,15 @@ private slots:
                 auto* detail = row->findChild<QQuickItem*>("libraryRowDetails");
                 auto* badge = row->findChild<QQuickItem*>("libraryRowSourceColumn");
                 auto* action = row->findChild<QQuickItem*>("libraryRowAction");
-                QVERIFY(title && detail && badge && action);
+                auto* explore = row->findChild<QQuickItem*>("libraryRowExplore");
+                auto* hide = row->findChild<QQuickItem*>("libraryRowHide");
+                QVERIFY(title && detail && badge && action && explore && hide);
                 QCOMPARE(title->mapToItem(row, QPointF{}).x(), 80.0); QCOMPARE(detail->mapToItem(row, QPointF{}).x(), 80.0);
-                QCOMPARE(action->x() + action->width(), width - 16.0);
-                QCOMPARE(badge->x() + badge->width(), action->x() - 24.0);
-                QVERIFY(title->width() > 0); QVERIFY(title->mapToItem(row, QPointF{}).x() + title->width() <= badge->x() - 24.0);
+                QCOMPARE(hide->x() + hide->width(), width - 16.0);
+                QVERIFY(explore->x() + explore->width() < action->x());
+                QVERIFY(action->x() + action->width() < hide->x());
+                QCOMPARE(badge->x() + badge->width(), explore->x() - 20.0);
+                QVERIFY(title->width() > 0); QVERIFY(title->mapToItem(row, QPointF{}).x() + title->width() <= badge->x() - 20.0);
             }
             const auto artifacts = qEnvironmentVariable("CONFLUX_UI_ARTIFACTS");
             if (!artifacts.isEmpty()) { QDir().mkpath(artifacts); QVERIFY(window.grabWindow().save(QDir(artifacts).filePath("library-rows-" + QString::number(width) + ".png"))); }

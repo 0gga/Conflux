@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Conflux.Style
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../components"
@@ -28,11 +29,11 @@ Item {
             Layout.fillWidth: true
             ColumnLayout {
                 spacing: 7
-                Text { text: "Find your next addition."; color: "#eef4ef"; font.pixelSize: 30; font.weight: Font.DemiBold; font.letterSpacing: -0.7 }
-                Text { text: "One catalogue. More possibilities."; color: "#96ac9e"; font.pixelSize: 14 }
+                Text { text: "Find your next addition."; color: Theme.colors.text; font.pixelSize: 30; font.weight: Font.DemiBold; font.letterSpacing: -0.7 }
+                Text { text: "One catalogue. More possibilities."; color: Theme.colors.muted; font.pixelSize: 14 }
             }
             Item { Layout.fillWidth: true }
-            Text { visible: !!root.app.activePack.name; text: "Adding to  " + (root.app.activePack.name || ""); color: "#9cceb0"; font.pixelSize: 12 }
+            Text { visible: !!root.app.activePack.name; text: (root.app.activePack.managed ? "Adding to  " : "Exploring for  ") + (root.app.activePack.name || ""); color: Theme.colors.accent; font.pixelSize: 12 }
         }
         RowLayout {
             Layout.fillWidth: true; spacing: 12
@@ -40,12 +41,12 @@ Item {
                 id: query; objectName: "modSearchInput"; Layout.fillWidth: true; implicitHeight: 44
                 placeholderText: "Search mods, discover something new…"; font.pixelSize: 14; leftPadding: 16
                 onTextEdited: debounce.restart(); onAccepted: root.runSearch()
-                background: Rectangle { color: "#1c2820"; border.color: query.activeFocus ? "#73c796" : "#34483a"; radius: 9 }
+                background: Rectangle { color: Theme.colors.input; border.color: query.activeFocus ? Theme.colors.selection : Theme.colors.border; radius: 9 }
             }
             TextField {
                 id: game; Layout.preferredWidth: 130; implicitHeight: 44; placeholderText: "Any MC version"
                 text: root.app.activePack.minecraft || ""; onTextEdited: debounce.restart(); onAccepted: root.runSearch()
-                background: Rectangle { color: "#1c2820"; border.color: "#34483a"; radius: 9 }
+                background: Rectangle { color: Theme.colors.input; border.color: Theme.colors.border; radius: 9 }
             }
             ComboBox { id: loader; Layout.preferredWidth: 135; implicitHeight: 44; model: ["Any loader", "fabric", "neoforge", "forge", "quilt"]; onActivated: root.runSearch() }
             ActionButton { text: "Search"; primary: true; onClicked: root.runSearch() }
@@ -62,14 +63,14 @@ Item {
             }
             Item { Layout.fillWidth: true }
             BusyIndicator { running: root.app.catalogueBusy; visible: running; Layout.preferredWidth: 24; Layout.preferredHeight: 24 }
-            Text { text: root.app.catalogueBusy ? "Searching…" : root.app.projects.length + " results"; color: "#8ca594"; font.pixelSize: 12 }
+            Text { text: root.app.catalogueBusy ? "Searching…" : root.app.projects.length + " results"; color: Theme.colors.muted; font.pixelSize: 12 }
         }
-        Text { visible: root.app.catalogueNotice.length > 0; Layout.fillWidth: true; text: root.app.catalogueNotice; wrapMode: Text.WordWrap; color: "#c9b991"; font.pixelSize: 12 }
+        Text { visible: root.app.catalogueNotice.length > 0; Layout.fillWidth: true; text: root.app.catalogueNotice; wrapMode: Text.WordWrap; color: Theme.colors.muted; font.pixelSize: 12 }
         RowLayout {
             visible: root.app.installBusy
             Layout.fillWidth: true
             BusyIndicator { running: root.app.installBusy; Layout.preferredWidth: 24; Layout.preferredHeight: 24 }
-            Text { Layout.fillWidth: true; text: root.app.installationStatus; color: "#9cceb0"; font.pixelSize: 12; elide: Text.ElideRight }
+            Text { Layout.fillWidth: true; text: root.app.installationStatus; color: Theme.colors.accent; font.pixelSize: 12; elide: Text.ElideRight }
             ActionButton { text: "Cancel"; subtle: true; enabled: root.app.installCancellable; onClicked: root.app.cancelInstallation() }
         }
         RowLayout {
@@ -85,24 +86,24 @@ Item {
                         required property var modelData
                         required property int index
                         width: results.width - 12; height: root.app.selectedProject.id ? 124 : 116; radius: 10
-                        color: root.app.selectedProject.id === modelData.id && root.app.selectedProject.provider === modelData.provider ? "#233c2b" : (resultMouse.containsMouse ? "#223127" : "#1a251e")
-                        border.color: root.app.selectedProject.id === modelData.id && root.app.selectedProject.provider === modelData.provider ? "#609d74" : "#2f4135"
+                        color: root.app.selectedProject.id === modelData.id && root.app.selectedProject.provider === modelData.provider ? Theme.colors.selection : (resultMouse.containsMouse ? Theme.colors.input : Theme.colors.card)
+                        border.color: root.app.selectedProject.id === modelData.id && root.app.selectedProject.provider === modelData.provider ? Theme.colors.accent : Theme.colors.border
                         RowLayout {
                             anchors.fill: parent; anchors.margins: 16; spacing: 16
                             Rectangle {
-                                Layout.alignment: Qt.AlignTop; implicitWidth: 52; implicitHeight: 52; radius: 11; color: "#304a37"; clip: true
-                                Text { anchors.centerIn: parent; text: resultCard.modelData.title.substring(0,1); color: "#c3e5ce"; font.pixelSize: 25; font.weight: Font.DemiBold }
+                                Layout.alignment: Qt.AlignTop; implicitWidth: 52; implicitHeight: 52; radius: 11; color: Theme.colors.border; clip: true
+                                Text { anchors.centerIn: parent; text: resultCard.modelData.title.substring(0,1); color: Theme.colors.text; font.pixelSize: 25; font.weight: Font.DemiBold }
                                 Image { anchors.fill: parent; source: resultCard.modelData.icon; fillMode: Image.PreserveAspectFit; asynchronous: true; visible: status === Image.Ready }
                             }
                             ColumnLayout {
                                 Layout.fillWidth: true; Layout.fillHeight: true; spacing: 5
                                 RowLayout {
                                     Layout.fillWidth: true; spacing: 10
-                                    Text { text: resultCard.modelData.title; Layout.fillWidth: true; elide: Text.ElideRight; color: "#e5efe8"; font.pixelSize: 16; font.weight: Font.DemiBold }
-                                    Text { visible: !root.app.selectedProject.id; text: "↓ " + resultCard.modelData.downloads; color: "#7e9e89"; font.pixelSize: 11 }
+                                    Text { text: resultCard.modelData.title; Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.colors.text; font.pixelSize: 16; font.weight: Font.DemiBold }
+                                    Text { visible: !root.app.selectedProject.id; text: "↓ " + resultCard.modelData.downloads; color: Theme.colors.accent; font.pixelSize: 11 }
                                 }
-                                Text { text: "by " + resultCard.modelData.author; color: "#86a693"; font.pixelSize: 11 }
-                                Text { Layout.fillWidth: true; Layout.fillHeight: true; text: resultCard.modelData.summary; color: "#a9bbb0"; font.pixelSize: 12; wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight }
+                                Text { text: "by " + resultCard.modelData.author; color: Theme.colors.accent; font.pixelSize: 11 }
+                                Text { Layout.fillWidth: true; Layout.fillHeight: true; text: resultCard.modelData.summary; color: Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight }
                                 RowLayout {
                                     spacing: 6
                                     Repeater { model: resultCard.modelData.sources; delegate: SourceBadge { required property string modelData; source: modelData } }
@@ -121,16 +122,16 @@ Item {
             }
             Rectangle {
                 visible: !!root.app.selectedProject.id
-                Layout.preferredWidth: 390; Layout.fillHeight: true; radius: 12; color: "#1a251e"; border.color: "#3a5342"
+                Layout.preferredWidth: 390; Layout.fillHeight: true; radius: 12; color: Theme.colors.card; border.color: Theme.colors.border
                 ColumnLayout {
                     anchors.fill: parent; anchors.margins: 20; spacing: 14
                     RowLayout {
                         Layout.fillWidth: true
-                        Text { text: "PROJECT"; color: "#85a690"; font.pixelSize: 10; font.letterSpacing: 1.6 }
+                        Text { text: "PROJECT"; color: Theme.colors.accent; font.pixelSize: 10; font.letterSpacing: 1.6 }
                         Item { Layout.fillWidth: true }
                         ActionButton { text: "Close  ×"; subtle: true; implicitHeight: 28; onClicked: root.app.closeProject() }
                     }
-                    Text { Layout.fillWidth: true; text: root.app.selectedProject.title || ""; color: "#eaf5ed"; font.pixelSize: 25; font.weight: Font.DemiBold; wrapMode: Text.WordWrap }
+                    Text { Layout.fillWidth: true; text: root.app.selectedProject.title || ""; color: Theme.colors.text; font.pixelSize: 25; font.weight: Font.DemiBold; wrapMode: Text.WordWrap }
                     RowLayout {
                         Repeater { model: root.app.selectedProject.sources || []; delegate: SourceBadge { required property string modelData; source: modelData } }
                         Item { Layout.fillWidth: true }
@@ -141,36 +142,36 @@ Item {
                         id: detailScroll; Layout.fillWidth: true; Layout.fillHeight: true; clip: true
                         ColumnLayout {
                             width: detailScroll.availableWidth; spacing: 16
-                            Text { Layout.fillWidth: true; text: root.app.selectedProject.summary || ""; color: "#b3c8b9"; wrapMode: Text.WordWrap; font.pixelSize: 13; lineHeight: 1.3 }
-                            Text { visible: root.app.detailNotice.length > 0; Layout.fillWidth: true; text: root.app.detailNotice; color: "#e3b288"; font.pixelSize: 12; wrapMode: Text.WordWrap }
-                            Text { text: "RELEASES"; color: "#8caa96"; font.pixelSize: 10; font.letterSpacing: 1.8; Layout.topMargin: 8 }
-                            Text { Layout.fillWidth: true; text: root.app.activePack.name ? "Add to " + root.app.activePack.name + ". Required dependencies are included automatically." : "Create or open a modpack to add mods."; color: "#92ad9c"; font.pixelSize: 12; wrapMode: Text.WordWrap }
+                            Text { Layout.fillWidth: true; text: root.app.selectedProject.summary || ""; color: Theme.colors.muted; wrapMode: Text.WordWrap; font.pixelSize: 13; lineHeight: 1.3 }
+                            Text { visible: root.app.detailNotice.length > 0; Layout.fillWidth: true; text: root.app.detailNotice; color: Theme.colors.warning; font.pixelSize: 12; wrapMode: Text.WordWrap }
+                            Text { text: "RELEASES"; color: Theme.colors.accent; font.pixelSize: 10; font.letterSpacing: 1.8; Layout.topMargin: 8 }
+                            Text { Layout.fillWidth: true; text: root.app.activePack.managed ? "Add to " + root.app.activePack.name + ". Required dependencies are included automatically." : root.app.activePack.name ? "This launcher pack is read-only. Create a Conflux pack to install mods here." : "Create or open a Conflux modpack to add mods."; color: Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.WordWrap }
                             Repeater {
                                 model: root.app.releases.slice(0, 30)
                                 delegate: Rectangle {
                                     id: releaseRow
                                     required property var modelData
                                     required property int index
-                                    Layout.fillWidth: true; implicitHeight: 88; color: "#202f25"; border.color: "#374d3e"; radius: 8
+                                    Layout.fillWidth: true; implicitHeight: 88; color: Theme.colors.input; border.color: Theme.colors.border; radius: 8
                                     RowLayout {
                                         anchors.fill: parent; anchors.margins: 12; spacing: 8
                                         ColumnLayout {
                                             Layout.fillWidth: true; spacing: 6
-                                            Text { Layout.fillWidth: true; text: releaseRow.modelData.version; color: "#dcece1"; elide: Text.ElideRight; font.pixelSize: 13; font.weight: Font.DemiBold }
-                                            Text { Layout.fillWidth: true; text: releaseRow.modelData.loaders.join(" / ") + "  ·  " + releaseRow.modelData.gameVersions.slice(-3).join(", "); color: "#90ae9a"; font.pixelSize: 10; elide: Text.ElideRight }
-                                            Text { text: releaseRow.modelData.published + (releaseRow.modelData.dependencies.length ? "  ·  " + releaseRow.modelData.dependencies.length + " required dependencies" : ""); color: "#789a85"; font.pixelSize: 10 }
+                                            Text { Layout.fillWidth: true; text: releaseRow.modelData.version; color: Theme.colors.text; elide: Text.ElideRight; font.pixelSize: 13; font.weight: Font.DemiBold }
+                                            Text { Layout.fillWidth: true; text: releaseRow.modelData.loaders.join(" / ") + "  ·  " + releaseRow.modelData.gameVersions.slice(-3).join(", "); color: Theme.colors.accent; font.pixelSize: 10; elide: Text.ElideRight }
+                                            Text { text: releaseRow.modelData.published + (releaseRow.modelData.dependencies.length ? "  ·  " + releaseRow.modelData.dependencies.length + " required dependencies" : ""); color: Theme.colors.accent; font.pixelSize: 10 }
                                         }
-                                        ActionButton { text: releaseRow.modelData.provider === "modrinth" ? "Add +" : "Soon"; implicitWidth: 64; enabled: releaseRow.modelData.provider === "modrinth" && !!root.app.activePack.name && !root.app.repositoryBusy && !!releaseRow.modelData.url; onClicked: root.app.pinRelease(releaseRow.index) }
+                                        ActionButton { text: releaseRow.modelData.provider === "modrinth" ? "Add +" : "Soon"; implicitWidth: 64; enabled: releaseRow.modelData.provider === "modrinth" && !!root.app.activePack.managed && !root.app.repositoryBusy && !!releaseRow.modelData.url; onClicked: root.app.pinRelease(releaseRow.index) }
                                     }
                                 }
                             }
-                            Text { visible: !root.app.detailBusy && root.app.releases.length === 0; text: "No releases match these filters."; color: "#a3b9ab"; font.pixelSize: 12 }
-                            Text { visible: root.app.releases.length > 30; text: "Showing the latest 30 releases. Narrow your filters to find another."; Layout.fillWidth: true; color: "#86a290"; font.pixelSize: 11; wrapMode: Text.WordWrap }
-                            Text { text: "ABOUT"; color: "#8caa96"; font.pixelSize: 10; font.letterSpacing: 1.8; Layout.topMargin: 8 }
-                            Text { Layout.fillWidth: true; text: root.app.description || "Description will appear here."; color: "#a9c0b1"; font.pixelSize: 12; wrapMode: Text.Wrap; lineHeight: 1.35; maximumLineCount: 60; elide: Text.ElideRight; textFormat: Text.PlainText }
-                            Text { visible: root.app.gallery.length > 0; text: "GALLERY"; color: "#8caa96"; font.pixelSize: 10; font.letterSpacing: 1.8 }
+                            Text { visible: !root.app.detailBusy && root.app.releases.length === 0; text: "No releases match these filters."; color: Theme.colors.muted; font.pixelSize: 12 }
+                            Text { visible: root.app.releases.length > 30; text: "Showing the latest 30 releases. Narrow your filters to find another."; Layout.fillWidth: true; color: Theme.colors.accent; font.pixelSize: 11; wrapMode: Text.WordWrap }
+                            Text { text: "ABOUT"; color: Theme.colors.accent; font.pixelSize: 10; font.letterSpacing: 1.8; Layout.topMargin: 8 }
+                            Text { Layout.fillWidth: true; text: root.app.description || "Description will appear here."; color: Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.Wrap; lineHeight: 1.35; maximumLineCount: 60; elide: Text.ElideRight; textFormat: Text.PlainText }
+                            Text { visible: root.app.gallery.length > 0; text: "GALLERY"; color: Theme.colors.accent; font.pixelSize: 10; font.letterSpacing: 1.8 }
                             Repeater { model: root.app.gallery.slice(0, 6); delegate: Image { required property string modelData; Layout.fillWidth: true; Layout.preferredHeight: 170; source: modelData; asynchronous: true; fillMode: Image.PreserveAspectFit } }
-                            Text { Layout.fillWidth: true; text: "Public comments are not available through the supported APIs."; color: "#799683"; font.pixelSize: 11; wrapMode: Text.WordWrap }
+                            Text { Layout.fillWidth: true; text: "Public comments are not available through the supported APIs."; color: Theme.colors.accent; font.pixelSize: 11; wrapMode: Text.WordWrap }
                         }
                     }
                     ActionButton { visible: !root.app.activePack.name; Layout.fillWidth: true; text: "+ Create a modpack"; primary: true; onClicked: root.createRequested() }

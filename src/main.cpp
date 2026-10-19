@@ -11,6 +11,8 @@
 #include <QTimer>
 #include <QTemporaryDir>
 #include <memory>
+#include <QtQml/qqmlextensionplugin.h>
+Q_IMPORT_QML_PLUGIN(Conflux_StylePlugin)
 
 int main(int argc, char* argv[]) {
 #ifdef Q_OS_WIN
@@ -98,7 +100,7 @@ int main(int argc, char* argv[]) {
                 controller.saveChanges("Pin first mod release"); break;
             }
             case 6:
-                if (controller.repositoryBusy()) return;
+                if (controller.repositoryBusy() || controller.contentBusy()) return;
                 if (!controller.history().contains("Pin first mod release") || !controller.gitStatus().isEmpty()) { fail("Git save failed: " + controller.notice()); return; }
                 window->setProperty("page", "workspace"); break;
             case 7:
@@ -106,7 +108,20 @@ int main(int argc, char* argv[]) {
                 window->setProperty("page", "settings"); break;
             case 8:
                 if (!capture("settings")) { fail("Settings render failed"); return; }
-                qInfo("PASS: live search, project details, temporary pack creation, compatible release pin, Git commit, five UI renders");
+                window->setProperty("page", "library"); break;
+            case 9:
+                if (!capture("library-with-conflux")) { fail("Unified library render failed"); return; }
+                if (!controller.installations().isEmpty()) controller.openLibraryPack(controller.installations().at(controller.installations().size() > 1 ? 1 : 0).toMap().value("path").toString());
+                else window->setProperty("page", "workspace");
+                break;
+            case 10:
+                if (controller.contentBusy()) return;
+                if (!capture("launcher-content")) { fail("Launcher content render failed"); return; }
+                if (auto* workspace = window->findChild<QObject*>("packWorkspace")) workspace->setProperty("showIssues", true);
+                window->setWidth(1080); window->setHeight(720); break;
+            case 11:
+                if (!capture("launcher-content-narrow")) { fail("Narrow content render failed"); return; }
+                qInfo("PASS: live search, project details, temporary pack installation, Git commit, unified library and read-only launcher content renders");
                 timer->stop(); application.exit(0); return;
             }
             ++state->phase;

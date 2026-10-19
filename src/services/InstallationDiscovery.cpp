@@ -6,6 +6,7 @@
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QSqlRecord>
 #include <QSet>
 #include <QUrl>
 #include <QUuid>
@@ -44,13 +45,20 @@ DiscoveryResult InstallationDiscovery::scan(const QString& mrRoot, const QString
             if (db.open()) {
                 // Explicit public profile fields only; never query account or token tables.
                 QSqlQuery query(db);
-                bool valid = query.exec("SELECT name, path, icon_path FROM instances");
+                bool valid = query.exec("SELECT i.name, i.path, i.icon_path, c.game_version, c.loader, c.loader_version FROM instances i LEFT JOIN instance_content_sets c ON c.id = i.applied_content_set_id");
+                if (!valid) valid = query.exec("SELECT name, path, icon_path FROM instances");
                 if (!valid) valid = query.exec("SELECT name, path, icon_path FROM profiles");
                 if (valid) {
                     while (query.next()) {
                         auto path = query.value(1).toString();
                         if (QDir::isRelativePath(path)) path = QDir(mrRoot).filePath("profiles/" + path);
-                        append(inspectFolder(path, "modrinth", query.value(0).toString(), query.value(2).toString()));
+                        auto row = inspectFolder(path, "modrinth", query.value(0).toString(), query.value(2).toString());
+                        if (query.record().count() > 3) {
+                            if (!query.value(3).toString().isEmpty()) row["gameVersion"] = query.value(3).toString();
+                            if (!query.value(4).toString().isEmpty()) row["loader"] = query.value(4).toString();
+                            row["loaderVersion"] = query.value(5).toString();
+                        }
+                        append(row);
                     }
                 } else result.warnings << "Modrinth profile database format was not recognized; scanning profile folders.";
                 db.close();

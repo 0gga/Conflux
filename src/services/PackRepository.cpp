@@ -8,8 +8,74 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QUuid>
+#include <QCryptographicHash>
+#include <QSet>
 
 namespace studio {
+static QString fileHash(const QString& path) {
+    QFile file(path); if (!file.open(QIODevice::ReadOnly)) return {};
+    QCryptographicHash hash(QCryptographicHash::Sha1);
+    return hash.addData(&file) ? QString::fromLatin1(hash.result().toHex()) : QString{};
+}
+static bool managedModPath(const QString& relative, const QString& hash) {
+    return QRegularExpression("^[a-f0-9]{40}$").match(hash).hasMatch() && relative == "mods/" + hash + ".jar";
+}
+RepositoryResult PackRepository::applyInstallation(const QString& path, const QJsonObject& expected,
+    const QJsonArray& references, const QString& staging) {
+    auto current = inspect(path);
+    if (!current.ok) return current;
+    if (current.manifest != expected) return {false, "The pack changed while mods were downloading. Retry with its current contents.", path};
+    const auto modsPath = QDir(path).filePath("mods");
+    const QFileInfo modsInfo(modsPath);
+    if (modsInfo.isSymLink() || modsInfo.isJunction() || (!QDir(modsPath).exists() && !QDir().mkpath(modsPath)))
+        return {false, "The managed mods folder is unavailable or is a symbolic link.", path};
+    QStringList created;
+    QSet<QString> keep;
+    auto rollback = [&created] { for (const auto& file : created) QFile::remove(file); };
+    for (const auto& item : references) {
+        const auto ref = item.toObject();
+        if (ref.value("provider").toString() != "modrinth") continue;
+        const auto hash = ref.value("sha1").toString().toLower(), relative = ref.value("installPath").toString();
+        if (!managedModPath(relative, hash)) { rollback(); return {false, "Invalid managed mod file path.", path}; }
+        const auto destination = QDir(path).filePath(relative);
+        keep.insert(relative);
+        if (QFileInfo::exists(destination)) {
+            if (QFileInfo(destination).isSymLink() || fileHash(destination) != hash) {
+                rollback(); return {false, "An existing mod file differs from its expected hash. It was left untouched.", path};
+            }
+            continue;
+        }
+        const auto source = QDir(staging).filePath(hash + ".jar");
+        if (fileHash(source) != hash) { rollback(); return {false, "A staged download failed verification.", path}; }
+        QFile input(source); QSaveFile output(destination);
+        bool copied = input.open(QIODevice::ReadOnly) && output.open(QIODevice::WriteOnly);
+        while (copied && !input.atEnd()) {
+            const auto bytes = input.read(256 * 1024);
+            copied = !bytes.isEmpty() && output.write(bytes) == bytes.size();
+        }
+        if (!copied || !output.commit()) { rollback(); return {false, "Could not install the verified mod file.", path}; }
+        created << destination;
+    }
+    auto manifest = current.manifest; manifest.insert("mods", references);
+    QSaveFile file(QDir(path).filePath("pack.json"));
+    const auto data = QJsonDocument(manifest).toJson(QJsonDocument::Indented);
+    if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
+        rollback(); return {false, "Could not save the installed pack. Its previous manifest was preserved.", path};
+    }
+    // Only remove superseded, unedited files previously owned by this manifest.
+    QStringList warnings;
+    for (const auto& item : expected.value("mods").toArray()) {
+        const auto old = item.toObject(); const auto relative = old.value("installPath").toString();
+        if (old.value("provider").toString() != "modrinth") continue;
+        const auto hash = old.value("sha1").toString().toLower();
+        if (!managedModPath(relative, hash) || keep.contains(relative)) continue;
+        const auto absolute = QDir(path).filePath(relative);
+        if (!QFileInfo::exists(absolute)) continue;
+        if (QFileInfo(absolute).isSymLink() || fileHash(absolute) != hash || !QFile::remove(absolute))
+            warnings << "A superseded mod file was edited or could not be removed; review " + relative;
+    }
+    auto result = inspect(path); if (result.ok) result.error = warnings.join('\n'); return result;
+}
 static QString git(const QString& path, const QStringList& arguments, bool* ok = nullptr) {
     QProcess process;
     process.setWorkingDirectory(path);
@@ -118,12 +184,31 @@ RepositoryResult PackRepository::remove(const QString& path, const QString& prov
     auto current = inspect(path);
     if (!current.ok) return current;
     auto mods = current.manifest.value("mods").toArray();
+    QJsonArray removed;
     for (qsizetype i = mods.size(); i > 0; --i) {
         const auto mod = mods.at(i - 1).toObject();
-        if (mod.value("provider").toString() == provider && mod.value("projectId").toString() == projectId) mods.removeAt(i - 1);
+        if (mod.value("provider").toString() == provider && mod.value("projectId").toString() == projectId) { removed.append(mod); mods.removeAt(i - 1); }
     }
     current.manifest.insert("mods", mods);
-    return write(path, current.manifest);
+    auto result = write(path, current.manifest);
+    if (!result.ok) return result;
+    const QFileInfo modsFolder(QDir(path).filePath("mods"));
+    if (modsFolder.isSymLink() || modsFolder.isJunction()) {
+        result.error = "The mods folder is linked elsewhere; its files were left untouched."; return result;
+    }
+    for (const auto& item : removed) {
+        const auto ref = item.toObject(); const auto relative = ref.value("installPath").toString();
+        const auto hash = ref.value("sha1").toString().toLower();
+        if (!managedModPath(relative, hash)) continue;
+        bool shared = false;
+        for (const auto& retained : mods) if (retained.toObject().value("installPath").toString() == relative) shared = true;
+        if (shared) continue;
+        const auto file = QDir(path).filePath(relative);
+        if (!QFileInfo::exists(file)) continue;
+        if (QFileInfo(file).isSymLink() || fileHash(file) != hash || !QFile::remove(file))
+            result.error = "The removed mod's file was edited or could not be deleted. Review " + relative;
+    }
+    return result;
 }
 RepositoryResult PackRepository::commit(const QString& path, const QString& message) {
     auto current = inspect(path);

@@ -66,6 +66,13 @@ Item {
         }
         Text { visible: root.app.catalogueNotice.length > 0; Layout.fillWidth: true; text: root.app.catalogueNotice; wrapMode: Text.WordWrap; color: "#c9b991"; font.pixelSize: 12 }
         RowLayout {
+            visible: root.app.installBusy
+            Layout.fillWidth: true
+            BusyIndicator { running: root.app.installBusy; Layout.preferredWidth: 24; Layout.preferredHeight: 24 }
+            Text { Layout.fillWidth: true; text: root.app.installationStatus; color: "#9cceb0"; font.pixelSize: 12; elide: Text.ElideRight }
+            ActionButton { text: "Cancel"; subtle: true; enabled: root.app.installCancellable; onClicked: root.app.cancelInstallation() }
+        }
+        RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 20
             Item {
                 Layout.fillWidth: true; Layout.fillHeight: true
@@ -137,7 +144,7 @@ Item {
                             Text { Layout.fillWidth: true; text: root.app.selectedProject.summary || ""; color: "#b3c8b9"; wrapMode: Text.WordWrap; font.pixelSize: 13; lineHeight: 1.3 }
                             Text { visible: root.app.detailNotice.length > 0; Layout.fillWidth: true; text: root.app.detailNotice; color: "#e3b288"; font.pixelSize: 12; wrapMode: Text.WordWrap }
                             Text { text: "RELEASES"; color: "#8caa96"; font.pixelSize: 10; font.letterSpacing: 1.8; Layout.topMargin: 8 }
-                            Text { Layout.fillWidth: true; text: root.app.activePack.name ? "Pin a release to " + root.app.activePack.name + "." : "Create or open a modpack to pin releases."; color: "#92ad9c"; font.pixelSize: 12; wrapMode: Text.WordWrap }
+                            Text { Layout.fillWidth: true; text: root.app.activePack.name ? "Add to " + root.app.activePack.name + ". Required dependencies are included automatically." : "Create or open a modpack to add mods."; color: "#92ad9c"; font.pixelSize: 12; wrapMode: Text.WordWrap }
                             Repeater {
                                 model: root.app.releases.slice(0, 30)
                                 delegate: Rectangle {
@@ -153,7 +160,7 @@ Item {
                                             Text { Layout.fillWidth: true; text: releaseRow.modelData.loaders.join(" / ") + "  ·  " + releaseRow.modelData.gameVersions.slice(-3).join(", "); color: "#90ae9a"; font.pixelSize: 10; elide: Text.ElideRight }
                                             Text { text: releaseRow.modelData.published + (releaseRow.modelData.dependencies.length ? "  ·  " + releaseRow.modelData.dependencies.length + " required dependencies" : ""); color: "#789a85"; font.pixelSize: 10 }
                                         }
-                                        ActionButton { text: "Pin +"; implicitWidth: 58; enabled: !!root.app.activePack.name && !root.app.repositoryBusy && !!releaseRow.modelData.url; onClicked: root.app.pinRelease(releaseRow.index) }
+                                        ActionButton { text: releaseRow.modelData.provider === "modrinth" ? "Add +" : "Soon"; implicitWidth: 64; enabled: releaseRow.modelData.provider === "modrinth" && !!root.app.activePack.name && !root.app.repositoryBusy && !!releaseRow.modelData.url; onClicked: root.app.pinRelease(releaseRow.index) }
                                     }
                                 }
                             }

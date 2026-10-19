@@ -14,6 +14,8 @@ public:
     static RepositoryResult pin(const QString& path, const QJsonObject& reference);
     static RepositoryResult remove(const QString& path, const QString& provider, const QString& projectId);
     static RepositoryResult commit(const QString& path, const QString& message);
+    static RepositoryResult applyInstallation(const QString& path, const QJsonObject& expectedManifest,
+        const QJsonArray& references, const QString& stagingDirectory);
     static QString slug(const QString& name);
 private:
     static RepositoryResult write(const QString& path, const QJsonObject& manifest);

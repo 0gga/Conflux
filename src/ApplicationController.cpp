@@ -14,8 +14,23 @@
 
 namespace studio {
 ApplicationController::ApplicationController(QObject* parent, QString packsRootOverride)
-    : QObject(parent), m_client(this), m_settings("ModpackStudio", "ModpackStudio"), m_packsRootOverride(std::move(packsRootOverride)) {
+    : QObject(parent), m_client(this), m_installer(this), m_settings("ModpackStudio", "ModpackStudio"), m_packsRootOverride(std::move(packsRootOverride)) {
     m_client.setCurseforgeKey(qgetenv("CURSEFORGE_API_KEY"));
+    connect(&m_installer, &ModInstaller::progress, this, [this](const QString& status) {
+        m_installationStatus = status; emit stateChanged();
+    });
+    connect(&m_installer, &ModInstaller::finished, this, [this](const RepositoryResult& result) {
+        m_notice = result.error;
+        if (result.ok) {
+            m_activePack = result.manifest.toVariantMap(); m_activePack.insert("path", result.path);
+            m_activeMods = result.manifest.value("mods").toArray().toVariantList();
+            m_gitStatus = result.status; m_history = result.history;
+            int installed = 0;
+            for (const auto& mod : m_activeMods) if (!mod.toMap().value("installPath").toString().isEmpty()) ++installed;
+            m_installationStatus = QString::number(installed) + " mods installed · required Modrinth dependencies included";
+        } else m_installationStatus.clear();
+        refreshPacks();
+    });
     QFile mappings(QDir(QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)).filePath("project-identities.json"));
     if (mappings.open(QIODevice::ReadOnly)) {
         const auto json = QJsonDocument::fromJson(mappings.readAll()).object();
@@ -95,7 +110,7 @@ void ApplicationController::closeProject() {
     m_gallery.clear(); m_description.clear(); m_detailBusy = false; emit stateChanged();
 }
 void ApplicationController::runRepository(std::function<RepositoryResult()> operation, bool navigate) {
-    if (m_repositoryBusy) return;
+    if (repositoryBusy()) return;
     m_repositoryBusy = true; m_notice.clear(); emit stateChanged();
     auto* watcher = new QFutureWatcher<RepositoryResult>(this);
     connect(watcher, &QFutureWatcher<RepositoryResult>::finished, this, [this, watcher, navigate] {
@@ -105,6 +120,7 @@ void ApplicationController::runRepository(std::function<RepositoryResult()> oper
             m_activePack = result.manifest.toVariantMap(); m_activePack.insert("path", result.path);
             m_activeMods = result.manifest.value("mods").toArray().toVariantList();
             m_gitStatus = result.status; m_history = result.history;
+            if (!result.error.isEmpty()) m_notice = result.error;
         }
         watcher->deleteLater(); refreshPacks();
         if (result.ok && navigate) emit packOpened();
@@ -122,14 +138,14 @@ void ApplicationController::openPack(const QString& path) {
     }
 }
 void ApplicationController::pinRelease(int index) {
-    if (m_detailBusy || index < 0 || index >= m_releaseData.size() || m_activePack.isEmpty()) return;
+    if (repositoryBusy() || m_detailBusy || index < 0 || index >= m_releaseData.size() || m_activePack.isEmpty()) return;
     const auto release = m_releaseData.at(index);
-    auto reference = QJsonObject::fromVariantMap(release.toVariant());
-    reference.insert("projectTitle", m_selectedProject.value("title").toString());
-    reference.insert("projectSourceIds", QJsonObject::fromVariantMap(m_selectedProject.value("sourceIds").toMap()));
     const auto path = m_activePack.value("path").toString();
-    runRepository([path, reference] { return PackRepository::pin(path, reference); });
+    m_notice.clear();
+    m_installer.start(path, release, m_selectedProject.value("title").toString(),
+        QJsonObject::fromVariantMap(m_selectedProject.value("sourceIds").toMap()));
 }
+void ApplicationController::cancelInstallation() { m_installer.cancel(); }
 void ApplicationController::removeMod(const QString& provider, const QString& projectId) {
     const auto path = m_activePack.value("path").toString();
     if (!path.isEmpty()) runRepository([path, provider, projectId] { return PackRepository::remove(path, provider, projectId); });

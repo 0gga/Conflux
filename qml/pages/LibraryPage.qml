@@ -67,18 +67,14 @@ Item {
                 }
                 Repeater {
                     model: root.app.packs
-                    delegate: Rectangle {
+                    delegate: LibraryRow {
                         id: packCard
                         required property var modelData
-                        Layout.fillWidth: true; implicitHeight: 90; color: "#1c2820"; border.color: packMouse.containsMouse ? "#62866c" : "#33483a"; radius: 10
-                        RowLayout {
-                            anchors.fill: parent; anchors.margins: 18; spacing: 16
-                            Rectangle { implicitWidth: 48; implicitHeight: 48; radius: 12; color: "#304d38"; Text { anchors.centerIn: parent; text: packCard.modelData.name.substring(0,1).toUpperCase(); font.pixelSize: 23; font.weight: Font.Bold; color: "#b9e7c7" } }
-                            ColumnLayout { Layout.fillWidth: true; spacing: 6; Text { text: packCard.modelData.name; color: "#e6efe9"; font.pixelSize: 16; font.weight: Font.DemiBold } Text { text: packCard.modelData.minecraft + "  ·  " + packCard.modelData.loader + "  ·  " + packCard.modelData.modCount + " mods"; color: "#8ea697"; font.pixelSize: 12 } }
-                            SourceBadge { source: "git" }
-                            Text { text: "→"; color: "#96b7a1"; font.pixelSize: 22 }
-                        }
-                        MouseArea { id: packMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.app.openPack(packCard.modelData.path) }
+                        Layout.fillWidth: true
+                        titleText: modelData.name
+                        detailText: modelData.minecraft + "  ·  " + modelData.loader + "  ·  " + modelData.modCount + " mods"
+                        source: "git"; actionText: "Open pack"; entireRowInteractive: true
+                        onActivated: root.app.openPack(modelData.path)
                     }
                 }
                 RowLayout {
@@ -97,25 +93,14 @@ Item {
                 Text { text: "Connected from your launchers. Open a folder to inspect its files."; color: "#8da596"; font.pixelSize: 12 }
                 Repeater {
                     model: root.app.installations.filter(function(row) { return root.source === "all" || row.provider === root.source })
-                    delegate: Rectangle {
+                    delegate: LibraryRow {
                         id: installationCard
                         required property var modelData
-                        Layout.fillWidth: true; implicitHeight: 86; radius: 10; color: "#19221c"; border.color: "#2c3a30"
-                        RowLayout {
-                            anchors.fill: parent; anchors.margins: 16; spacing: 16
-                            Rectangle {
-                                implicitWidth: 48; implicitHeight: 48; radius: 10; color: installationCard.modelData.provider === "modrinth" ? "#284331" : "#3c3025"; clip: true
-                                Text { anchors.centerIn: parent; text: installationCard.modelData.title.substring(0, 1); color: "#c8d9cc"; font.pixelSize: 23; font.weight: Font.DemiBold }
-                                Image { anchors.fill: parent; source: installationCard.modelData.icon; fillMode: Image.PreserveAspectCrop; asynchronous: true; visible: status === Image.Ready }
-                            }
-                            ColumnLayout {
-                                Layout.fillWidth: true; spacing: 6
-                                Text { text: installationCard.modelData.title; color: "#dce7df"; font.pixelSize: 15; font.weight: Font.DemiBold }
-                                Text { text: (installationCard.modelData.gameVersion || "Minecraft") + (installationCard.modelData.loader ? "  ·  " + installationCard.modelData.loader : "") + "  ·  " + installationCard.modelData.modCount + " mod files"; color: "#89a18f"; font.pixelSize: 12 }
-                            }
-                            SourceBadge { source: installationCard.modelData.provider }
-                            ActionButton { text: "Open folder"; subtle: true; onClicked: root.app.openFolder(installationCard.modelData.path) }
-                        }
+                        Layout.fillWidth: true
+                        titleText: modelData.title
+                        detailText: (modelData.gameVersion || "Minecraft version unknown") + (modelData.loader ? "  ·  " + modelData.loader : "") + "  ·  " + modelData.modCount + " mod files"
+                        source: modelData.provider; thumbnail: modelData.icon
+                        onActivated: root.app.openFolder(modelData.path)
                     }
                 }
                 Text { visible: root.app.installations.length === 0 && !root.app.libraryBusy; text: "No installations found. Set your launcher folders in Settings."; color: "#98b09f"; font.pixelSize: 13; Layout.topMargin: 12 }

@@ -38,7 +38,12 @@ Item {
             ColumnLayout {
                 Layout.fillWidth: true; Layout.fillHeight: true; spacing: 14
                 Text { text: "Pinned content"; color: "#dfede3"; font.pixelSize: 19; font.weight: Font.DemiBold }
-                Text { Layout.fillWidth: true; text: "Exact release references are tracked in Git. Dependencies and game installation are not downloaded in this foundation."; color: "#8fab99"; font.pixelSize: 12; wrapMode: Text.WordWrap; lineHeight: 1.3 }
+                Text { Layout.fillWidth: true; text: "Modrinth files and required dependencies are downloaded and verified. Exact versions are tracked in Git; mod binaries stay local."; color: "#8fab99"; font.pixelSize: 12; wrapMode: Text.WordWrap; lineHeight: 1.3 }
+                RowLayout {
+                    visible: root.app.installationStatus.length > 0; Layout.fillWidth: true
+                    Text { Layout.fillWidth: true; text: root.app.installationStatus; color: "#9cceb0"; font.pixelSize: 12; elide: Text.ElideRight }
+                    ActionButton { visible: root.app.installBusy; text: "Cancel"; subtle: true; enabled: root.app.installCancellable; onClicked: root.app.cancelInstallation() }
+                }
                 Item {
                     Layout.fillWidth: true; Layout.fillHeight: true
                     ListView {
@@ -53,7 +58,7 @@ Item {
                                     Layout.fillWidth: true; spacing: 8
                                     Text { Layout.fillWidth: true; text: modCard.modelData.projectTitle || modCard.modelData.projectId; color: "#e1eee5"; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight }
                                     Text { Layout.fillWidth: true; text: modCard.modelData.version; color: "#99b6a3"; font.pixelSize: 12; elide: Text.ElideRight }
-                                    Text { visible: modCard.modelData.dependencies.length > 0; text: modCard.modelData.dependencies.length + " required dependencies to resolve"; color: "#d4ba82"; font.pixelSize: 10 }
+                                    Text { text: modCard.modelData.installPath ? "Downloaded · checksum verified" : "Reference only · add this release to download"; color: modCard.modelData.installPath ? "#83c69d" : "#d4ba82"; font.pixelSize: 10 }
                                 }
                                 SourceBadge { source: modCard.modelData.provider }
                                 ActionButton { text: "Remove"; subtle: true; enabled: !root.app.repositoryBusy; onClicked: root.app.removeMod(modCard.modelData.provider, modCard.modelData.projectId) }

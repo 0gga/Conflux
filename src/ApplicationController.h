@@ -1,6 +1,7 @@
 #pragma once
 #include "services/CatalogueClient.h"
 #include "services/PackRepository.h"
+#include "services/ModInstaller.h"
 #include <QObject>
 #include <QSettings>
 #include <QVariantList>
@@ -27,6 +28,9 @@ class ApplicationController : public QObject {
     Q_PROPERTY(bool catalogueBusy READ catalogueBusy NOTIFY stateChanged)
     Q_PROPERTY(bool detailBusy READ detailBusy NOTIFY stateChanged)
     Q_PROPERTY(bool repositoryBusy READ repositoryBusy NOTIFY stateChanged)
+    Q_PROPERTY(bool installBusy READ installBusy NOTIFY stateChanged)
+    Q_PROPERTY(bool installCancellable READ installCancellable NOTIFY stateChanged)
+    Q_PROPERTY(QString installationStatus READ installationStatus NOTIFY stateChanged)
     Q_PROPERTY(bool curseforgeEnabled READ curseforgeEnabled NOTIFY stateChanged)
     Q_PROPERTY(QString modrinthRoot READ modrinthRoot NOTIFY stateChanged)
     Q_PROPERTY(QString curseforgeRoot READ curseforgeRoot NOTIFY stateChanged)
@@ -50,7 +54,10 @@ public:
     bool libraryBusy() const { return m_libraryBusy; }
     bool catalogueBusy() const { return m_catalogueBusy; }
     bool detailBusy() const { return m_detailBusy; }
-    bool repositoryBusy() const { return m_repositoryBusy; }
+    bool repositoryBusy() const { return m_repositoryBusy || m_installer.busy(); }
+    bool installBusy() const { return m_installer.busy(); }
+    bool installCancellable() const { return m_installer.cancellable(); }
+    QString installationStatus() const { return m_installationStatus; }
     bool curseforgeEnabled() const { return m_client.hasCurseforgeKey(); }
     QString modrinthRoot() const;
     QString curseforgeRoot() const;
@@ -62,6 +69,7 @@ public:
     Q_INVOKABLE void createPack(const QString& name, const QString& game, const QString& loader);
     Q_INVOKABLE void openPack(const QString& path);
     Q_INVOKABLE void pinRelease(int index);
+    Q_INVOKABLE void cancelInstallation();
     Q_INVOKABLE void removeMod(const QString& provider, const QString& projectId);
     Q_INVOKABLE void saveChanges(const QString& message);
     Q_INVOKABLE void setInstallationRoots(const QString& modrinth, const QString& curseforge);
@@ -74,6 +82,7 @@ signals:
     void packOpened();
 private:
     CatalogueClient m_client;
+    ModInstaller m_installer;
     QSettings m_settings;
     QString m_packsRootOverride;
     QVariantList m_installations, m_packs, m_projects, m_releases, m_activeMods;
@@ -84,6 +93,7 @@ private:
     QString m_description, m_history, m_gitStatus, m_notice, m_catalogueNotice, m_detailNotice;
     QStringList m_gallery;
     QString m_searchGame, m_searchLoader;
+    QString m_installationStatus;
     int m_searchGeneration = 0, m_detailGeneration = 0;
     bool m_libraryBusy = false, m_catalogueBusy = false, m_detailBusy = false, m_repositoryBusy = false;
     void refreshPacks();

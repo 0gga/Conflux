@@ -17,7 +17,7 @@ static int loaderNumber(const QString& loader) {
 CatalogueClient::CatalogueClient(QObject* parent) : QObject(parent), m_network(this) {}
 void CatalogueClient::get(const QUrl& url, bool cf, JsonCallback callback) {
     QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::UserAgentHeader, "ModpackStudio/0.1.0 (desktop prototype)");
+    request.setHeader(QNetworkRequest::UserAgentHeader, "0gga/Conflux/0.1.0 (https://github.com/0gga/Conflux)");
     request.setRawHeader("Accept", "application/json");
     if (cf) request.setRawHeader("x-api-key", m_curseforgeKey);
     request.setTransferTimeout(20000);
@@ -148,18 +148,7 @@ void CatalogueClient::loadProject(const Project& project, const QString& game, c
                     for (const auto& dep : row.value("dependencies").toArray()) if (dep.toObject().value("relationType").toInt() == 3)
                         r.requiredDependencies << QString::number(dep.toObject().value("modId").toInteger());
                 } else {
-                    r.loaders = strings(row.value("loaders").toArray());
-                    const auto files = row.value("files").toArray();
-                    QJsonObject primary;
-                    for (const auto& file : files) { if (primary.isEmpty() || file.toObject().value("primary").toBool()) primary = file.toObject(); }
-                    r.filename = primary.value("filename").toString(); r.url = primary.value("url").toString();
-                    r.sha1 = primary.value("hashes").toObject().value("sha1").toString();
-                    r.sha512 = primary.value("hashes").toObject().value("sha512").toString();
-                    for (const auto& dep : row.value("dependencies").toArray()) if (dep.toObject().value("dependency_type").toString() == "required") {
-                        auto dependency = dep.toObject().value("project_id").toString();
-                        if (dependency.isEmpty()) dependency = "version:" + dep.toObject().value("version_id").toString();
-                        r.requiredDependencies << dependency;
-                    }
+                    r = modrinthRelease(row);
                 }
                 batch->detail.releases.append(r);
             }

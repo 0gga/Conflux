@@ -23,7 +23,33 @@ QVariantMap Release::toVariant() const {
     return {{"provider", provider}, {"projectId", projectId}, {"id", id}, {"version", version},
         {"title", title}, {"filename", filename}, {"url", url}, {"sha1", sha1}, {"sha512", sha512},
         {"published", published.left(10)}, {"gameVersions", gameVersions}, {"loaders", loaders},
-        {"dependencies", requiredDependencies}, {"sources", sourceIds.keys()}, {"sourceIds", variantIds(sourceIds)}};
+        {"dependencies", requiredDependencies}, {"dependencyRefs", dependencyRefs.toVariantList()}, {"fileSize", fileSize},
+        {"sources", sourceIds.keys()}, {"sourceIds", variantIds(sourceIds)}};
+}
+Release modrinthRelease(const QJsonObject& row) {
+    Release r; r.provider = "modrinth"; r.projectId = row.value("project_id").toString();
+    r.id = row.value("id").toString(); r.version = row.value("version_number").toString();
+    r.title = row.value("name").toString(); r.published = row.value("date_published").toString();
+    for (const auto& value : row.value("game_versions").toArray()) r.gameVersions << value.toString();
+    for (const auto& value : row.value("loaders").toArray()) r.loaders << value.toString();
+    QJsonObject primary;
+    for (const auto& value : row.value("files").toArray()) {
+        const auto file = value.toObject();
+        if (!file.value("filename").toString().endsWith(".jar", Qt::CaseInsensitive)) continue;
+        if (primary.isEmpty() || file.value("primary").toBool()) primary = file;
+    }
+    r.filename = primary.value("filename").toString(); r.url = primary.value("url").toString();
+    r.fileSize = primary.value("size").toInteger();
+    r.sha1 = primary.value("hashes").toObject().value("sha1").toString();
+    r.sha512 = primary.value("hashes").toObject().value("sha512").toString();
+    r.dependencyRefs = row.value("dependencies").toArray();
+    for (const auto& value : r.dependencyRefs) {
+        const auto dep = value.toObject();
+        if (dep.value("dependency_type").toString() != "required") continue;
+        const auto project = dep.value("project_id").toString();
+        r.requiredDependencies << (project.isEmpty() ? "version:" + dep.value("version_id").toString() : project);
+    }
+    return r;
 }
 QVector<Project> mergeProjects(const QVector<Project>& projects, const QHash<QString, QString>& identities) {
     QVector<Project> result;

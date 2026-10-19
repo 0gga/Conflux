@@ -16,6 +16,7 @@ Item {
     })
     signal createRequested()
     signal discoverRequested()
+    signal packRequested(string path, bool explore)
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 32; spacing: 22
         RowLayout {
@@ -26,8 +27,8 @@ Item {
                 Text { text: "All your worlds. One place to make them yours."; color: Theme.colors.muted; font.pixelSize: 14 }
             }
             Item { Layout.fillWidth: true }
-            ActionButton { text: root.app.libraryBusy ? "Scanning…" : "Refresh"; enabled: !root.app.libraryBusy; subtle: true; onClicked: root.app.refreshLibrary() }
-            ActionButton { text: "+ Create modpack"; primary: true; onClicked: root.createRequested() }
+            ActionButton { iconName: "refresh"; text: root.app.libraryBusy ? "Scanning…" : "Refresh"; enabled: !root.app.libraryBusy; subtle: true; onClicked: root.app.refreshLibrary() }
+            ActionButton { text: "Create modpack"; iconName: "plus"; primary: true; onClicked: root.createRequested() }
         }
         Rectangle {
             objectName: "libraryOnboarding"
@@ -49,7 +50,7 @@ Item {
             ActionButton { text: "Modpacks  " + root.app.visiblePackCount; subtle: root.hiddenTab; onClicked: root.hiddenTab = false }
             ActionButton { text: "Hidden  " + root.app.hiddenPackCount; subtle: !root.hiddenTab; onClicked: root.hiddenTab = true }
             Item { Layout.fillWidth: true }
-            TextField { Layout.preferredWidth: 260; placeholderText: "Search your library…"; selectByMouse: true; onTextChanged: root.query = text }
+            SearchField { Layout.preferredWidth: 260; leadingIcon: "search"; placeholderText: "Search your library…"; selectByMouse: true; onTextChanged: root.query = text }
         }
         RowLayout {
             Layout.fillWidth: true; spacing: 6
@@ -76,8 +77,8 @@ Item {
                     titleText: modelData.title
                     detailText: (modelData.gameVersion || "Minecraft version unknown") + (modelData.loader ? "  ·  " + modelData.loader : "") + "  ·  " + modelData.modCount + " mods"
                     source: modelData.provider; thumbnail: modelData.icon || ""; hiddenPack: modelData.hidden
-                    onActivated: root.app.openLibraryPack(modelData.path)
-                    onExploreRequested: root.app.openLibraryPack(modelData.path, true)
+                    onActivated: root.packRequested(modelData.path, false)
+                    onExploreRequested: root.packRequested(modelData.path, true)
                     onHideRequested: root.app.setPackHidden(modelData.path, !modelData.hidden)
                 }
             }

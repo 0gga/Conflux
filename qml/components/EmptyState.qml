@@ -12,7 +12,7 @@ ColumnLayout {
     Rectangle {
         Layout.alignment: Qt.AlignHCenter
         implicitWidth: 64; implicitHeight: 64; radius: 20; color: Theme.colors.input
-        Text { anchors.centerIn: parent; text: state.symbol; font.pixelSize: 30; color: Theme.colors.accent }
+        Icon { anchors.centerIn: parent; name: state.symbol === "+" ? "plus" : state.symbol === "▦" ? "library" : state.symbol; size: 28; color: Theme.colors.muted }
     }
     Text { Layout.alignment: Qt.AlignHCenter; text: state.title; color: Theme.colors.text; font.pixelSize: 19; font.weight: Font.DemiBold }
     Text {

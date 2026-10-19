@@ -37,18 +37,18 @@ Item {
         }
         RowLayout {
             Layout.fillWidth: true; spacing: 12
-            TextField {
+            SearchField {
                 id: query; objectName: "modSearchInput"; Layout.fillWidth: true; implicitHeight: 44
                 placeholderText: "Search mods, discover something new…"; font.pixelSize: 14; leftPadding: 16
                 onTextEdited: debounce.restart(); onAccepted: root.runSearch()
-                background: Rectangle { color: Theme.colors.input; border.color: query.activeFocus ? Theme.colors.selection : Theme.colors.border; radius: 9 }
+                background: Rectangle { color: Theme.colors.input; border.color: query.activeFocus ? Theme.colors.selection : Theme.colors.border; radius: 14 }
             }
-            TextField {
+            SearchField {
                 id: game; Layout.preferredWidth: 130; implicitHeight: 44; placeholderText: "Any MC version"
                 text: root.app.activePack.minecraft || ""; onTextEdited: debounce.restart(); onAccepted: root.runSearch()
-                background: Rectangle { color: Theme.colors.input; border.color: Theme.colors.border; radius: 9 }
+                background: Rectangle { color: Theme.colors.input; border.color: Theme.colors.border; radius: 14 }
             }
-            ComboBox { id: loader; Layout.preferredWidth: 135; implicitHeight: 44; model: ["Any loader", "fabric", "neoforge", "forge", "quilt"]; onActivated: root.runSearch() }
+            SelectBox { id: loader; Layout.preferredWidth: 135; implicitHeight: 44; model: ["Any loader", "fabric", "neoforge", "forge", "quilt"]; onActivated: root.runSearch() }
             ActionButton { text: "Search"; primary: true; onClicked: root.runSearch() }
         }
         RowLayout {
@@ -91,7 +91,7 @@ Item {
                         RowLayout {
                             anchors.fill: parent; anchors.margins: 16; spacing: 16
                             Rectangle {
-                                Layout.alignment: Qt.AlignTop; implicitWidth: 52; implicitHeight: 52; radius: 11; color: Theme.colors.border; clip: true
+                                Layout.alignment: Qt.AlignTop; implicitWidth: 52; implicitHeight: 52; radius: 14; color: Theme.colors.border; clip: true
                                 Text { anchors.centerIn: parent; text: resultCard.modelData.title.substring(0,1); color: Theme.colors.text; font.pixelSize: 25; font.weight: Font.DemiBold }
                                 Image { anchors.fill: parent; source: resultCard.modelData.icon; fillMode: Image.PreserveAspectFit; asynchronous: true; visible: status === Image.Ready }
                             }
@@ -122,7 +122,7 @@ Item {
             }
             Rectangle {
                 visible: !!root.app.selectedProject.id
-                Layout.preferredWidth: 390; Layout.fillHeight: true; radius: 12; color: Theme.colors.card; border.color: Theme.colors.border
+                Layout.preferredWidth: 390; Layout.fillHeight: true; radius: 14; color: Theme.colors.card; border.color: Theme.colors.border
                 ColumnLayout {
                     anchors.fill: parent; anchors.margins: 20; spacing: 14
                     RowLayout {

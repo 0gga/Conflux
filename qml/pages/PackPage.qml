@@ -67,9 +67,18 @@ Item {
     Component { id: worldView; WorldPanel { worlds: root.session.worlds; onOpenRequested: function(path) { root.app.openFolder(root.workspace.pack.path + "/" + path) } } }
     Dialog {
         id: removeDialog; property string provider; property string projectId; property string modTitle
-        anchors.centerIn: parent; modal: true; title: "Remove mod?"; standardButtons: Dialog.Ok | Dialog.Cancel
-        background: Rectangle { radius: 16; color: Theme.colors.card }
-        Label { text: "Remove " + removeDialog.modTitle + " from this pack?\nRequired dependencies are kept."; wrapMode: Text.WordWrap }
+        anchors.centerIn: parent; modal: true; title: "Remove mod?"; width: 460; padding: 24
+        background: Rectangle { radius: 18; color: Theme.colors.card; border.color: Theme.colors.border }
+        header: Text { text: removeDialog.title; color: Theme.colors.text; font.pixelSize: 21; font.weight: Font.DemiBold; padding: 24; bottomPadding: 8 }
+        ColumnLayout {
+            width: parent.width; spacing: 20
+            Text { Layout.fillWidth: true; text: "Remove " + removeDialog.modTitle + " from this pack?\nRequired dependencies are kept."; color: Theme.colors.muted; font.pixelSize: 13; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                ActionButton { text: "Cancel"; subtle: true; onClicked: removeDialog.reject() }
+                ActionButton { text: "Remove mod"; iconName: "trash"; onClicked: removeDialog.accept() }
+            }
+        }
         onAccepted: root.app.removeMod(provider,projectId)
     }
 }

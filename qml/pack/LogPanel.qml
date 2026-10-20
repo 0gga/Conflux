@@ -18,7 +18,7 @@ Item {
         Rectangle {
             Layout.fillWidth: true; Layout.fillHeight: true; radius: 16; color: Theme.colors.panel; clip: true
             ScrollView { id: scroll; anchors.fill: parent; anchors.margins: 16; clip: true
-                TextEdit { width: Math.max(scroll.availableWidth, contentWidth); height: contentHeight; text: root.logs.text; font.family: "Consolas"; font.pixelSize: 12; color: Theme.colors.text; textFormat: TextEdit.PlainText; readOnly: true; selectByMouse: true; wrapMode: TextEdit.NoWrap }
+                TextEdit { width: Math.max(scroll.availableWidth, contentWidth); height: contentHeight; text: root.logs.text; font.family: "Consolas"; font.pixelSize: 12; color: Theme.colors.text; selectionColor: Theme.colors.selection; selectedTextColor: Theme.colors.text; textFormat: TextEdit.PlainText; readOnly: true; selectByMouse: true; wrapMode: TextEdit.NoWrap }
             }
         }
     }

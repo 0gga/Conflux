@@ -71,12 +71,12 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
         Rectangle {
-            Layout.preferredWidth: 200; Layout.fillHeight: true
+            Layout.preferredWidth: 216; Layout.fillHeight: true
             color: Theme.colors.panel
             ColumnLayout {
-                anchors.fill: parent; anchors.margins: 20; spacing: 8
+                anchors.fill: parent; anchors.margins: 16; spacing: 6
                 RowLayout {
-                    Layout.topMargin: 16; Layout.bottomMargin: 36; spacing: 12
+                    Layout.leftMargin: 8; Layout.topMargin: 12; Layout.bottomMargin: 34; spacing: 12
                     Item {
                         implicitWidth: 32; implicitHeight: 36
                         Rectangle { anchors.centerIn: parent; width: 23; height: 29; radius: 14; color: "transparent"; border.width: 3; border.color: Theme.colors.accent; rotation: -32 }
@@ -87,42 +87,37 @@ ApplicationWindow {
                 Text { text: "WORKSPACE"; color: Theme.colors.muted; font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 1.8; Layout.leftMargin: 12; Layout.bottomMargin: 10 }
                 Repeater {
                     model: [{key:"library", label:"Library", icon:"library"}, {key:"discover", label:"Discover", icon:"compass"}, {key:"workspace", label:"Modpack", icon:"content"}]
-                    delegate: Rectangle {
-                        id: navItem
+                    delegate: NavigationButton {
                         required property var modelData
-                        Layout.fillWidth: true; height: 46; radius: 12
-                        color: window.page === modelData.key ? Theme.colors.selection : (navMouse.containsMouse ? Theme.colors.input : "transparent")
-                        RowLayout {
-                            anchors.fill: parent; anchors.leftMargin: 13; anchors.rightMargin: 13; spacing: 12
-                            Icon { name: navItem.modelData.icon; color: window.page === navItem.modelData.key ? Theme.colors.text : Theme.colors.muted; Layout.preferredWidth: 23 }
-                            Text { text: navItem.modelData.label; font.pixelSize: 14; color: window.page === navItem.modelData.key ? Theme.colors.text : Theme.colors.muted; font.weight: window.page === navItem.modelData.key ? Font.DemiBold : Font.Normal; Layout.fillWidth: true }
-                            Text { text: ""; color: Theme.colors.accent }
-                        }
-                        MouseArea { id: navMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: window.navigate(navItem.modelData.key) }
+                        Layout.fillWidth: true
+                        text: modelData.label; iconName: modelData.icon
+                        selected: window.page === modelData.key
+                        onClicked: window.navigate(modelData.key)
                     }
                 }
                 Item { Layout.fillHeight: true }
-                ActionButton { Layout.fillWidth: true; Layout.topMargin: 12; text: "Settings"; iconName: "settings"; subtle: window.page !== "settings"; onClicked: window.navigate("settings") }
+                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.border; Layout.bottomMargin: 8 }
+                NavigationButton { Layout.fillWidth: true; text: "Settings"; iconName: "settings"; selected: window.page === "settings"; onClicked: window.navigate("settings") }
                 Text { Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 8; text: "Your mods. Connected."; color: Theme.colors.muted; font.pixelSize: 10 }
             }
         }
-        Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.colors.input }
+        Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.colors.border }
         ColumnLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 0
             Rectangle {
-                Layout.fillWidth: true; Layout.preferredHeight: 72; color: Theme.colors.background
+                Layout.fillWidth: true; Layout.preferredHeight: 68; color: Theme.colors.background
                 RowLayout {
                     anchors.fill: parent; anchors.leftMargin: 32; anchors.rightMargin: 32
                     ActionButton { iconName: "back"; hint: "Back · Alt+Left"; enabled: window.session.navigation.canBack; subtle: true; onClicked: window.session.navigation.back() }
                     ActionButton { iconName: "forward"; hint: "Forward · Alt+Right"; enabled: window.session.navigation.canForward; subtle: true; onClicked: window.session.navigation.forward() }
-                    Text { text: "CONFLUX"; font.pixelSize: 10; font.letterSpacing: 2.4; font.weight: Font.DemiBold; color: Theme.colors.muted }
+                    Rectangle { Layout.leftMargin: 8; Layout.rightMargin: 12; implicitWidth: 1; implicitHeight: 18; color: Theme.colors.border }
+                    Text { Layout.maximumWidth: 240; elide: Text.ElideRight; text: window.page === "workspace" ? (window.app.activePack.name || "Modpack") : window.page === "discover" ? "Discover" : window.page === "settings" ? "Settings" : "Library"; font.pixelSize: 13; color: Theme.colors.muted; textFormat: Text.PlainText }
                     Item { Layout.fillWidth: true }
-                    Text { text: "⌕  Search mods   Ctrl K"; font.pixelSize: 12; color: Theme.colors.muted; MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { if (window.navigate("discover")) discovery.focusSearch() } } }
-                    Rectangle { Layout.leftMargin: 18; Layout.rightMargin: 18; implicitWidth: 1; implicitHeight: 23; color: Theme.colors.border }
+                    ActionButton { text: "Search mods"; iconName: "search"; hint: "Search mods · Ctrl+K"; subtle: true; onClicked: { if (window.navigate("discover")) discovery.focusSearch() } }
                     ActionButton { text: "New modpack"; iconName: "plus"; primary: true; enabled: !window.session.editor.dirty && !window.session.editor.busy; onClicked: newPack.open() }
                 }
             }
-            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.input }
+            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.border }
             StackLayout {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 currentIndex: ["library", "discover", "workspace", "settings"].indexOf(window.page)
@@ -151,7 +146,8 @@ ApplicationWindow {
     Dialog {
         id: unsaved; objectName: "unsavedConfigDialog"; modal: true; anchors.centerIn: parent; width: 480; padding: 24; title: "Unsaved config changes"
         closePolicy: Popup.NoAutoClose
-        background: Rectangle { radius: 18; color: Theme.colors.card }
+        background: Rectangle { radius: 18; color: Theme.colors.card; border.color: Theme.colors.border }
+        header: Text { text: unsaved.title; color: Theme.colors.text; font.pixelSize: 21; font.weight: Font.DemiBold; padding: 24; bottomPadding: 8 }
         ColumnLayout { width: parent.width; spacing: 16
             Text { Layout.fillWidth: true; text: "Save your config edits before leaving, or discard them."; color: Theme.colors.text; font.pixelSize: 14; wrapMode: Text.WordWrap }
             Text { visible: window.session.editor.error.length > 0; Layout.fillWidth: true; text: window.session.editor.error; color: Theme.colors.danger; wrapMode: Text.WordWrap }
@@ -167,7 +163,7 @@ ApplicationWindow {
         modal: true; anchors.centerIn: parent; width: 470; padding: 28
         title: "Create a modpack"
         closePolicy: window.app.repositoryBusy ? Popup.NoAutoClose : Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.muted; radius: 14 }
+        background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: 18 }
         header: Text { text: newPack.title; color: Theme.colors.text; font.pixelSize: 23; font.weight: Font.DemiBold; padding: 28; bottomPadding: 6 }
         ColumnLayout {
             width: parent.width; spacing: 16

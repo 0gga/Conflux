@@ -4,6 +4,7 @@ Requests are prioritized here; listing an idea does not mean it is implemented. 
 
 ## Delivered in this workspace update
 
+- OLED default with a black canvas, distinct action/selection states, compact filters, shared keyboard-accessible sidebar buttons and consistent input focus/hover feedback. JSON customization retains four groups and fourteen tokens; dark grey remains available.
 - Rounded shared controls and theme-aware vector icons, embedded mod/resource icons and related-mod icons for unambiguous config matches.
 - Back/forward buttons, mouse buttons, Alt+Left/Right and guarded navigation for unsaved config edits.
 - Independent Content, Configs, Files, Logs and Worlds sections.

@@ -16,8 +16,9 @@ Rectangle {
     signal hideRequested()
     implicitHeight: 96
     radius: 16
-    color: hover.hovered ? Theme.colors.hover : Theme.colors.card
-    border.color: Theme.colors.border
+    color: hover.hovered ? Theme.colors.panel : Theme.colors.card
+    border.color: hover.hovered ? Qt.lighter(Theme.colors.border, 1.5) : Theme.colors.border
+    Behavior on border.color { ColorAnimation { duration: 100 } }
     HoverHandler { id: hover }
     MouseArea { anchors.fill: parent; enabled: row.entireRowInteractive; cursorShape: Qt.PointingHandCursor; onClicked: row.activated() }
     ContentIcon {

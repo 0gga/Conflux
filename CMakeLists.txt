@@ -7,7 +7,7 @@ qt_standard_project_setup(REQUIRES 6.8)
 qt_add_qml_module(conflux_style STATIC URI Conflux.Style VERSION 1.0
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Conflux/Style
     SOURCES src/theme/Theme.h src/theme/Theme.cpp
-    RESOURCES themes/dark-grey.json)
+    RESOURCES themes/dark-grey.json themes/oled.json)
 target_link_libraries(conflux_style PRIVATE Qt6::Gui)
 target_include_directories(conflux_style PUBLIC src/theme)
 add_library(miniz STATIC third_party/miniz.c third_party/miniz_tdef.c third_party/miniz_tinfl.c third_party/miniz_zip.c)
@@ -74,6 +74,7 @@ qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     qml/components/SearchField.qml
     qml/components/SelectBox.qml
     qml/components/SectionTabs.qml
+    qml/components/NavigationButton.qml
     qml/components/ActionButton.qml qml/components/SourceBadge.qml qml/components/EmptyState.qml qml/components/LibraryRow.qml
     qml/pages/LibraryPage.qml qml/pages/DiscoverPage.qml qml/pages/PackPage.qml qml/pages/SettingsPage.qml)
 target_link_libraries(modpack-studio PRIVATE pack_foundation conflux_desktop conflux_styleplugin Qt6::Quick Qt6::QuickControls2 Qt6::Concurrent Qt6::Svg)

@@ -39,14 +39,12 @@ Item {
             Layout.fillWidth: true; spacing: 12
             SearchField {
                 id: query; objectName: "modSearchInput"; Layout.fillWidth: true; implicitHeight: 44
-                placeholderText: "Search mods, discover something new…"; font.pixelSize: 14; leftPadding: 16
+                leadingIcon: "search"; placeholderText: "Search mods, discover something new…"; font.pixelSize: 14
                 onTextEdited: debounce.restart(); onAccepted: root.runSearch()
-                background: Rectangle { color: Theme.colors.input; border.color: query.activeFocus ? Theme.colors.selection : Theme.colors.border; radius: 14 }
             }
             SearchField {
                 id: game; Layout.preferredWidth: 130; implicitHeight: 44; placeholderText: "Any MC version"
                 text: root.app.activePack.minecraft || ""; onTextEdited: debounce.restart(); onAccepted: root.runSearch()
-                background: Rectangle { color: Theme.colors.input; border.color: Theme.colors.border; radius: 14 }
             }
             SelectBox { id: loader; Layout.preferredWidth: 135; implicitHeight: 44; model: ["Any loader", "fabric", "neoforge", "forge", "quilt"]; onActivated: root.runSearch() }
             ActionButton { text: "Search"; primary: true; onClicked: root.runSearch() }
@@ -57,7 +55,7 @@ Item {
                 model: [{key:"merged",label:"All sources"}, {key:"modrinth",label:"Modrinth"}, {key:"curseforge",label:"CurseForge"}]
                 delegate: ActionButton {
                     required property var modelData
-                    text: modelData.label; subtle: root.source !== modelData.key
+                    text: modelData.label; subtle: true; compact: true; selected: root.source === modelData.key
                     onClicked: { root.source = modelData.key; root.runSearch() }
                 }
             }
@@ -85,9 +83,11 @@ Item {
                         id: resultCard
                         required property var modelData
                         required property int index
-                        width: results.width - 12; height: root.app.selectedProject.id ? 124 : 116; radius: 10
-                        color: root.app.selectedProject.id === modelData.id && root.app.selectedProject.provider === modelData.provider ? Theme.colors.selection : (resultMouse.containsMouse ? Theme.colors.input : Theme.colors.card)
-                        border.color: root.app.selectedProject.id === modelData.id && root.app.selectedProject.provider === modelData.provider ? Theme.colors.accent : Theme.colors.border
+                        readonly property bool selected: root.app.selectedProject.id === modelData.id && root.app.selectedProject.provider === modelData.provider
+                        width: results.width - 12; height: root.app.selectedProject.id ? 124 : 116; radius: 14
+                        color: selected ? Theme.colors.input : resultMouse.containsMouse ? Theme.colors.hover : Theme.colors.card
+                        border.color: selected ? Theme.colors.accent : Theme.colors.border
+                        Rectangle { anchors.left: parent.left; anchors.leftMargin: 1; anchors.verticalCenter: parent.verticalCenter; width: 3; height: 30; radius: 1.5; color: Theme.colors.accent; visible: resultCard.selected }
                         RowLayout {
                             anchors.fill: parent; anchors.margins: 16; spacing: 16
                             Rectangle {
@@ -129,7 +129,7 @@ Item {
                         Layout.fillWidth: true
                         Text { text: "PROJECT"; color: Theme.colors.accent; font.pixelSize: 10; font.letterSpacing: 1.6 }
                         Item { Layout.fillWidth: true }
-                        ActionButton { text: "Close  ×"; subtle: true; implicitHeight: 28; onClicked: root.app.closeProject() }
+                        ActionButton { iconName: "close"; hint: "Close project"; subtle: true; compact: true; onClicked: root.app.closeProject() }
                     }
                     Text { Layout.fillWidth: true; text: root.app.selectedProject.title || ""; color: Theme.colors.text; font.pixelSize: 25; font.weight: Font.DemiBold; wrapMode: Text.WordWrap }
                     RowLayout {
@@ -152,7 +152,7 @@ Item {
                                     id: releaseRow
                                     required property var modelData
                                     required property int index
-                                    Layout.fillWidth: true; implicitHeight: 88; color: Theme.colors.input; border.color: Theme.colors.border; radius: 8
+                                    Layout.fillWidth: true; implicitHeight: 88; color: Theme.colors.panel; border.color: Theme.colors.border; radius: 12
                                     RowLayout {
                                         anchors.fill: parent; anchors.margins: 12; spacing: 8
                                         ColumnLayout {

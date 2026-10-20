@@ -208,7 +208,8 @@ version = "1"
     void themeValidationAndLastGoodState() {
         Theme theme(nullptr, storage.path() + "/theme");
         QVERIFY(!theme.colors().isEmpty());
-        QCOMPARE(theme.colors().value("background").toString(), QString("#17181b"));
+        QCOMPARE(theme.colors().value("background").toString(), QString("#000000"));
+        QCOMPARE(theme.file(), QString("Built-in OLED"));
         QFile input(QDir(theme.folder()).filePath("dark-grey.json"));
         QVERIFY(input.open(QIODevice::ReadOnly));
         auto doc = QJsonDocument::fromJson(input.readAll()).object();
@@ -230,7 +231,63 @@ version = "1"
         QVERIFY(!theme.error().isEmpty());
         QVERIFY(!theme.select("../outside.json"));
         QVERIFY(theme.select("Built-in dark grey"));
+        QCOMPARE(theme.colors().value("background").toString(), QString("#17181b"));
         QFile::remove(custom);
+    }
+    void oledDefaultMigrationPreservesLaterChoicesAndCustomFiles() {
+        QTemporaryDir legacy;
+        QVERIFY(legacy.isValid());
+        {
+            QSettings settings(legacy.path() + "/appearance.ini", QSettings::IniFormat);
+            settings.setValue("appearance/theme", "Built-in dark grey");
+        }
+        {
+            Theme migrated(nullptr, legacy.path());
+            QCOMPARE(migrated.file(), QString("Built-in OLED"));
+            QVERIFY(migrated.select("Built-in dark grey"));
+        }
+        {
+            Theme reopened(nullptr, legacy.path());
+            QCOMPARE(reopened.file(), QString("Built-in dark grey"));
+        }
+        QTemporaryDir existingCustom;
+        QVERIFY(existingCustom.isValid());
+        {
+            Theme seed(nullptr, existingCustom.path());
+        }
+        const auto customThemePath = existingCustom.path() + "/themes/dark-grey.json";
+        QFile customThemeFile(customThemePath);
+        QVERIFY(customThemeFile.open(QIODevice::ReadOnly));
+        const auto customThemeBytes = customThemeFile.readAll();
+        customThemeFile.close();
+        {
+            QSettings settings(existingCustom.path() + "/appearance.ini", QSettings::IniFormat);
+            settings.remove("appearance/oledDefaultApplied");
+            settings.setValue("appearance/theme", "dark-grey.json");
+        }
+        {
+            Theme existing(nullptr, existingCustom.path());
+            QCOMPARE(existing.file(), QString("dark-grey.json"));
+            QCOMPARE(existing.colors().value("background").toString(), QString("#17181b"));
+        }
+        QVERIFY(customThemeFile.open(QIODevice::ReadOnly));
+        QCOMPARE(customThemeFile.readAll(), customThemeBytes);
+        QTemporaryDir customStorage;
+        QVERIFY(customStorage.isValid());
+        QDir().mkpath(customStorage.path() + "/themes");
+        const auto customPath = customStorage.path() + "/themes/oled.json";
+        const auto original = QByteArray("{\"user-edited\":true}");
+        write(customPath, original);
+        {
+            QSettings settings(customStorage.path() + "/appearance.ini", QSettings::IniFormat);
+            settings.setValue("appearance/theme", "oled.json");
+        }
+        Theme custom(nullptr, customStorage.path());
+        QVERIFY(!custom.error().isEmpty());
+        QFile originalFile(customPath);
+        QVERIFY(originalFile.open(QIODevice::ReadOnly));
+        QCOMPARE(originalFile.readAll(), original);
+        QCOMPARE(custom.file(), QString("Built-in OLED"));
     }
 };
 QTEST_MAIN(WorkspaceTests)

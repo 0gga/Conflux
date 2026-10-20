@@ -20,11 +20,11 @@ Item {
             Layout.fillWidth: true
             SearchField { Layout.fillWidth: true; leadingIcon: "search"; placeholderText: "Search content…"; onTextChanged: root.query = text }
             Repeater { model: [{key:"all",label:"All"},{key:"mods",label:"Mods"},{key:"shaderpacks",label:"Shaders"},{key:"resourcepacks",label:"Resources"}]
-                delegate: ActionButton { required property var modelData; text: modelData.label; subtle: root.category !== modelData.key; onClicked: root.category = modelData.key }
+                delegate: ActionButton { required property var modelData; text: modelData.label; compact: true; subtle: true; selected: root.category === modelData.key; onClicked: root.category = modelData.key }
             }
         }
         Rectangle {
-            Layout.fillWidth: true; Layout.fillHeight: true; radius: 16; color: Theme.colors.panel; clip: true
+            Layout.fillWidth: true; Layout.fillHeight: true; radius: 16; color: Theme.colors.panel; border.color: Theme.colors.border; clip: true
             ColumnLayout {
                 anchors.fill: parent; spacing: 0
                 RowLayout {
@@ -41,6 +41,7 @@ Item {
                             id: entry; required property var modelData
                             width: list.width; height: 80; color: hover.hovered ? Theme.colors.card : "transparent"; radius: 12
                             HoverHandler { id: hover }
+                            Rectangle { anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.leftMargin: 16; anchors.rightMargin: 16; height: 1; color: Theme.colors.border; opacity: 0.5 }
                             RowLayout {
                                 anchors.fill: parent; anchors.margins: 16; spacing: 14
                                 ContentIcon { source: entry.modelData.icon || ""; kind: entry.modelData.category === "mods" ? "mod" : entry.modelData.category === "shaderpacks" ? "shader" : "resource" }

@@ -10,7 +10,7 @@ Rectangle {
     signal valueChanged(var value)
     property var items: { try { return JSON.parse(field.value) } catch (error) { return [] } }
     function updateItem(index, value) { items[index] = value; valueChanged(JSON.stringify(items)) }
-    implicitHeight: body.implicitHeight + 32; radius: 14; color: Theme.colors.card
+    implicitHeight: body.implicitHeight + 32; radius: 14; color: Theme.colors.card; border.color: Theme.colors.border
     ColumnLayout {
         id: body; anchors.fill: parent; anchors.margins: 16; spacing: 10
         RowLayout {
@@ -31,7 +31,7 @@ Rectangle {
             visible: root.field.minimum !== undefined && root.field.maximum !== undefined && (root.field.type === "number" || root.field.type === "integer")
             Layout.fillWidth: true; from: root.field.minimum || 0; to: root.field.maximum || 1; value: Number(valueInput.text); stepSize: root.field.type === "integer" ? 1 : 0
             background: Rectangle { x: rangeSlider.leftPadding; y: rangeSlider.topPadding + (rangeSlider.availableHeight - height) / 2; width: rangeSlider.availableWidth; height: 5; radius: 3; color: Theme.colors.input; Rectangle { width: rangeSlider.visualPosition * parent.width; height: parent.height; radius: 3; color: Theme.colors.accent } }
-            handle: Rectangle { x: rangeSlider.leftPadding + rangeSlider.visualPosition * (rangeSlider.availableWidth - width); y: rangeSlider.topPadding + (rangeSlider.availableHeight - height) / 2; implicitWidth: 18; implicitHeight: 18; radius: 9; color: Theme.colors.accent }
+            handle: Rectangle { x: rangeSlider.leftPadding + rangeSlider.visualPosition * (rangeSlider.availableWidth - width); y: rangeSlider.topPadding + (rangeSlider.availableHeight - height) / 2; implicitWidth: 18; implicitHeight: 18; radius: 9; color: Theme.colors.accent; border.width: rangeSlider.visualFocus ? 2 : 0; border.color: Theme.colors.text }
             Accessible.name: root.field.label; onMoved: { valueInput.text = String(root.field.type === "integer" ? Math.round(value) : Number(value.toFixed(6))); root.valueChanged(valueInput.text) }
         }
         ColumnLayout {

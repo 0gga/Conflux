@@ -23,12 +23,15 @@ Item {
             Layout.fillWidth: true
             ColumnLayout {
                 spacing: 8
-                Text { text: "Library"; color: Theme.colors.text; font.pixelSize: 31; font.weight: Font.DemiBold }
-                Text { text: "All your worlds. One place to make them yours."; color: Theme.colors.muted; font.pixelSize: 14 }
+                RowLayout {
+                    spacing: 12
+                    Text { text: "Library"; color: Theme.colors.text; font.pixelSize: 31; font.weight: Font.DemiBold; font.letterSpacing: -0.7 }
+                    Rectangle { implicitWidth: total.implicitWidth + 18; implicitHeight: 26; radius: 8; color: Theme.colors.input; Text { id: total; anchors.centerIn: parent; text: root.app.visiblePackCount; color: Theme.colors.muted; font.pixelSize: 12 } }
+                }
+                Text { text: "Your modpacks, across every launcher."; color: Theme.colors.muted; font.pixelSize: 13 }
             }
             Item { Layout.fillWidth: true }
             ActionButton { iconName: "refresh"; text: root.app.libraryBusy ? "Scanning…" : "Refresh"; enabled: !root.app.libraryBusy; subtle: true; onClicked: root.app.refreshLibrary() }
-            ActionButton { text: "Create modpack"; iconName: "plus"; primary: true; onClicked: root.createRequested() }
         }
         Rectangle {
             objectName: "libraryOnboarding"
@@ -47,19 +50,23 @@ Item {
         }
         RowLayout {
             Layout.fillWidth: true; spacing: 8
-            ActionButton { text: "Modpacks  " + root.app.visiblePackCount; subtle: root.hiddenTab; onClicked: root.hiddenTab = false }
-            ActionButton { text: "Hidden  " + root.app.hiddenPackCount; subtle: !root.hiddenTab; onClicked: root.hiddenTab = true }
+            SectionTabs {
+                entries: [{key:"visible",label:"Modpacks",icon:"content"},{key:"hidden",label:"Hidden · " + root.app.hiddenPackCount,icon:"hide"}]
+                current: root.hiddenTab ? "hidden" : "visible"
+                onSelected: function(key) { root.hiddenTab = key === "hidden" }
+            }
             Item { Layout.fillWidth: true }
             SearchField { Layout.preferredWidth: 260; leadingIcon: "search"; placeholderText: "Search your library…"; selectByMouse: true; onTextChanged: root.query = text }
         }
         RowLayout {
-            Layout.fillWidth: true; spacing: 6
+            Layout.fillWidth: true; spacing: 4
+            Text { text: "Sources"; color: Theme.colors.muted; font.pixelSize: 12; Layout.rightMargin: 12 }
             Repeater {
                 model: ["all", "conflux", "modrinth", "curseforge"]
                 delegate: ActionButton {
                     required property string modelData
                     text: modelData === "all" ? "All sources" : modelData === "conflux" ? "Conflux" : modelData === "modrinth" ? "Modrinth" : "CurseForge"
-                    subtle: root.source !== modelData; onClicked: root.source = modelData
+                    compact: true; subtle: true; selected: root.source === modelData; onClicked: root.source = modelData
                 }
             }
             Item { Layout.fillWidth: true }

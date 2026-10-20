@@ -18,6 +18,15 @@ ApplicationWindow {
         else session.navigation.resumePending()
     }
     readonly property string page: session.navigation.route.page || "library"
+    readonly property string browseInstanceName: {
+        const path = session.navigation.route.packPath || ""
+        const instance = app.libraryPacks.find(function(pack) { return pack.path === path })
+        return instance ? instance.title : session.browse.pack.path === path ? (session.browse.pack.name || "selected instance") : "selected instance"
+    }
+    readonly property string pageTitle: page === "discover"
+        ? (session.navigation.route.packPath ? 'Exploring content for "' + browseInstanceName + '"' : "Explore content")
+        : page === "showcase" ? (session.showcase.project.title || "Mod showcase")
+        : page === "workspace" ? (app.activePack.name || "Modpack") : page === "settings" ? "Settings" : "Library"
     function syncRoutePack() {
         const route = session.navigation.route
         if (route.packPath && route.packPath !== app.activePack.path && !app.repositoryBusy) app.openLibraryPack(route.packPath)
@@ -95,6 +104,7 @@ ApplicationWindow {
                         onClicked: window.navigate(modelData.key)
                     }
                 }
+                NavigationButton { Layout.fillWidth: true; text: "New modpack"; iconName: "plus"; enabled: !window.session.editor.dirty && !window.session.editor.busy; onClicked: newPack.open() }
                 Item { Layout.fillHeight: true }
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.border; Layout.bottomMargin: 8 }
                 NavigationButton { Layout.fillWidth: true; text: "Settings"; iconName: "settings"; selected: window.page === "settings"; onClicked: window.navigate("settings") }
@@ -105,16 +115,29 @@ ApplicationWindow {
         ColumnLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 0
             Rectangle {
-                Layout.fillWidth: true; Layout.preferredHeight: 68; color: Theme.colors.background
+                Layout.fillWidth: true; Layout.preferredHeight: 56; color: Theme.colors.background
                 RowLayout {
-                    anchors.fill: parent; anchors.leftMargin: 32; anchors.rightMargin: 32
-                    ActionButton { iconName: "back"; hint: "Back · Alt+Left"; enabled: window.session.navigation.canBack; subtle: true; onClicked: window.session.navigation.back() }
+                    anchors.fill: parent; anchors.leftMargin: 28; anchors.rightMargin: 28
+                    ActionButton { objectName: "navigationBackButton"; iconName: "back"; hint: "Back · Alt+Left"; enabled: window.session.navigation.canBack; subtle: true; onClicked: window.session.navigation.back() }
                     ActionButton { iconName: "forward"; hint: "Forward · Alt+Right"; enabled: window.session.navigation.canForward; subtle: true; onClicked: window.session.navigation.forward() }
                     Rectangle { Layout.leftMargin: 8; Layout.rightMargin: 12; implicitWidth: 1; implicitHeight: 18; color: Theme.colors.border }
-                    Text { Layout.maximumWidth: 240; elide: Text.ElideRight; text: window.page === "showcase" ? (window.session.showcase.project.title || "Mod showcase") : window.page === "workspace" ? (window.app.activePack.name || "Modpack") : window.page === "discover" ? "Explore content" : window.page === "settings" ? "Settings" : "Library"; font.pixelSize: 13; color: Theme.colors.muted; textFormat: Text.PlainText }
-                    Item { Layout.fillWidth: true }
-                    ActionButton { text: "Explore content"; iconName: "search"; hint: "Explore content · Ctrl+K"; subtle: true; onClicked: { if (window.navigate("discover")) discovery.focusSearch() } }
-                    ActionButton { text: "New modpack"; iconName: "plus"; primary: true; enabled: !window.session.editor.dirty && !window.session.editor.busy; onClicked: newPack.open() }
+                    Text {
+                        id: titleLabel
+                        objectName: "pageTitle"
+                        Layout.fillWidth: true; Layout.minimumWidth: 0
+                        elide: Text.ElideRight; text: window.pageTitle
+                        font.pixelSize: 19; font.weight: Font.DemiBold; color: Theme.colors.text; textFormat: Text.PlainText
+                        HoverHandler { id: titleHover }
+                        RoundedToolTip { visible: titleHover.hovered && titleLabel.truncated; text: window.pageTitle }
+                    }
+                    SelectBox {
+                        objectName: "browseInstanceSelector"
+                        visible: window.page === "discover"
+                        Layout.preferredWidth: 232
+                        model: ["Browse without an instance"].concat(discovery.instances.map(function(pack) { return pack.title + " - " + Branding.label(pack.provider) }))
+                        currentIndex: discovery.instances.findIndex(function(pack) { return pack.path === discovery.targetPath })+1
+                        onActivated: discovery.instanceRequested(currentIndex > 0 ? discovery.instances[currentIndex-1].path : "")
+                    }
                 }
             }
             Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.border }

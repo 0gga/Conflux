@@ -1,5 +1,6 @@
 #pragma once
 #include "domain/CatalogueSearch.h"
+#include "features/preferences/BrowseFilterPreferences.h"
 #include "features/preferences/ContentVisibility.h"
 #include <QObject>
 #include <QSet>
@@ -18,7 +19,8 @@ class BrowseCatalogue final : public QObject {
     Q_PROPERTY(qreal scrollPosition READ scrollPosition WRITE setScrollPosition NOTIFY scrollChanged)
   public:
     BrowseCatalogue(std::shared_ptr<ICatalogueSearch>, std::shared_ptr<IContentVisibility>,
-                    QHash<QString, QString> identities = {}, QObject *parent = nullptr);
+                    QHash<QString, QString> identities = {},
+                    std::shared_ptr<IBrowseFilterPreferences> preferences = {}, QObject *parent = nullptr);
     QVariantList projects() const;
     QVariantMap filters() const {
         return m_filters;
@@ -68,9 +70,11 @@ class BrowseCatalogue final : public QObject {
         QVariantList building;
         int page = 0;
         qreal scroll = 0;
+        bool defaultLoaders = true;
     };
     std::shared_ptr<ICatalogueSearch> m_source;
     std::shared_ptr<IContentVisibility> m_visibility;
+    std::shared_ptr<IBrowseFilterPreferences> m_preferences;
     QHash<QString, QString> m_identities;
     QSet<QString> m_installed, m_seen;
     QHash<QString, Project> m_known;
@@ -82,6 +86,7 @@ class BrowseCatalogue final : public QObject {
     QStringList m_defaultVersions, m_defaultLoaders;
     int m_page = 0, m_generation = 0, m_reads = 0;
     bool m_busy = false, m_cf = false, m_optionsLoaded = false;
+    bool m_defaultLoaderSelection = true;
     qreal m_scroll = 0;
     QVariantList m_building;
     CatalogueQuery request(const QString &) const;
@@ -91,5 +96,10 @@ class BrowseCatalogue final : public QObject {
     void pump();
     void publish(Project);
     bool before(const Project &, const Project &) const;
+    QString viewKey() const;
+    void saveSnapshot();
+    void activateView(bool sameInstance = false);
+    void saveCompatibility();
+    bool applyDefaults();
 };
 } // namespace studio

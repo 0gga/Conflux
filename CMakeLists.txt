@@ -56,6 +56,7 @@ target_sources(conflux_desktop PRIVATE
     src/features/explore/BrowseInstalls.h src/features/explore/BrowseInstalls.cpp
     src/features/explore/BrowseCatalogue.h src/features/explore/BrowseCatalogue.cpp
     src/features/preferences/BrowsePreferences.h src/features/preferences/BrowsePreferences.cpp
+    src/features/preferences/BrowseFilterPreferences.h src/features/preferences/BrowseFilterPreferences.cpp
     src/features/preferences/ContentVisibility.h src/features/preferences/ContentVisibility.cpp
     src/platform/BrowseSettingsStore.h src/platform/BrowseSettingsStore.cpp
     src/platform/AssetInstaller.h src/platform/AssetInstaller.cpp
@@ -100,6 +101,7 @@ qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     qml/components/IconPaths.js
     qml/components/BrandBadge.qml qml/components/ProjectCard.qml
     qml/components/CompatibilityBadges.qml qml/components/BoundedScrollView.qml
+    qml/components/RoundedToolTip.qml
     qml/components/ContentIcon.qml
     qml/components/SearchField.qml
     qml/components/SelectBox.qml

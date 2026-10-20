@@ -716,11 +716,55 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     fail("Content visibility changed installed files");
                     return;
                 }
+                session.navigation()->go({{"page", "discover"}, {"packPath", state->managedPath}});
+                session.catalogue()->configure({{"type", "mod"}, {"unlocked", true}});
+                break;
+            case 45: {
+                if (session.catalogue()->busy())
+                    return;
+                auto *selector = window->findChild<QQuickItem *>("browseInstanceSelector");
+                auto *filters = window->findChild<QQuickItem *>("browseFilterPanel");
+                auto *versions = window->findChild<QQuickItem *>("browseVersionList");
+                auto *title = window->findChild<QQuickItem *>("pageTitle");
+                if (!selector || !filters || !versions || !title ||
+                    qAbs(selector->width() - filters->width()) > 1 ||
+                    qAbs(selector->mapToScene(QPointF{}).x() - filters->mapToScene(QPointF{}).x()) > 1 ||
+                    !versions->isVisible() || versions->property("count").toInt() < 20 ||
+                    !title->property("text").toString().startsWith("Exploring content for ")) {
+                    fail("Explore top-bar alignment or unlocked scrollable version list failed");
+                    return;
+                }
+                if (!capture("browse-unlocked-versions")) {
+                    fail("Unlocked versions render failed");
+                    return;
+                }
+                auto *back = window->findChild<QObject *>("navigationBackButton");
+                auto *tip = back ? back->findChild<QObject *>("roundedToolTip") : nullptr;
+                auto *background = tip ? tip->property("background").value<QQuickItem *>() : nullptr;
+                if (!background || background->property("radius").toInt() < 8) {
+                    fail("Tooltip background is not rounded");
+                    return;
+                }
+                tip->setProperty("text", "Back to the previous page");
+                tip->setProperty("delay", 0);
+                tip->setProperty("visible", true);
+                break;
+            }
+            case 46:
+                if (auto *tip = window->findChild<QObject *>("navigationBackButton")
+                                    ->findChild<QObject *>("roundedToolTip");
+                    !tip || !tip->property("opened").toBool())
+                    return;
+                if (!capture("browse-rounded-tooltip")) {
+                    fail("Rounded tooltip render failed");
+                    return;
+                }
                 if (smokeRuntimeError) {
                     fail("QML runtime warning in Explore content");
                     return;
                 }
-                qInfo("PASS: provider pagination and page/scroll restoration, right filters, stop-at-bounds "
+                qInfo("PASS: compact contextual top bar, scrollable versions and rounded tooltips; provider "
+                      "pagination and page/scroll restoration, right filters, stop-at-bounds "
                       "scrolling; instance-scoped browse installs, exact installed-version badges, verified "
                       "live "
                       "ZIP assets, four content types and branded rounded cards; live API/install/Git, "

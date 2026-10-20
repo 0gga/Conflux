@@ -6,9 +6,9 @@
 namespace studio {
 BrowseCatalogue::BrowseCatalogue(std::shared_ptr<ICatalogueSearch> source,
                                  std::shared_ptr<IContentVisibility> visibility, QHash<QString, QString> ids,
-                                 QObject *parent)
+                                 std::shared_ptr<IBrowseFilterPreferences> preferences, QObject *parent)
     : QObject(parent), m_source(std::move(source)), m_visibility(std::move(visibility)),
-      m_identities(std::move(ids)) {
+      m_preferences(std::move(preferences)), m_identities(std::move(ids)) {
     m_filters = {{"query", ""},
                  {"source", "merged"},
                  {"type", "mod"},
@@ -50,45 +50,61 @@ void BrowseCatalogue::loadOptions() {
         emit guard->changed();
     });
 }
-void BrowseCatalogue::setContext(const QString &key, const QStringList &versions,
-                                 const QStringList &loaders) {
-    m_defaultVersions = versions;
-    m_defaultLoaders = loaders;
-    if (m_context == key) {
-        if (key != "global" && !m_filters.value("unlocked").toBool() &&
-            (m_filters.value("versions").toStringList() != versions ||
-             m_filters.value("loaders").toStringList() != loaders))
-            configure({{"versions", versions}, {"loaders", loaders}});
+QString BrowseCatalogue::viewKey() const {
+    return m_context + QChar(0x1f) + m_filters.value("type").toString();
+}
+void BrowseCatalogue::saveCompatibility() {
+    if (m_preferences && !m_context.isEmpty())
+        m_preferences->save(m_context, m_filters.value("type").toString(),
+                            {m_filters.value("versions").toStringList(),
+                             m_filters.value("loaders").toStringList(), m_filters.value("unlocked").toBool(),
+                             m_defaultLoaderSelection});
+}
+void BrowseCatalogue::saveSnapshot() {
+    if (m_context.isEmpty())
         return;
+    m_contexts[viewKey()] = {m_filters, m_pages,    m_streams, m_seen,   m_installed,
+                             m_known,   m_building, m_page,    m_scroll, m_defaultLoaderSelection};
+}
+bool BrowseCatalogue::applyDefaults() {
+    // A requested instance can be selected before its inventory metadata has arrived.
+    if (m_context != "global" && m_defaultVersions.isEmpty())
+        return false;
+    bool changed = false;
+    if (!m_filters.value("unlocked").toBool() &&
+        m_filters.value("versions").toStringList() != m_defaultVersions) {
+        m_filters["versions"] = m_defaultVersions;
+        changed = true;
     }
-    if (!m_context.isEmpty()) {
-        Snapshot cached;
-        cached.filters = m_filters;
-        cached.pages = m_pages;
-        cached.streams = m_streams;
-        cached.seen = m_seen;
-        cached.installed = m_installed;
-        cached.known = m_known;
-        cached.building = m_building;
-        cached.page = m_page;
-        cached.scroll = m_scroll;
-        m_contexts[m_context] = std::move(cached);
+    if (m_defaultLoaderSelection && m_filters.value("loaders").toStringList() != m_defaultLoaders) {
+        m_filters["loaders"] = m_defaultLoaders;
+        changed = true;
     }
-    m_context = key;
+    return changed;
+}
+void BrowseCatalogue::activateView(bool sameInstance) {
     ++m_generation;
     m_busy = false;
-    if (m_contexts.contains(key)) {
-        const auto state = m_contexts.value(key);
+    m_notice.clear();
+    if (m_contexts.contains(viewKey())) {
+        const auto state = m_contexts.value(viewKey());
         m_filters = state.filters;
         m_pages = state.pages;
         m_streams = state.streams;
         m_seen = state.seen;
-        m_installed = state.installed;
+        const bool installedChanged = sameInstance && m_installed != state.installed;
+        if (!sameInstance)
+            m_installed = state.installed;
         m_known = state.known;
         m_building = state.building;
         m_page = state.page;
         m_scroll = state.scroll;
+        m_defaultLoaderSelection = state.defaultLoaders;
         m_reads = 0;
+        if (applyDefaults() || (installedChanged && m_filters.value("hideInstalled").toBool())) {
+            reset();
+            return;
+        }
         m_busy = m_page >= m_pages.size();
         emit changed();
         emit scrollChanged();
@@ -96,11 +112,34 @@ void BrowseCatalogue::setContext(const QString &key, const QStringList &versions
             pump();
         return;
     }
-    m_installed.clear();
-    m_filters["versions"] = versions;
-    m_filters["loaders"] = loaders;
+    m_filters["versions"] = m_defaultVersions;
+    m_filters["loaders"] = m_defaultLoaders;
     m_filters["unlocked"] = false;
+    m_filters["tags"] = QStringList{};
+    m_defaultLoaderSelection = true;
+    if (m_preferences)
+        if (const auto saved = m_preferences->load(m_context, m_filters.value("type").toString())) {
+            m_filters["versions"] = saved->versions;
+            m_filters["loaders"] = saved->loaders;
+            m_filters["unlocked"] = saved->versionUnlocked;
+            m_defaultLoaderSelection = saved->defaultLoaders;
+            applyDefaults();
+        }
     reset();
+}
+void BrowseCatalogue::setContext(const QString &key, const QStringList &versions,
+                                 const QStringList &loaders) {
+    m_defaultVersions = versions;
+    m_defaultLoaders = loaders;
+    if (m_context == key) {
+        if (applyDefaults())
+            reset();
+        return;
+    }
+    saveSnapshot();
+    m_context = key;
+    m_installed.clear();
+    activateView();
 }
 void BrowseCatalogue::setInstalled(const QVariantList &inventory) {
     QSet<QString> ids;
@@ -135,9 +174,17 @@ CatalogueQuery BrowseCatalogue::request(const QString &provider) const {
 }
 void BrowseCatalogue::configure(const QVariantMap &requested) {
     auto changes = requested;
+    const auto type = changes.take("type").toString();
+    if (!type.isEmpty() && type != m_filters.value("type").toString() &&
+        QStringList{"mod", "resourcepack", "shader", "datapack"}.contains(type)) {
+        saveSnapshot();
+        m_filters["type"] = type;
+        activateView(true);
+    }
+    if (changes.contains("loaders"))
+        m_defaultLoaderSelection = false;
     if (changes.contains("unlocked") && !changes.value("unlocked").toBool() && m_context != "global") {
         changes["versions"] = m_defaultVersions;
-        changes["loaders"] = m_defaultLoaders;
     }
     bool changed = false;
     for (auto it = changes.cbegin(); it != changes.cend(); ++it) {
@@ -166,6 +213,8 @@ void BrowseCatalogue::configure(const QVariantMap &requested) {
             changed = true;
         }
     }
+    if (changes.contains("versions") || changes.contains("loaders") || changes.contains("unlocked"))
+        saveCompatibility();
     if (changed)
         reset();
 }
@@ -198,8 +247,6 @@ void BrowseCatalogue::reset() {
             else
                 ++it;
         }
-    if (source != "modrinth" && !m_cf)
-        m_notice = "CurseForge needs an approved API key; showing available Modrinth results.";
     if (m_filters.value("sort") == "follows" && m_streams.contains("curseforge"))
         m_notice = "CurseForge has no follower sort; its results use popularity.";
     emit changed();

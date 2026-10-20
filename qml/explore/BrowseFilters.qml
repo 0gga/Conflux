@@ -34,13 +34,30 @@ BoundedScrollView {
                 Repeater { model: root.catalogue.filters.versions || []; delegate: ActionButton { required property string modelData; text: modelData; compact: true; pill: true; selected: true; enabled: !root.hasInstance || !!root.catalogue.filters.unlocked; hint: "Remove version"; onClicked: root.toggle("versions",modelData) } }
             }
         }
-        Text { visible: root.hasInstance && !root.catalogue.filters.unlocked; Layout.fillWidth: true; text: "Compatibility comes from this instance. Unlock to browse other versions and loaders; this does not change the instance."; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap }
-        ActionButton { visible: root.hasInstance; text: root.catalogue.filters.unlocked ? "Use instance compatibility" : "Unlock filters"; iconName: "lock"; compact: true; onClicked: root.catalogue.configure({unlocked:!root.catalogue.filters.unlocked}) }
-        SearchField { id: versionsSearch; Layout.fillWidth: true; placeholderText: "Find versions..."; leadingIcon: "search" }
-        SelectBox {
-            Layout.fillWidth: true; enabled: !root.hasInstance || !!root.catalogue.filters.unlocked
-            model: ["Add a version"].concat((root.catalogue.options.versions || []).filter(function(version) { return version.indexOf(versionsSearch.text)!==-1 && (root.catalogue.filters.versions || []).indexOf(version)===-1 }))
-            onActivated: { if(currentIndex>0)root.toggle("versions",model[currentIndex]);currentIndex=0 }
+        Text { visible: root.hasInstance && !root.catalogue.filters.unlocked; Layout.fillWidth: true; text: "Game version follows this instance. Unlock to browse other versions; the instance stays unchanged. Loader filters are always editable."; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap }
+        ActionButton { visible: root.hasInstance; text: root.catalogue.filters.unlocked ? "Use instance version" : "Unlock game version"; iconName: "lock"; compact: true; onClicked: root.catalogue.configure({unlocked:!root.catalogue.filters.unlocked}) }
+        SearchField { id: versionsSearch; visible: !root.hasInstance || !!root.catalogue.filters.unlocked; Layout.fillWidth: true; placeholderText: "Find versions..."; leadingIcon: "search" }
+        Rectangle {
+            visible: !root.hasInstance || !!root.catalogue.filters.unlocked
+            Layout.fillWidth: true
+            implicitHeight: Math.min(240, versionsList.contentHeight + 12)
+            radius: 10; color: Theme.colors.input
+            ListView {
+                id: versionsList; objectName: "browseVersionList"
+                anchors.fill: parent; anchors.margins: 6
+                clip: true; boundsBehavior: Flickable.StopAtBounds; spacing: 3
+                model: (root.catalogue.options.versions || []).filter(function(version) { return version.indexOf(versionsSearch.text)!==-1 })
+                ScrollBar.vertical: ScrollBar {}
+                delegate: ActionButton {
+                    required property string modelData
+                    width: versionsList.width
+                    text: modelData; compact: true; subtle: true; alignLeft: true
+                    selected: (root.catalogue.filters.versions || []).indexOf(modelData)!==-1
+                    iconName: selected ? "check" : ""
+                    Accessible.description: selected ? "Selected game version" : "Select game version"
+                    onClicked: root.toggle("versions",modelData)
+                }
+            }
         }
         ActionButton { visible: !root.hasInstance || !!root.catalogue.filters.unlocked; text: "Clear versions"; compact: true; subtle: true; onClicked: root.catalogue.configure({versions:[]}) }
         Text { visible: root.catalogue.filters.type === "mod"; text: "Loaders"; color: Theme.colors.text; font.pixelSize: 14; font.weight: Font.DemiBold }
@@ -50,7 +67,7 @@ BoundedScrollView {
                 required property string modelData
                 visible: root.catalogue.filters.type === "mod"
                 Layout.fillWidth: true
-                SelectionBox { enabled: !root.hasInstance || !!root.catalogue.filters.unlocked; checked: (root.catalogue.filters.loaders || []).indexOf(parent.modelData)!==-1; Accessible.name: Branding.label(parent.modelData); onClicked: root.toggle("loaders",parent.modelData) }
+                SelectionBox { checked: (root.catalogue.filters.loaders || []).indexOf(parent.modelData)!==-1; Accessible.name: Branding.label(parent.modelData); onClicked: root.toggle("loaders",parent.modelData) }
                 BrandBadge { brand: parent.modelData }
             }
         }

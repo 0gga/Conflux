@@ -34,21 +34,7 @@ Item {
     }
     Timer { id: debounce; interval: 400; onTriggered: root.catalogue.configure({query:query.text}) }
     ColumnLayout {
-        anchors.fill: parent; anchors.margins: 28; spacing: 18
-        RowLayout {
-            Layout.fillWidth: true; spacing: 14
-            ColumnLayout {
-                Layout.fillWidth: true; spacing: 6
-                Text { text: "Explore content"; color: Theme.colors.text; font.pixelSize: 28; font.weight: Font.DemiBold }
-                Text { Layout.fillWidth: true; text: root.browse.ready ? "Adding to " + root.browse.pack.name : root.targetPath ? "Opening the selected instance..." : "Choose an instance to install content."; color: root.browse.ready ? Theme.colors.accent : Theme.colors.muted; font.pixelSize: 13; elide: Text.ElideRight; textFormat: Text.PlainText }
-            }
-            SelectBox {
-                Layout.preferredWidth: 260
-                model: ["Browse without an instance"].concat(root.instances.map(function(pack) { return pack.title + " - " + Branding.label(pack.provider) }))
-                currentIndex: root.instances.findIndex(function(pack) { return pack.path === root.targetPath })+1
-                onActivated: root.instanceRequested(currentIndex > 0 ? root.instances[currentIndex-1].path : "")
-            }
-        }
+        anchors.fill: parent; anchors.leftMargin: 28; anchors.rightMargin: 28; anchors.topMargin: 10; anchors.bottomMargin: 20; spacing: 12
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 18
             ColumnLayout {
@@ -57,25 +43,14 @@ Item {
                     objectName: "browseContentTypes"
                     entries: [{key:"mod",label:"Mods",icon:"mod"},{key:"resourcepack",label:"Resource Packs",icon:"resource"},{key:"datapack",label:"Data Packs",icon:"world"},{key:"shader",label:"Shaders",icon:"shader"}]
                     current: root.contentType
-                    onSelected: function(key) { root.catalogue.configure({type:key,tags:[]}) }
+                    onSelected: function(key) { root.catalogue.configure({type:key}) }
                 }
                 SearchField {
                     id: query; objectName: "modSearchInput"; Layout.fillWidth: true; implicitHeight: 44; leadingIcon: "search"
                     text: root.catalogue.filters.query || ""; placeholderText: "Search " + Branding.label(root.contentType).toLowerCase() + "..."
                     onTextEdited: debounce.restart(); onAccepted: { debounce.stop();root.catalogue.configure({query:text}) }
                 }
-                PaginationBar { Layout.fillWidth: true; catalogue: root.catalogue }
-                RowLayout {
-                    Layout.fillWidth: true; spacing: 10
-                    SelectBox {
-                        Layout.preferredWidth: 160; model: ["All sources","Modrinth","CurseForge"]
-                        currentIndex: ["merged","modrinth","curseforge"].indexOf(root.catalogue.filters.source)
-                        onActivated: root.catalogue.configure({source:["merged","modrinth","curseforge"][currentIndex],tags:[]})
-                    }
-                    Text { Layout.fillWidth: true; text: root.catalogue.busy ? "Searching..." : root.catalogue.projects.length + " on this page"; color: Theme.colors.muted; font.pixelSize: 11 }
-                    BusyIndicator { visible: root.catalogue.busy || root.browse.busy; running: visible; Layout.preferredWidth: 20; Layout.preferredHeight: 20 }
-                    ActionButton { iconName: "refresh"; hint: "Refresh catalogue"; compact: true; subtle: true; enabled: !root.catalogue.busy; onClicked: root.catalogue.refresh() }
-                }
+                PaginationBar { Layout.fillWidth: true; catalogue: root.catalogue; contextBusy: root.browse.busy }
                 Text { Layout.fillWidth: true; visible: root.catalogue.notice.length>0; text: root.catalogue.notice; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
                 Text { Layout.fillWidth: true; visible: root.browse.notice.length>0; text: root.browse.notice; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
                 Text { Layout.fillWidth: true; visible: root.contentType==="datapack"; text: "Data Packs are managed per instance. ZIP packs need a global data-pack loader in Minecraft; compatible mod versions use the mod installer."; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap }
@@ -109,6 +84,7 @@ Item {
                 }
             }
             Rectangle {
+                objectName: "browseFilterPanel"
                 Layout.preferredWidth: 232; Layout.fillHeight: true; radius: 16; color: Theme.colors.panel; border.color: Theme.colors.border
                 BrowseFilters { anchors.fill: parent; anchors.margins: 14; catalogue: root.catalogue; hasInstance: root.browse.ready; connectorAvailable: root.browse.connectorAvailable }
             }

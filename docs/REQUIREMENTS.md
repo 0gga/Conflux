@@ -65,3 +65,14 @@ API limitations and release/project equivalence are implementation constraints, 
 The source statements and reference images distinguish these requirements from implementation constraints or proposed backlog ideas.
 
 - Show verified source platforms alongside content tags using icons only; loader metadata also uses icon-only badges, retaining accessible names and hover labels.
+
+## Owner compact Explore and remembered compatibility correction
+
+- Move the source selector beside the pagination controls; remove the page-entry count and routine missing-CurseForge-key notice.
+- Reduce the Explore title and top padding. Match the instance selector width and alignment to the right filter panel.
+- Loader filters are editable immediately, independently of the game-version lock.
+- Keep Connector-assisted Fabric selection in Settings; remembered manual loader choices take priority over defaults.
+- Remember game-version and loader filters separately for every instance and content type, including across app restarts.
+
+- Follow-up: move Explore title/context to the top bar as Exploring content for "instance name", remove the duplicate page heading/subtitle and top-right Explore/New modpack actions, and keep instance selection aligned over the filters.
+- When versions are unlocked, show a bounded scrollable multi-select list of all API-provided versions instead of a dropdown. Tooltips share rounded, theme-aware presentation.

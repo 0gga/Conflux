@@ -61,7 +61,7 @@ These are ideas, not delivered features or additional owner requirements.
 | P1 | Cross-type asset dependencies | Resolve required mod/resource/shader/data-pack dependencies as one reviewed transaction. Current ZIP installs visibly reject required dependencies. |
 | P1 | Per-instance update channels | Choose stable/beta/alpha with per-project exceptions/freezes; show a changelog and compatibility diff before Update all. |
 | P1 | Shader-engine and side checks | Detect Iris/Oculus/OptiFine and client/server requirements from verified metadata; explain prerequisites and offer reviewed alternatives. |
-| P2 | Batch install queue and saved searches | Queue projects, review the combined dependency plan and preserve saved filters/searches per content type. |
+| P2 | Batch install queue and saved searches | Queue projects, review the combined dependency plan and preserve named searches beyond the implemented per-instance/content-type compatibility preferences. |
 | P2 | Arbitrary page jumps and precise merged totals | Build resumable provider cursor indexes for large direct jumps; expose deduplicated totals when exact, without treating summed source listings as unique projects. |
 | P2 | Instance cloning and profiles | Duplicate a pack with a new Git identity; support client/server/export profiles preserving exact shared pins and explicit overrides. |
 | P2 | Reusable collections | Curate optional groups of mods with compatibility/dependency previews before adding a collection. |
@@ -71,3 +71,5 @@ These are ideas, not delivered features or additional owner requirements.
 | P3 | Searchable command palette | Jump to instances, worlds, content, configs and common actions with clear context and keyboard shortcuts. |
 
 - Delivered browsing: page-size/sort controls, cached page/scroll restoration, right multi-value compatibility/tag filters, persistent hide/restore menus, instance-scoped Data Packs and the Connector search preference. Precise merged totals/direct page jumps, automatic global ZIP loader provisioning and cross-type ZIP dependency graphs remain follow-up work.
+
+- Delivered refinement: compact Explore header, aligned instance/filter widths, source selector beside pagination, editable loaders, persistent per-instance/content-type version/loader choices and retained per-type page/scroll state.

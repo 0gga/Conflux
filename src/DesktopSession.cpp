@@ -29,7 +29,8 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
       m_content(m_contentFiles, std::make_shared<ContentCatalogue>(), m_contentInstaller,
                 std::make_shared<SettingsContentPreferences>(settingsFile), this),
       m_browse(std::make_shared<ContentCatalogue>(), this), m_browsePreferences(m_browseStore, this),
-      m_catalogue(std::make_shared<CatalogueClient>(), m_visibility, ReviewedProjectIdentities::load(), this),
+      m_catalogue(std::make_shared<CatalogueClient>(), m_visibility, ReviewedProjectIdentities::load(),
+                  std::make_shared<BrowseFilterPreferences>(m_browseStore), this),
       m_changes(this) {
     m_content.setVisibility(m_visibility);
     connect(m_visibility.get(), &ContentVisibility::changed, &m_content, &ContentActions::visibilityChanged);

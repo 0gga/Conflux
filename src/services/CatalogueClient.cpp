@@ -292,8 +292,7 @@ void CatalogueClient::facets(std::function<void(QVariantMap, QString)> callback)
         [batch, done](QJsonDocument doc, QString error) {
             QStringList versions;
             for (const auto &value : doc.array())
-                if (value.toObject().value("version_type") == "release")
-                    versions << value.toObject().value("version").toString();
+                versions << value.toObject().value("version").toString();
             batch->options["versions"] = versions;
             if (!error.isEmpty())
                 batch->errors << error;

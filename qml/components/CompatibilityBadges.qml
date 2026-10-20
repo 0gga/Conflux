@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Controls
 import Conflux.Style
 
 Row {
@@ -26,8 +25,7 @@ Row {
             textFormat: Text.PlainText
         }
         HoverHandler { id: hover }
-        ToolTip.visible: hover.hovered
-        ToolTip.text: "Minecraft " + (root.minecraft || "version unknown")
+        RoundedToolTip { visible: hover.hovered; text: "Minecraft " + (root.minecraft || "version unknown") }
     }
     BrandBadge {
         objectName: "compatibilityLoader"

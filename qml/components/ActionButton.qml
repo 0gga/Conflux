@@ -23,7 +23,7 @@ Button {
     font.pixelSize: compact ? 12 : 13; font.weight: selected || primary ? Font.DemiBold : Font.Medium
     Accessible.name: text || hint
     Accessible.description: selected ? "Selected" : ""
-    ToolTip.visible: hovered && hint.length > 0; ToolTip.text: hint; ToolTip.delay: 600
+    RoundedToolTip { visible: control.hovered && control.hint.length > 0; text: control.hint }
     HoverHandler { cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor }
     contentItem: Item {
         implicitWidth: labelRow.implicitWidth; implicitHeight: labelRow.implicitHeight

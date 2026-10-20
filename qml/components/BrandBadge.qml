@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Controls
 import Conflux.Style
 Rectangle {
     id: root
@@ -21,6 +20,5 @@ Rectangle {
         Text { visible: !root.iconOnly; text: root.text; color: root.framed ? (root.info.color || Theme.colors.muted) : Theme.colors.muted; font.pixelSize: 12; textFormat: Text.PlainText }
     }
     HoverHandler { id: hover }
-    ToolTip.visible: hover.hovered
-    ToolTip.text: root.info.label
+    RoundedToolTip { visible: hover.hovered; text: root.info.label }
 }

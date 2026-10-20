@@ -70,6 +70,75 @@ class BrowseCatalogueTests final : public QObject {
         return fixture;
     }
   private slots:
+    void loaderChoicesAreEditableAndIndependentOfVersionLockAndBridgeDefaults() {
+        auto api = source();
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
+        BrowseCatalogue model(api, visibility);
+        model.setContext("a", {"1.21.1"}, {"neoforge", "fabric"});
+        QTRY_VERIFY(!model.busy());
+        QVERIFY(model.notice().isEmpty());
+        QVERIFY(!model.filters().value("unlocked").toBool());
+        model.configure({{"loaders", QStringList{"quilt"}}});
+        model.setContext("a", {"1.21.1"}, {"neoforge"});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.filters().value("loaders").toStringList(), QStringList{"quilt"});
+        model.configure({{"unlocked", true}, {"versions", QStringList{"1.20.1"}}});
+        model.configure({{"unlocked", false}});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.filters().value("versions").toStringList(), QStringList{"1.21.1"});
+        QCOMPARE(model.filters().value("loaders").toStringList(), QStringList{"quilt"});
+        model.setContext("b", {"1.21.1"}, {"neoforge"});
+        model.setContext("b", {"1.21.1"}, {"neoforge", "fabric"});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.filters().value("loaders").toStringList(), (QStringList{"neoforge", "fabric"}));
+    }
+    void compatibilityAndPageStateAreSeparatePerTypeAndPersistPerInstance() {
+        QTemporaryDir temp;
+        const auto file = temp.path() + "/filters.ini";
+        auto store = std::make_shared<BrowseSettingsStore>(file);
+        auto prefs = std::make_shared<BrowseFilterPreferences>(store);
+        auto visibility = std::make_shared<ContentVisibility>(store);
+        {
+            BrowseCatalogue model(source(), visibility, {}, prefs);
+            model.setContext("a", {"1.21.1"}, {"neoforge"});
+            model.configure({{"unlocked", true},
+                             {"versions", QStringList{"1.20.1"}},
+                             {"loaders", QStringList{"fabric", "quilt"}}});
+            QTRY_VERIFY(!model.busy());
+            model.next();
+            QTRY_VERIFY(!model.busy());
+            model.setScrollPosition(117);
+            model.configure({{"type", "resourcepack"}});
+            model.configure(
+                {{"unlocked", true}, {"versions", QStringList{"1.19.2"}}, {"loaders", QStringList{}}});
+            QTRY_VERIFY(!model.busy());
+            model.setContext("b", {"1.21.1"}, {"forge"});
+            model.configure({{"unlocked", true}, {"versions", QStringList{"1.18.2"}}});
+            QTRY_VERIFY(!model.busy());
+            model.setContext("a", {}, {}); // pending metadata must not erase a saved view
+            model.configure({{"type", "mod"}});
+            model.setContext("a", {"1.21.1"}, {"neoforge", "fabric"});
+            QTRY_VERIFY(!model.busy());
+            QCOMPARE(model.page(), 2);
+            QCOMPARE(model.scrollPosition(), 117.0);
+            QCOMPARE(model.filters().value("versions").toStringList(), QStringList{"1.20.1"});
+            QCOMPARE(model.filters().value("loaders").toStringList(), (QStringList{"fabric", "quilt"}));
+        }
+        auto restored =
+            std::make_shared<BrowseFilterPreferences>(std::make_shared<BrowseSettingsStore>(file));
+        BrowseCatalogue model(source(), visibility, {}, restored);
+        model.setContext("a", {"1.21.1"}, {"neoforge"});
+        QCOMPARE(model.filters().value("versions").toStringList(), QStringList{"1.20.1"});
+        QCOMPARE(model.filters().value("loaders").toStringList(), (QStringList{"fabric", "quilt"}));
+        model.configure({{"type", "resourcepack"}});
+        QCOMPARE(model.filters().value("versions").toStringList(), QStringList{"1.19.2"});
+        QVERIFY(model.filters().value("loaders").toStringList().isEmpty());
+        model.setContext("b", {"1.21.1"}, {"forge"});
+        QCOMPARE(model.filters().value("versions").toStringList(), QStringList{"1.18.2"});
+        model.setContext("global", {}, {});
+        QVERIFY(model.filters().value("versions").toStringList().isEmpty());
+        QTRY_VERIFY(!model.busy());
+    }
     void providerRequestsEncodeOrWithinCompatibilityGroupsAndRealOffsets() {
         CatalogueQuery q;
         q.versions = {"1.21.1", "1.20.1"};

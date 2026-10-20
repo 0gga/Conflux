@@ -1,4 +1,5 @@
 #include "ApplicationController.h"
+#include "platform/ReviewedProjectIdentities.h"
 #include "services/InstallationDiscovery.h"
 #include <QDesktopServices>
 #include <QDir>
@@ -46,14 +47,7 @@ ApplicationController::ApplicationController(QObject *parent, QString packsRootO
             m_installationStatus.clear();
         refreshPacks();
     });
-    QFile mappings(QDir(QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation))
-                       .filePath("project-identities.json"));
-    if (mappings.open(QIODevice::ReadOnly)) {
-        const auto json = QJsonDocument::fromJson(mappings.readAll()).object();
-        for (auto it = json.begin(); it != json.end(); ++it)
-            if (it.value().isString() && !it.value().toString().isEmpty())
-                m_identities.insert(it.key(), it.value().toString());
-    }
+    m_identities = ReviewedProjectIdentities::load();
     connect(&m_client, &CatalogueClient::searchFinished, this,
             [this](int generation, QVector<Project> projects, const QStringList &errors) {
                 if (generation != m_searchGeneration)
@@ -244,7 +238,7 @@ void ApplicationController::refreshActivePack() {
     refreshLibrary();
 }
 void ApplicationController::search(const QString &query, const QString &source, const QString &game,
-                                   const QString &loader) {
+                                   const QString &loader, const QString &type) {
     closeProject();
     m_catalogueBusy = true;
     m_projects.clear();
@@ -252,7 +246,7 @@ void ApplicationController::search(const QString &query, const QString &source, 
     m_searchGame = game.trimmed();
     m_searchLoader = loader;
     emit stateChanged();
-    m_client.search(query.trimmed(), source, m_searchGame, m_searchLoader, ++m_searchGeneration);
+    m_client.search(query.trimmed(), source, m_searchGame, m_searchLoader, ++m_searchGeneration, type);
 }
 void ApplicationController::selectProject(int index) {
     if (index < 0 || index >= m_projectData.size())

@@ -1,12 +1,13 @@
 #pragma once
 #include "domain/Catalogue.h"
+#include "domain/CatalogueSearch.h"
 #include <QJsonDocument>
 #include <QNetworkAccessManager>
 #include <QObject>
 #include <functional>
 
 namespace studio {
-class CatalogueClient : public QObject {
+class CatalogueClient : public QObject, public ICatalogueSearch {
     Q_OBJECT
   public:
     explicit CatalogueClient(QObject *parent = nullptr);
@@ -17,7 +18,13 @@ class CatalogueClient : public QObject {
         return !m_curseforgeKey.isEmpty();
     }
     void search(const QString &query, const QString &source, const QString &game, const QString &loader,
-                int generation);
+                int generation, const QString &type = "mod");
+    void fetch(const CatalogueQuery &, int offset, int limit, Callback) override;
+    void facets(std::function<void(QVariantMap, QString)>) override;
+    void setKey(const QByteArray &key) override {
+        setCurseforgeKey(key);
+    }
+    static QUrl searchUrl(const CatalogueQuery &, int offset, int limit, int classId = 6);
     void loadProject(const Project &project, const QString &game, const QString &loader, int generation);
     void resolveProject(const QString &sha1, QMap<QString, QString> sourceIds, int generation);
   signals:

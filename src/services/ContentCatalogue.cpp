@@ -1,4 +1,5 @@
 #include "ContentCatalogue.h"
+#include "domain/ContentTypes.h"
 #include "domain/LicensePolicy.h"
 #include <QJsonArray>
 #include <QNetworkReply>
@@ -53,7 +54,7 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
     QJsonArray hashes;
     for (const auto &value : input) {
         const auto row = value.toMap();
-        if (row.value("category") == "mods" && !row.value("sha1").toString().isEmpty())
+        if (!row.value("sha1").toString().isEmpty())
             hashes << row.value("sha1").toString();
     }
     if (hashes.isEmpty()) {
@@ -88,7 +89,8 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
                             row["installedRelease"] = modrinthRelease(installed, hash).toVariant();
                             row["version"] = installed.value("version_number").toString();
                             const auto project = batch->projects.value(id).toObject();
-                            row["projectUrl"] = "https://modrinth.com/mod/" + id;
+                            row["projectUrl"] = "https://modrinth.com/" +
+                                                categoryType(row.value("category").toString()) + "/" + id;
                             if (!project.isEmpty()) {
                                 row["title"] = project.value("title").toString(row.value("title").toString());
                                 if (!project.value("icon_url").toString().isEmpty())
@@ -130,6 +132,7 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
                                 latest.value("project_id") == installed.value("project_id")) {
                                 row["updateRelease"] = modrinthRelease(latest).toVariant();
                                 row["updateAvailable"] =
+                                    row.value("category") == "mods" &&
                                     isNewerRelease(modrinthRelease(installed, hash), modrinthRelease(latest));
                             }
                         }
@@ -200,6 +203,7 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
 void ContentCatalogue::versions(const QVariantMap &row, const QString &game, const QString &loader,
                                 VersionsCallback callback) {
     Project project;
+    project.type = categoryType(row.value("category").toString());
     const auto ids = row.value("sourceIds").toMap();
     for (auto it = ids.begin(); it != ids.end(); ++it)
         project.sourceIds[it.key()] = it.value().toString();

@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Conflux.Style
 import "../components"
@@ -20,7 +19,7 @@ Rectangle {
             ActionButton { text: root.expanded ? "Collapse" : "Review"; subtle: true; onClicked: root.expanded = !root.expanded }
             ActionButton { iconName: "settings"; hint: "Warning settings"; subtle: true; onClicked: root.settingsRequested() }
         }
-        ScrollView {
+        BoundedScrollView {
             id: scroll; visible: root.expanded; Layout.fillWidth: true; Layout.preferredHeight: Math.min(150, detail.implicitHeight); clip: true
             Text { id: detail; width: scroll.availableWidth; text: root.issues.map(function(issue) { return issue.message }).join("\n\n"); wrapMode: Text.Wrap; textFormat: Text.PlainText; color: Theme.colors.warning; font.pixelSize: 12 }
         }

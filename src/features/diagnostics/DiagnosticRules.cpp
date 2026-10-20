@@ -1,4 +1,5 @@
 #include "DiagnosticRule.h"
+#include "domain/ContentTypes.h"
 #include <QDir>
 #include <QFileInfo>
 #include <QSet>
@@ -58,7 +59,7 @@ class LoaderCompatibilityRule final : public IDiagnosticRule {
             }
             result.append(issue("loader",
                                 row.value("fileName").toString() + " declares " + required.join(" / ") +
-                                    " metadata; this pack uses " + loader + ".",
+                                    " metadata; this pack uses " + contentLabel(loader) + ".",
                                 row.value("relativePath").toString()));
         }
         if (bridged)

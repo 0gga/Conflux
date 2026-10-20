@@ -17,6 +17,8 @@ class PackRepository {
     static RepositoryResult commit(const QString &path, const QString &message);
     static RepositoryResult updateContentPins(const QString &path, const QJsonObject &expected,
                                               const QJsonArray &pins);
+    static RepositoryResult updateContentReferences(const QString &path, const QJsonObject &expected,
+                                                    const QJsonArray &mods, const QJsonArray &assets);
     static RepositoryResult applyInstallation(const QString &path, const QJsonObject &expectedManifest,
                                               const QJsonArray &references, const QString &stagingDirectory);
     static QString slug(const QString &name);

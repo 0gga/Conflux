@@ -22,7 +22,7 @@ Rectangle {
             SearchField { id: message; objectName: "commitMessageInput"; Layout.preferredWidth: 180; placeholderText: "Describe changes…" }
             ActionButton { iconName: "save"; text: "Save"; enabled: !root.busy && message.text.trim().length > 0 && root.status.length > 0; onClicked: root.saveRequested(message.text) }
         }
-        ScrollView { id: scroll; visible: root.expanded; Layout.fillWidth: true; Layout.preferredHeight: 100; clip: true
+        BoundedScrollView { id: scroll; visible: root.expanded; Layout.fillWidth: true; Layout.preferredHeight: 100; clip: true
             Text { width: scroll.availableWidth; text: root.history || "No commits yet."; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: Theme.colors.muted; font.pixelSize: 12 }
         }
     }

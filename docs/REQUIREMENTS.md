@@ -40,3 +40,28 @@ API limitations and release/project equivalence are implementation constraints, 
 - Investigate Catalogue/Configured and expose usable launcher-side visual config controls instead of a raw file editor.
 - Replace the UI icons with a simple, prominent and consistent set.
 - Content artwork fills its rounded square edge to edge, without a padded background box.
+
+## Owner instance browsing and rounded catalogue request
+
+- Rename Explore mods to Explore content and keep the clicked instance as the installation target.
+- Offer Mods, Resource Packs, Data Packs and Shaders tabs, as shown in the supplied reference.
+- Include an Install action on each project and mark installed project/version state only for the selected instance.
+- Keep canonical IDs internal; display Fabric, Forge, NeoForge, Quilt and other loader names with correct capitalization and recognizable colored icons.
+- Use the supplied project-card layout with large rounded artwork, author, summary, tags and per-platform download totals/icons. Never add provider download totals together.
+- Keep subtle rounded edges consistently on cards, controls, menus and artwork.
+- Propose convenience/features for later owner review; proposals are distinct from delivered work.
+
+- Owner correction: Minecraft version and loader use adjacent matching pills wherever compatibility is displayed; Library details stay aligned. Every scroll surface must stop at content boundaries with no overshoot/rebound.
+
+## Owner paged browsing and compatibility filtering
+
+- Manage Data Packs per instance, with no per-world browse target.
+- Add pagination, selectable entries per page and sorting by relevance, downloads, followers, publication date and update date. Restore the page and scroll position after viewing content.
+- Place hide/restore actions in three-dot menus at the far left of content entries.
+- Show project tags and provide tag, game-version and loader filters on the right. Versions and loaders each accept multiple alternatives using OR.
+- Allow unlocking the instance-derived browse filters to change selected versions/loaders.
+- Detect installed Connector and optionally browse primary-loader plus Fabric content; expose the preference in Settings.
+
+The source statements and reference images distinguish these requirements from implementation constraints or proposed backlog ideas.
+
+- Show verified source platforms alongside content tags using icons only; loader metadata also uses icon-only badges, retaining accessible names and hover labels.

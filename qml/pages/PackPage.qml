@@ -37,7 +37,7 @@ Item {
                     ActionButton { id: warningButton; visible: root.visibleIssues.length > 0; text: String(root.visibleIssues.length); iconName: "warning"; compact: true; hint: root.visibleIssues.length + " items to review"; onClicked: warningsPopup.open() }
                     Item { Layout.fillWidth: true }
                 }
-                RowLayout { spacing: 8; SourceBadge { source: root.workspace.pack.provider || "conflux" } Text { text: (root.workspace.pack.minecraft || "Minecraft version unknown") + (root.workspace.pack.loader ? " · " + root.workspace.pack.loader : ""); color: Theme.colors.muted; font.pixelSize: 12 } }
+                RowLayout { spacing: 12; CompatibilityBadges { minecraft: root.workspace.pack.minecraft || ""; loader: root.workspace.pack.loader || ""; showUnknownVersion: true } SourceBadge { source: root.workspace.pack.provider || "conflux" } }
             }
             ActionButton { text: "Play"; iconName: "play"; primary: true; enabled: root.session.launch.packAvailable && !root.app.repositoryBusy; hint: root.session.launch.packAvailable ? "Launch in Modrinth App" : "This pack has no supported launcher handoff yet"; onClicked: root.session.launch.playPack() }
             ActionButton { iconName: "settings"; hint: "Open modpack configs"; subtle: true; onClicked: root.sectionRequested("configs") }
@@ -64,7 +64,7 @@ Item {
             ActionButton { visible: root.section !== "content"; iconName: "refresh"; hint: "Rescan pack content"; subtle: true; enabled: !root.workspace.busy && !root.session.editor.dirty; onClicked: root.workspace.refresh() }
         }
     }
-    Component { id: contentView; ContentPanel { controller: root.session.content; onBrowseRequested: root.discoverRequested(); onShowcaseRequested: function(path) { root.showcaseRequested(path) } onShowFilesRequested: function(path) { root.app.openContentFolder(path) } } }
+    Component { id: contentView; ContentPanel { controller: root.session.content; minecraft: root.workspace.pack.minecraft || ""; loader: root.workspace.pack.loader || ""; onBrowseRequested: root.discoverRequested(); onShowcaseRequested: function(path) { root.showcaseRequested(path) } onShowFilesRequested: function(path) { root.app.openContentFolder(path) } } }
     Component { id: configView; ConfigPanel { library: root.session.configs; onEditRequested: function(path) { root.configRequested(path) } onShowFilesRequested: function(path) { root.app.openContentFolder(path) } } }
     Component { id: editorView; ConfigEditorPanel { editor: root.session.editor; onCloseRequested: root.sectionRequested("configs") } }
     Component { id: fileView; FilePanel { browser: root.session.files; onDirectoryRequested: function(path) { root.app.openFolder(root.workspace.pack.path + "/" + path) } onFolderRequested: function(path) { root.folderRequested(path) } onShowFilesRequested: function(path) { root.app.openContentFolder(path) } } }

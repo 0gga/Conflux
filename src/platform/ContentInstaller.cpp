@@ -1,4 +1,5 @@
 #include "ContentInstaller.h"
+#include "domain/ContentCompatibility.h"
 #include "platform/PackFileStore.h"
 #include "services/PackContent.h"
 #include <QDir>
@@ -9,8 +10,9 @@
 #include <filesystem>
 namespace studio {
 ContentInstaller::ContentInstaller(std::shared_ptr<const NativeContentStore> files, QObject *parent)
-    : QObject(parent), m_installer(this), m_files(std::move(files)) {
+    : QObject(parent), m_installer(this), m_assets(files, this), m_files(std::move(files)) {
     connect(&m_installer, &ModInstaller::progress, this, &ContentInstaller::progress);
+    connect(&m_assets, &AssetInstaller::progress, this, &ContentInstaller::progress);
     connect(&m_installer, &ModInstaller::finished, this, [this](const RepositoryResult &result) {
         if (!result.ok) {
             finish({false, result.error});
@@ -100,6 +102,17 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
     m_rows = rows;
     m_callback = std::move(callback);
     m_cancelled = false;
+    if (requests.size() == 1 && requests.first().contentType != "mod") {
+        m_assets.install(pack, rows, requests.first(),
+                         [this](ContentWriteResult result) { finish(std::move(result)); });
+        return;
+    }
+    for (const auto &request : requests)
+        if (request.contentType != "mod") {
+            finish({false, "Install different content types separately."});
+            return;
+        }
+    const bool bridge = hasFabricBridge(pack.value("loader").toString(), rows);
     bool untracked = false;
     for (const auto &value : rows) {
         const auto row = value.toMap();
@@ -112,7 +125,7 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
         if (!tracked)
             untracked = true;
     }
-    if (pack.value("managed").toBool() && !untracked) {
+    if (pack.value("managed").toBool() && !untracked && !bridge) {
         m_installer.startBatch(pack.value("path").toString(), requests);
         return;
     }
@@ -125,7 +138,7 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
     emit progress("Preparing an isolated dependency transaction…");
     const auto stage = m_stage;
     auto *watcher = new QFutureWatcher<RepositoryResult>(this);
-    connect(watcher, &QFutureWatcher<RepositoryResult>::finished, this, [this, watcher, requests] {
+    connect(watcher, &QFutureWatcher<RepositoryResult>::finished, this, [this, watcher, requests, bridge] {
         const auto result = watcher->result();
         watcher->deleteLater();
         m_preparing = false;
@@ -137,7 +150,7 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
             finish({false, result.error});
             return;
         }
-        m_installer.startBatch(result.path, requests);
+        m_installer.startBatch(result.path, requests, bridge);
     });
     watcher->setFuture(QtConcurrent::run([pack, rows, stage] {
         auto result =

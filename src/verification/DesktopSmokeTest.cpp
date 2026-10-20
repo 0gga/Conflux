@@ -38,7 +38,7 @@ DesktopSmokeTest::DesktopSmokeTest(const QStringList &arguments, QObject *parent
     qInstallMessageHandler([](QtMsgType, const QMessageLogContext &, const QString &message) {
         if (message.contains("Binding loop") || message.contains("ReferenceError") ||
             message.contains("TypeError") || message.contains("Cannot assign") ||
-            message.contains("Error decoding"))
+            message.contains("Error decoding") || message.contains("recursive rearrange"))
             smokeRuntimeError = true;
         QFile output(smokeLogPath);
         if (output.open(QIODevice::Append))
@@ -58,6 +58,8 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
         QString managedPath;
         QString selectedMod;
         QString externalPath;
+        QVariantMap assetProject;
+        QString pagedProjectId;
         QElapsedTimer elapsed;
     };
     auto state = std::make_shared<SmokeState>();
@@ -65,11 +67,19 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
     QObject::connect(
         timer, &QTimer::timeout, &application,
         [window, folder, timer, state, &application, &controller, &session] {
-            if (state->elapsed.elapsed() > 120000 || !window) {
+            if (state->elapsed.elapsed() > 180000 || !window) {
                 application.exit(2);
                 return;
             }
             auto capture = [window, folder](const QString &name) {
+                for (auto *item : window->findChildren<QQuickItem *>()) {
+                    const auto bounds = item->property("boundsBehavior");
+                    if (bounds.isValid() && bounds.toInt() != 0) {
+                        qWarning().noquote()
+                            << "Scroll overshoot still enabled in" << name << item->objectName();
+                        return false;
+                    }
+                }
                 const auto image = window->grabWindow();
                 return !image.isNull() && image.save(QDir(folder).filePath(name + ".png"));
             };
@@ -86,10 +96,15 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     fail("Library render failed");
                     return;
                 }
+                controller.search("Fabric API", "modrinth", "1.21.1", "fabric");
+                session.catalogue()->configure(
+                    {{"query", "Fabric API"}, {"source", "modrinth"}, {"type", "mod"}});
                 session.navigation()->go(
                     {{"page", "discover"}, {"packPath", controller.activePack().value("path")}});
                 break;
             case 1:
+                if (controller.catalogueBusy() || session.catalogue()->busy())
+                    return;
                 if (!capture("discover")) {
                     fail("Discovery render failed");
                     return;
@@ -141,13 +156,19 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     fail("No compatible release returned");
                     return;
                 }
-                controller.pinRelease(0);
+                if (session.content()->busy() || session.workspace()->busy() || !session.browse()->ready())
+                    return;
+                session.browse()->install(controller.projects().first().toMap());
                 break;
             case 5: {
-                if (controller.repositoryBusy())
+                if (controller.repositoryBusy() || session.browse()->busy() || session.workspace()->busy())
                     return;
                 if (controller.activeMods().size() != 1) {
                     fail("Pin failed: " + controller.notice());
+                    return;
+                }
+                if (!session.browse()->installed(controller.activeMods().first().toMap())) {
+                    fail("Newly installed version was not marked installed for its instance");
                     return;
                 }
                 const auto path = controller.activePack().value("path").toString();
@@ -525,7 +546,185 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     fail("QML runtime warnings occurred; inspect smoke.log");
                     return;
                 }
-                qInfo("PASS: live API/install/Git, native installed-mod showcase, content "
+                session.navigation()->go({{"page", "discover"}, {"packPath", state->managedPath}});
+                session.catalogue()->configure(
+                    {{"type", "resourcepack"}, {"query", "Fast Better Grass"}, {"source", "modrinth"}});
+                break;
+            case 30:
+                if (controller.repositoryBusy() || session.catalogue()->busy() ||
+                    session.workspace()->busy() || session.browse()->busy())
+                    return;
+                if (session.catalogue()->projects().isEmpty() || !session.browse()->ready() ||
+                    session.browse()->pack().value("path") != state->managedPath) {
+                    fail("Resource-pack browse lost its instance context");
+                    return;
+                }
+                state->assetProject = session.catalogue()->projects().first().toMap();
+                session.browse()->install(state->assetProject);
+                break;
+            case 31:
+                if (controller.repositoryBusy() || session.browse()->busy() || session.workspace()->busy())
+                    return;
+                if (!session.browse()->state(state->assetProject).value("installed").toBool() ||
+                    controller.activePack().value("assets").toList().isEmpty()) {
+                    fail("Verified resource-pack install or installed-project badge failed: " +
+                         session.content()->notice());
+                    return;
+                }
+                if (!capture("explore-installed-resource")) {
+                    fail("Explore resource-pack render failed");
+                    return;
+                }
+                session.navigation()->go({{"page", "showcase"},
+                                          {"packPath", state->managedPath},
+                                          {"project", state->assetProject},
+                                          {"showcaseTab", "versions"}});
+                break;
+            case 32:
+                if (session.showcase()->busy() || session.browse()->busy())
+                    return;
+                {
+                    bool installed = false;
+                    for (const auto &group : session.showcase()->versions())
+                        for (const auto &release : group.toMap().value("variants").toList())
+                            installed = installed || session.browse()->installed(release.toMap());
+                    if (!installed) {
+                        fail("Resource-pack version was not marked installed in its instance");
+                        return;
+                    }
+                }
+                if (!capture("resource-version-installed")) {
+                    fail("Installed resource version render failed");
+                    return;
+                }
+                session.navigation()->go({{"page", "discover"}, {"packPath", state->managedPath}});
+                window->setWidth(1360);
+                window->setHeight(900);
+                break;
+            case 33:
+                if (!capture("explore-wide")) {
+                    fail("Explore wide render failed");
+                    return;
+                }
+                window->setWidth(1080);
+                window->setHeight(720);
+                break;
+            case 34:
+                if (!capture("explore-narrow")) {
+                    fail("Explore narrow render failed");
+                    return;
+                }
+                session.catalogue()->configure({{"type", "datapack"}, {"query", ""}});
+                break;
+            case 35:
+                if (session.catalogue()->busy())
+                    return;
+                if (session.catalogue()->projects().isEmpty() ||
+                    session.catalogue()->projects().first().toMap().value("type") != "datapack" ||
+                    !capture("explore-data-packs")) {
+                    fail("Live data-pack search or render failed");
+                    return;
+                }
+                session.catalogue()->configure({{"type", "shader"}});
+                break;
+            case 36:
+                if (session.catalogue()->busy())
+                    return;
+                if (session.catalogue()->projects().isEmpty() ||
+                    session.catalogue()->projects().first().toMap().value("type") != "shader" ||
+                    !capture("explore-shaders")) {
+                    fail("Live shader search or render failed");
+                    return;
+                }
+                session.catalogue()->configure({{"type", "mod"}, {"sort", "downloads"}, {"size", 10}});
+                break;
+            case 37:
+                if (session.catalogue()->busy())
+                    return;
+                session.catalogue()->next();
+                break;
+            case 38:
+                if (session.catalogue()->busy())
+                    return;
+                if (session.catalogue()->page() != 2 || session.catalogue()->projects().isEmpty()) {
+                    fail("Live pagination did not reach page two");
+                    return;
+                }
+                state->pagedProjectId =
+                    session.catalogue()->projects().first().toMap().value("id").toString();
+                session.catalogue()->setScrollPosition(80);
+                session.navigation()->go({{"page", "showcase"},
+                                          {"packPath", state->managedPath},
+                                          {"project", session.catalogue()->projects().first().toMap()}});
+                break;
+            case 39:
+                if (session.showcase()->busy())
+                    return;
+                session.navigation()->back();
+                break;
+            case 40:
+                if (session.catalogue()->busy())
+                    return;
+                if (session.catalogue()->page() != 2 ||
+                    session.catalogue()->projects().first().toMap().value("id") != state->pagedProjectId ||
+                    session.catalogue()->scrollPosition() != 80) {
+                    fail("Browse page/scroll state was lost after viewing a project");
+                    return;
+                }
+                if (!capture("browse-restored-page-two")) {
+                    fail("Restored browse render failed");
+                    return;
+                }
+                session.catalogue()->hide(session.catalogue()->projects().first().toMap());
+                break;
+            case 41:
+                if (session.catalogue()->busy())
+                    return;
+                session.catalogue()->configure({{"hidden", true}});
+                break;
+            case 42:
+                if (session.catalogue()->busy())
+                    return;
+                if (session.catalogue()->projects().size() != 1 ||
+                    session.catalogue()->projects().first().toMap().value("id") != state->pagedProjectId) {
+                    fail("Hidden catalogue content was not isolated");
+                    return;
+                }
+                if (!capture("browse-hidden-content")) {
+                    fail("Hidden content render failed");
+                    return;
+                }
+                session.catalogue()->hide(session.catalogue()->projects().first().toMap(), false);
+                break;
+            case 43:
+                if (session.catalogue()->busy())
+                    return;
+                if (!session.catalogue()->projects().isEmpty()) {
+                    fail("Restored project remained hidden");
+                    return;
+                }
+                session.catalogue()->configure({{"hidden", false}});
+                session.navigation()->go({{"page", "settings"}, {"settingsTab", "browse"}});
+                break;
+            case 44:
+                if (!capture("settings-browsing")) {
+                    fail("Browsing settings render failed");
+                    return;
+                }
+                if (controller.activeMods().size() != 1 ||
+                    controller.activePack().value("assets").toList().size() != 1) {
+                    fail("Content visibility changed installed files");
+                    return;
+                }
+                if (smokeRuntimeError) {
+                    fail("QML runtime warning in Explore content");
+                    return;
+                }
+                qInfo("PASS: provider pagination and page/scroll restoration, right filters, stop-at-bounds "
+                      "scrolling; instance-scoped browse installs, exact installed-version badges, verified "
+                      "live "
+                      "ZIP assets, four content types and branded rounded cards; live API/install/Git, "
+                      "native installed-mod showcase, content "
                       "selection/filter/version picker, vertical Settings, navigation, visual config saves, "
                       "worlds and warnings renders");
                 timer->stop();

@@ -36,7 +36,7 @@ Popup {
                 }
             }
         }
-        ScrollView {
+        BoundedScrollView {
             id: options; visible: root.category.length > 0; Layout.fillWidth: true
             implicitHeight: Math.min(330,choices.implicitHeight); clip: true
             ColumnLayout {

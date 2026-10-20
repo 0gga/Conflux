@@ -8,6 +8,8 @@ import "../components"
 Item {
     id: root; objectName: "contentPanel"
     required property var controller
+    property string minecraft: ""
+    property string loader: ""
     signal showcaseRequested(string path)
     signal showFilesRequested(string path)
     signal browseRequested()
@@ -31,6 +33,7 @@ Item {
                 delegate: ActionButton { required property var modelData; text: modelData.label; compact: true; pill: true; subtle: true; selected: root.controller.category === modelData.key; onClicked: root.controller.category = modelData.key }
             }
             ActionButton { id: filterButton; text: "Filter"; iconName: "plus"; compact: true; onClicked: { const point = mapToItem(root,0,height); filters.x = Math.min(point.x,root.width-filters.width); filters.y = point.y+6; filters.open() } }
+            ActionButton { text: root.controller.filters.hidden ? "Hidden content" : "Hidden"; iconName: "hide"; compact: true; subtle: true; selected: !!root.controller.filters.hidden; onClicked: root.controller.setFilter("hidden",!root.controller.filters.hidden) }
             ActionButton { text: "Clear"; compact: true; subtle: true; visible: !!root.controller.filters.author || !!root.controller.filters.environment || !!root.controller.filters.state || root.controller.filters.updates || root.controller.filters.openSource || root.controller.filters.external; onClicked: root.controller.clearFilters() }
             Item { Layout.fillWidth: true }
             ActionButton { iconName: "download"; text: "Update all"; compact: true; subtle: true; accented: true; enabled: root.controller.updateCount > 0 && !root.controller.busy; hint: root.controller.updateCount + " compatible updates · frozen versions are skipped"; onClicked: root.controller.updateAll() }
@@ -58,15 +61,16 @@ Item {
                     Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 24; color: Theme.colors.card }
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 16; spacing: 12
+                        Item { Layout.preferredWidth: 34 }
                         SelectionBox { checked: root.rows.length > 0 && root.visibleSelected === root.rows.length; partial: root.visibleSelected > 0 && root.visibleSelected < root.rows.length; Accessible.name: "Select visible content"; onClicked: root.controller.selectVisible(root.visibleSelected !== root.rows.length) }
                         Text { Layout.fillWidth: true; text: "Project"; color: Theme.colors.muted; font.pixelSize: 12; font.weight: Font.DemiBold }
                         Text { Layout.preferredWidth: Math.max(150,root.width*0.29); text: "Version"; color: Theme.colors.muted; font.pixelSize: 12; font.weight: Font.DemiBold }
-                        Text { Layout.preferredWidth: 182; text: "Actions"; horizontalAlignment: Text.AlignRight; color: Theme.colors.muted; font.pixelSize: 12; font.weight: Font.DemiBold }
+                        Text { Layout.preferredWidth: 140; text: "Actions"; horizontalAlignment: Text.AlignRight; color: Theme.colors.muted; font.pixelSize: 12; font.weight: Font.DemiBold }
                     }
                 }
                 Item {
                     Layout.fillWidth: true; Layout.fillHeight: true
-                    ListView {
+                    ListView { boundsBehavior: Flickable.StopAtBounds;
                         id: list; anchors.fill: parent; clip: true; model: root.rows; ScrollBar.vertical: ScrollBar {}
                         delegate: Rectangle {
                             id: entry; objectName: "contentRow"
@@ -79,6 +83,7 @@ Item {
                             Rectangle { anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right; height: 1; color: Theme.colors.border; opacity: 0.6 }
                             RowLayout {
                                 anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 16; spacing: 12
+                                ActionButton { id: moreButton; objectName: "contentMore"; Layout.preferredWidth: 34; iconName: "more"; hint: "More actions"; subtle: true; compact: true; onClicked: { const point = moreButton.mapToItem(root,moreButton.width,moreButton.height); rowMenu.x = Math.max(0,Math.min(point.x-rowMenu.width,root.width-rowMenu.width)); rowMenu.y = Math.max(0,Math.min(point.y+4,root.height-rowMenu.height)); rowMenu.open() } }
                                 SelectionBox { objectName: "contentSelection"; checked: entry.selected; Accessible.name: "Select " + entry.modelData.title; onToggled: root.controller.select(entry.modelData.relativePath,checked) }
                                 ContentIcon { size: 44; source: entry.modelData.icon || ""; kind: entry.modelData.category === "mods" ? "mod" : entry.modelData.category === "shaderpacks" ? "shader" : "resource" }
                                 ColumnLayout {
@@ -86,7 +91,7 @@ Item {
                                     Text { Layout.fillWidth: true; text: entry.modelData.title; color: Theme.colors.text; font.pixelSize: 13; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
                                     RowLayout {
                                         Layout.fillWidth: true; spacing: 6
-                                        Image { visible: !!entry.modelData.authorIcon; source: entry.modelData.authorIcon || ""; Layout.preferredWidth: 17; Layout.preferredHeight: 17; asynchronous: true; fillMode: Image.PreserveAspectFit }
+                                        ContentIcon { visible: !!entry.modelData.authorIcon; source: entry.modelData.authorIcon || ""; size: 18; radius: 9; kind: "mod" }
                                         Text { Layout.fillWidth: true; text: entry.modelData.author || "Unknown author"; color: Theme.colors.muted; font.pixelSize: 11; elide: Text.ElideRight; textFormat: Text.PlainText }
                                     }
                                 }
@@ -96,12 +101,11 @@ Item {
                                     Text { Layout.fillWidth: true; text: entry.modelData.fileName; color: Theme.colors.muted; font.pixelSize: 11; elide: Text.ElideRight; textFormat: Text.PlainText }
                                 }
                                 RowLayout {
-                                    Layout.preferredWidth: 182; spacing: 1
+                                    Layout.preferredWidth: 140; spacing: 1
                                     Icon { name: "lock"; size: 16; opacity: entry.modelData.frozen ? 1 : 0; color: Theme.colors.muted }
                                     ActionButton { Layout.preferredWidth: 34; iconName: entry.modelData.updateAvailable ? "download" : "switch"; accented: !!entry.modelData.updateAvailable; subtle: true; compact: true; hint: entry.modelData.frozen ? "Version frozen" : entry.modelData.updateAvailable ? "Update to " + entry.modelData.updateRelease.version : "Switch version"; enabled: !root.controller.busy && !entry.modelData.frozen && !!entry.modelData.projectId; onClicked: { if(entry.modelData.updateAvailable) root.controller.update(entry.modelData.relativePath); else { root.controller.openVersions(entry.modelData.relativePath); versions.open() } } }
                                     ToggleSwitch { objectName: "contentToggle"; Layout.preferredWidth: 48; checked: !!entry.modelData.enabled; enabled: !root.controller.busy && !!entry.modelData.sha1 && !entry.modelData.directory; Accessible.name: "Enable " + entry.modelData.title; onToggled: { root.controller.setEnabled(entry.modelData.relativePath,checked); checked = Qt.binding(function() { return !!entry.modelData.enabled }) } }
                                     ActionButton { Layout.preferredWidth: 34; iconName: "trash"; hint: "Remove content"; subtle: true; compact: true; enabled: !root.controller.busy && !!entry.modelData.sha1; onClicked: { removeDialog.path = entry.modelData.relativePath; removeDialog.modTitle = entry.modelData.title; removeDialog.open() } }
-                                    ActionButton { id: moreButton; objectName: "contentMore"; Layout.preferredWidth: 34; iconName: "more"; hint: "More actions"; subtle: true; compact: true; onClicked: { const point = moreButton.mapToItem(root,moreButton.width,moreButton.height); rowMenu.x = Math.max(0,Math.min(point.x-rowMenu.width,root.width-rowMenu.width)); rowMenu.y = Math.max(0,Math.min(point.y+4,root.height-rowMenu.height)); rowMenu.open() } }
                                 }
                             }
                             Popup {
@@ -109,6 +113,7 @@ Item {
                                 background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: 13 }
                                 contentItem: ColumnLayout {
                                     spacing: 2
+                                    ActionButton { Layout.fillWidth: true; text: entry.modelData.hidden ? "Restore content" : "Hide content"; iconName: entry.modelData.hidden ? "restore" : "hide"; subtle: true; alignLeft: true; onClicked: { rowMenu.close();root.controller.hide(entry.modelData.relativePath,!entry.modelData.hidden) } }
                                     ActionButton { Layout.fillWidth: true; text: "Show file"; iconName: "folder"; subtle: true; alignLeft: true; onClicked: { root.showFilesRequested(entry.modelData.relativePath); rowMenu.close() } }
                                     ActionButton { Layout.fillWidth: true; objectName: "copyContentLink"; text: "Copy link"; iconName: "copy"; subtle: true; alignLeft: true; enabled: !!entry.modelData.projectUrl; onClicked: { root.controller.copyLink(entry.modelData.relativePath); rowMenu.close() } }
                                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.border; Layout.topMargin: 5; Layout.bottomMargin: 5 }
@@ -123,7 +128,7 @@ Item {
         }
     }
     ContentFilter { id: filters; objectName: "contentFilter"; controller: root.controller }
-    VersionPicker { id: versions; objectName: "versionPicker"; controller: root.controller }
+    VersionPicker { id: versions; objectName: "versionPicker"; controller: root.controller; minecraft: root.minecraft; preferredLoader: root.loader }
     FileDialog { id: upload; title: "Add content to this pack"; fileMode: FileDialog.OpenFiles; nameFilters: ["Mods (*.jar)","Resource packs (*.zip)","Shader packs (*.zip)"]; onAccepted: root.controller.importFiles(selectedFiles,["mods","resourcepacks","shaderpacks"][selectedNameFilter.index]) }
     Dialog {
         id: removeDialog; property string path: ""; property string modTitle: ""

@@ -1,13 +1,17 @@
 #include "DesktopSession.h"
 #include "features/preferences/ContentPreferences.h"
+#include "platform/BrowseSettingsStore.h"
 #include "platform/CatalogueShowcaseSource.h"
 #include "platform/ConfigOwnershipStore.h"
 #include "platform/InstalledModIdentity.h"
+#include "platform/ReviewedProjectIdentities.h"
 #include "platform/WorldLaunchAdapters.h"
 #include "services/ContentCatalogue.h"
 namespace studio {
 DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString backupRoot)
-    : QObject(parent), m_fileStore(std::make_shared<NativePackFileStore>(backupRoot)),
+    : QObject(parent), m_browseStore(std::make_shared<BrowseSettingsStore>(settingsFile)),
+      m_visibility(std::make_shared<ContentVisibility>(m_browseStore)),
+      m_fileStore(std::make_shared<NativePackFileStore>(backupRoot)),
       m_contentFiles(
           std::make_shared<NativeContentStore>(std::make_shared<NativeInstalledModIdentity>(m_fileStore),
                                                backupRoot.isEmpty() ? QString{} : backupRoot + "/content")),
@@ -24,8 +28,38 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
                  std::make_shared<NativeInstalledModIdentity>(m_fileStore), this),
       m_content(m_contentFiles, std::make_shared<ContentCatalogue>(), m_contentInstaller,
                 std::make_shared<SettingsContentPreferences>(settingsFile), this),
+      m_browse(std::make_shared<ContentCatalogue>(), this), m_browsePreferences(m_browseStore, this),
+      m_catalogue(std::make_shared<CatalogueClient>(), m_visibility, ReviewedProjectIdentities::load(), this),
       m_changes(this) {
+    m_content.setVisibility(m_visibility);
+    connect(m_visibility.get(), &ContentVisibility::changed, &m_content, &ContentActions::visibilityChanged);
+    connect(m_visibility.get(), &ContentVisibility::changed, &m_catalogue, &BrowseCatalogue::refresh);
+    auto updateBrowseContext = [this] {
+        const auto pack = m_browse.pack();
+        QStringList versions, loaders;
+        if (!pack.value("minecraft").toString().isEmpty())
+            versions << pack.value("minecraft").toString();
+        if (!pack.value("loader").toString().isEmpty() && pack.value("loader") != "vanilla")
+            loaders << pack.value("loader").toString();
+        if (m_browse.connectorAvailable() && m_browsePreferences.connectorFabric() &&
+            !loaders.contains("fabric"))
+            loaders << "fabric";
+        const auto target = m_navigation.route().value("packPath").toString();
+        m_catalogue.setContext(target.isEmpty() ? QString("global") : target, versions, loaders);
+        if (m_browse.ready() && !m_browse.busy())
+            m_catalogue.setInstalled(m_content.inventory());
+    };
+    connect(&m_browse, &BrowseInstalls::changed, this, updateBrowseContext);
+    connect(&m_browsePreferences, &BrowsePreferences::changed, this, updateBrowseContext);
+    m_catalogue.setKey(qgetenv("CURSEFORGE_API_KEY"));
+    updateBrowseContext();
     m_navigation.setLeaveGuard([this] { return !m_editor.dirty(); });
+    connect(&m_browse, &BrowseInstalls::installRequested, &m_content, &ContentActions::installRelease);
+    connect(&m_content, &ContentActions::changed, this, [this] {
+        m_browse.setContext(m_workspace.pack(), m_content.inventory(),
+                            m_content.busy() || m_workspace.busy());
+    });
+
     connect(&m_navigation, &NavigationHistory::changed, this, &DesktopSession::activateRoute);
     connect(&m_logs, &PackLogViewer::changed, this, &DesktopSession::activateRoute);
     connect(&m_workspace, &PackWorkspace::changed, this, [this] {
@@ -71,7 +105,9 @@ void DesktopSession::setPack(const QVariantMap &pack) {
 }
 void DesktopSession::activateRoute() {
     const auto route = m_navigation.route();
-    const auto pack = m_workspace.pack();
+    m_browse.setTargetPath(route.value("packPath").toString());
+    auto pack = m_workspace.pack();
+    pack["catalogueLoader"] = m_browse.versionLoaders();
     const auto section = route.value("section").toString();
     if (route.value("page") == "showcase") {
         if (route.value("packPath").toString() != pack.value("path").toString() || m_workspace.busy())

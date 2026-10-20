@@ -123,7 +123,7 @@ class ApplicationController : public QObject {
         }
     }
     Q_INVOKABLE void search(const QString &query, const QString &source, const QString &game,
-                            const QString &loader);
+                            const QString &loader, const QString &type = "mod");
     Q_INVOKABLE void selectProject(int index);
     Q_INVOKABLE void closeProject();
     Q_INVOKABLE void createPack(const QString &name, const QString &game, const QString &loader);

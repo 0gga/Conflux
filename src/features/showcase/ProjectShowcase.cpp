@@ -77,11 +77,15 @@ void ProjectShowcase::resolve(const InstalledModIdentity &identity, const QVaria
             emit self->changed();
             return;
         }
-        self->m_project = project.toVariant();
+        auto presentation = project;
+        if (!self->m_project.value("type").toString().isEmpty())
+            presentation.type = self->m_project.value("type").toString();
+        self->m_project = presentation.toVariant();
         emit self->changed();
         self->m_source->load(
-            project, pack.value("minecraft").toString(), pack.value("loader").toString(),
-            [guard, generation, project](ProjectDetail detail) {
+            presentation, pack.value("minecraft").toString(),
+            pack.value("catalogueLoader", pack.value("loader")).toString(),
+            [guard, generation, project = presentation](ProjectDetail detail) {
                 if (!guard || guard->m_generation != generation)
                     return;
                 auto *self = guard.data();
@@ -99,7 +103,7 @@ void ProjectShowcase::resolve(const InstalledModIdentity &identity, const QVaria
                     for (int variantIndex = 0; variantIndex < variants.size(); ++variantIndex) {
                         auto variant = variants.at(variantIndex).toMap();
                         variant["pageUrl"] = variant.value("provider") == "modrinth"
-                                                 ? "https://modrinth.com/mod/" +
+                                                 ? "https://modrinth.com/" + project.type + "/" +
                                                        variant.value("projectId").toString() + "/version/" +
                                                        variant.value("id").toString()
                                                  : project.sourceUrls.value("curseforge") + "/files/" +

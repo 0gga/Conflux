@@ -26,6 +26,15 @@ static QStringList orderedSources(const QMap<QString, QString> &ids) {
     return sources;
 }
 QVariantMap Project::toVariant() const {
+    QVariantList statistics;
+    auto counts = sourceDownloads;
+    if (!counts.contains(provider))
+        counts[provider] = downloads;
+    for (const auto &source :
+         orderedSources(sourceIds.isEmpty() ? QMap<QString, QString>{{provider, id}} : sourceIds))
+        if (counts.contains(source))
+            statistics << QVariantMap{
+                {"provider", source}, {"count", compactCount(counts[source])}, {"raw", counts[source]}};
     return {{"provider", provider},
             {"id", id},
             {"title", title},
@@ -36,7 +45,14 @@ QVariantMap Project::toVariant() const {
             {"categories", categories},
             {"downloads", compactCount(downloads)},
             {"sources", orderedSources(sourceIds)},
-            {"sourceIds", variantIds(sourceIds)}};
+            {"sourceIds", variantIds(sourceIds)},
+            {"type", type},
+            {"loaders", loaders},
+            {"environment", environment},
+            {"updated", updated},
+            {"created", created},
+            {"followers", compactCount(followers)},
+            {"downloadStats", statistics}};
 }
 QVariantMap Release::toVariant() const {
     return {{"provider", provider},
@@ -49,6 +65,7 @@ QVariantMap Release::toVariant() const {
             {"sha1", sha1},
             {"sha512", sha512},
             {"published", published.left(10)},
+            {"channel", channel},
             {"gameVersions", gameVersions},
             {"loaders", loaders},
             {"dependencies", requiredDependencies},
@@ -60,6 +77,7 @@ QVariantMap Release::toVariant() const {
 Release modrinthRelease(const QJsonObject &row, const QString &fileSha1) {
     Release r;
     r.provider = "modrinth";
+    r.channel = row.value("version_type").toString("release");
     r.projectId = row.value("project_id").toString();
     r.id = row.value("id").toString();
     r.version = row.value("version_number").toString();
@@ -75,7 +93,8 @@ Release modrinthRelease(const QJsonObject &row, const QString &fileSha1) {
         if (!fileSha1.isEmpty() && file.value("hashes").toObject().value("sha1").toString().compare(
                                        fileSha1, Qt::CaseInsensitive) != 0)
             continue;
-        if (!file.value("filename").toString().endsWith(".jar", Qt::CaseInsensitive))
+        if (!file.value("filename").toString().endsWith(".jar", Qt::CaseInsensitive) &&
+            !file.value("filename").toString().endsWith(".zip", Qt::CaseInsensitive))
             continue;
         if (primary.isEmpty() || file.value("primary").toBool())
             primary = file;
@@ -138,6 +157,7 @@ QVariantList groupReleaseVariants(const QVector<Release> &releases) {
 Release releaseFromVariant(const QVariantMap &value) {
     Release r;
     r.provider = value.value("provider").toString();
+    r.channel = value.value("channel", "release").toString();
     r.projectId = value.value("projectId").toString();
     r.id = value.value("id").toString();
     r.version = value.value("version").toString();
@@ -164,6 +184,7 @@ QVector<Project> mergeProjects(const QVector<Project> &projects, const QHash<QSt
         const auto providerId = project.provider + ':' + project.id;
         const auto key = identities.value(providerId, providerId);
         project.sourceIds.insert(project.provider, project.id);
+        project.sourceDownloads[project.provider] = project.downloads;
         if (!positions.contains(key)) {
             positions.insert(key, result.size());
             result.append(project);
@@ -171,10 +192,13 @@ QVector<Project> mergeProjects(const QVector<Project> &projects, const QHash<QSt
         }
         auto &existing = result[positions[key]];
         auto ids = existing.sourceIds;
+        auto downloads = existing.sourceDownloads;
+        downloads.insert(project.provider, project.downloads);
         ids.insert(project.provider, project.id);
         if (project.provider == "modrinth")
             existing = project;
         existing.sourceIds = ids;
+        existing.sourceDownloads = downloads;
     }
     return result;
 }

@@ -1,4 +1,5 @@
 #include "NativeContentStore.h"
+#include "domain/ContentTypes.h"
 #include "platform/PackFileStore.h"
 #include "services/PackRepository.h"
 #include <QCryptographicHash>
@@ -7,6 +8,7 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QSet>
 #include <QStandardPaths>
@@ -23,7 +25,8 @@ static QString sha1File(const QString &path) {
 }
 static bool contentPath(const QString &relative) {
     const auto parts = relative.split('/');
-    return parts.size() == 2 && QStringList{"mods", "resourcepacks", "shaderpacks"}.contains(parts.first()) &&
+    return parts.size() == 2 &&
+           QStringList{"mods", "resourcepacks", "shaderpacks", "datapacks"}.contains(parts.first()) &&
            !parts.last().isEmpty() && parts.last() != "." && parts.last() != ".." &&
            !parts.last().contains('\\');
 }
@@ -62,13 +65,27 @@ QVariantList NativeContentStore::snapshot(const QVariantMap &pack, const QVarian
                 }
             }
         }
+        if (row.value("category") != "mods")
+            for (const auto &value : pack.value("assets").toList()) {
+                const auto pin = value.toMap();
+                if (pin.value("installPath") == relative && pin.value("sha1") == row.value("sha1")) {
+                    row["sourceIds"] = pin.value("projectSourceIds");
+                    row["installedRelease"] = pin;
+                    row["projectId"] = pin.value("projectId");
+                    row["provider"] = pin.value("provider");
+                    row["external"] = false;
+                    row["version"] = pin.value("version");
+                    row["title"] = pin.value("projectTitle", row.value("title"));
+                }
+            }
         rows << row;
     }
     return rows;
 }
 ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, const QList<Edit> &edits,
-                                             const QJsonArray *replacementPins) const {
-    if (edits.isEmpty() && !replacementPins)
+                                             const QJsonArray *replacementPins,
+                                             const QJsonArray *replacementAssets) const {
+    if (edits.isEmpty() && !replacementPins && !replacementAssets)
         return {false, "Select content first."};
     const auto root = QFileInfo(pack.value("path").toString()).canonicalFilePath();
     if (root.isEmpty())
@@ -98,7 +115,7 @@ ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, const QLis
             if (targets.contains(edit.to))
                 return {false, "Two files would have the same destination."};
             targets.insert(edit.to);
-            const auto parent = edit.to.section('/', 0, 0);
+            const auto parent = edit.to.section('/', 0, -2);
             const auto existingParent = NativePackFileStore::resolve(root, parent);
             if (existingParent.isEmpty() && QFileInfo::exists(QDir(root).filePath(parent)))
                 return {false, "The content folder is linked or unsafe."};
@@ -178,8 +195,25 @@ ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, const QLis
             if (!removed)
                 updated << pin;
         }
-        const auto result = PackRepository::updateContentPins(root, originalManifest,
-                                                              replacementPins ? *replacementPins : updated);
+        QJsonArray assets;
+        for (const auto &value : originalManifest.value("assets").toArray()) {
+            auto pin = value.toObject();
+            bool removed = false;
+            for (const auto &edit : edits)
+                if (!edit.from.isEmpty() && pin.value("installPath").toString() == edit.from) {
+                    if (edit.to.isEmpty())
+                        removed = true;
+                    else {
+                        pin["installPath"] = edit.to;
+                        pin["enabled"] = !edit.to.endsWith(".disabled");
+                    }
+                }
+            if (!removed)
+                assets << pin;
+        }
+        const auto result = PackRepository::updateContentReferences(
+            root, originalManifest, replacementPins ? *replacementPins : updated,
+            replacementAssets ? *replacementAssets : assets);
         if (!result.ok) {
             const bool restored = rollback();
             return {false, result.error + (restored ? " Files were restored." : " Check backups: " + backup),
@@ -212,7 +246,7 @@ ContentWriteResult NativeContentStore::remove(const QVariantMap &pack, const QVa
 }
 ContentWriteResult NativeContentStore::importFiles(const QVariantMap &pack, const QList<QUrl> &files,
                                                    const QString &category) const {
-    if (!QStringList{"mods", "resourcepacks", "shaderpacks"}.contains(category))
+    if (!QStringList{"mods", "resourcepacks", "shaderpacks", "datapacks"}.contains(category))
         return {false, "Choose a content type."};
     QList<Edit> edits;
     for (const auto &url : files) {
@@ -299,5 +333,63 @@ ContentWriteResult NativeContentStore::applyStaged(const QVariantMap &pack, cons
     if (removals.isEmpty() && additions.isEmpty() && !pack.value("managed").toBool())
         return {true, {}, {}};
     return apply(pack, removals + additions, pack.value("managed").toBool() ? &managedPins : nullptr);
+}
+ContentWriteResult NativeContentStore::installAsset(const QVariantMap &pack, const QVariantList &rows,
+                                                    const ContentInstallRequest &request,
+                                                    const QString &source) const {
+    const auto &release = request.release;
+    const auto category = contentCategory(request.contentType);
+    if (!QStringList{"resourcepacks", "shaderpacks", "datapacks"}.contains(category) ||
+        QFileInfo(release.filename).fileName() != release.filename ||
+        release.filename.contains(QRegularExpression(QStringLiteral("[<>:\"/\\\\|?*\\x00-\\x1f]"))) ||
+        !release.filename.endsWith(".zip", Qt::CaseInsensitive))
+        return {false, "This content is not a supported ZIP pack."};
+    const auto root = pack.value("path").toString();
+    QString directory = category;
+    if (sha1File(source) != release.sha1)
+        return {false, "The downloaded pack failed verification."};
+    QVariantMap old;
+    for (const auto &value : rows) {
+        const auto row = value.toMap();
+        if (row.value("category") != category ||
+            (category == "datapacks" && !row.value("relativePath").toString().startsWith(directory + '/')))
+            continue;
+        if (row.value("sourceIds").toMap().value(release.provider).toString() == release.projectId) {
+            if (!old.isEmpty())
+                return {false,
+                        "Multiple installed files match this project. Review Content before replacing it."};
+            old = row;
+        }
+    }
+    if (!old.isEmpty() && old.value("sha1").toString() == release.sha1)
+        return {true, {}};
+    const auto target = directory + '/' + release.filename +
+                        (!old.isEmpty() && !old.value("enabled").toBool() ? ".disabled" : "");
+    QList<Edit> edits;
+    if (!old.isEmpty())
+        edits << Edit{old.value("relativePath").toString(), {}, {}, old.value("sha1").toString()};
+    edits << Edit{{}, target, source, {}};
+    QJsonArray pins;
+    if (pack.value("managed").toBool()) {
+        const auto current = PackRepository::inspect(root);
+        if (!current.ok)
+            return {false, current.error};
+        if (current.manifest.value("assets").toArray() !=
+            QJsonArray::fromVariantList(pack.value("assets").toList()))
+            return {false, "The asset manifest changed during download. Refresh and retry."};
+        for (const auto &value : current.manifest.value("assets").toArray()) {
+            const auto ref = value.toObject();
+            if (ref.value("installPath") != old.value("relativePath").toString())
+                pins << ref;
+        }
+        auto ref = QJsonObject::fromVariantMap(release.toVariant());
+        ref["category"] = category;
+        ref["installPath"] = target;
+        ref["projectTitle"] = request.title;
+        ref["projectSourceIds"] = request.sourceIds;
+        ref["enabled"] = !target.endsWith(".disabled");
+        pins << ref;
+    }
+    return apply(pack, edits, nullptr, pack.value("managed").toBool() ? &pins : nullptr);
 }
 } // namespace studio

@@ -41,7 +41,7 @@ Requests are prioritized here; listing an idea does not mean it is implemented. 
 ## Content follow-ups
 
 - Complete approved CurseForge downloads/updates and live API validation. Current provider-only showcases require an approved key; Modrinth-backed files use Modrinth first.
-- Add safe folder-pack mutations and provider-aware resource/shader version management; current local JAR/ZIP actions do not imply a universal shader-settings adapter.
+- Add safe folder-pack identity/mutations and cross-type asset dependency/update planning. Individual verified Modrinth ZIP install/version selection is implemented; this does not imply a universal shader-settings adapter.
 - Add shared Git freeze-policy files, richer update channels and backup restore/retention UI. Current freeze preferences are local.
 - Add full NBT world names/metadata and game-process observation; handing a URL to a launcher is not proof of a successful game launch.
 
@@ -50,3 +50,24 @@ Requests are prioritized here; listing an idea does not mean it is implemented. 
 Ownership is an unambiguous filename/directory match, not a declaration from a mod. Unknown owners and unsupported formats remain inspectable without an Edit action. JSON is reserialized with its values preserved; TOML/properties patch supported values and preserve unrelated text. Complex values remain unchanged and are omitted from forms. No runtime schema, enum or range is inferred for JSON. Logs/worlds/files are inspection tools. Scans do not guarantee runtime compatibility. Backups are local application data and have no automatic retention policy yet.
 
 - Delivered correction: readable descriptions, page-only navigation history, dependency-safe Forge identity and grouped duplicate paths, editable-first config forms with explicit owner association, Lucide glyphs and rounded edge-to-edge artwork.
+
+## Proposed convenience work for owner review
+
+These are ideas, not delivered features or additional owner requirements.
+
+| Priority | Idea | Acceptance criteria |
+| --- | --- | --- |
+| P1 | Install/update plan with rollback | Preview dependencies, replaced files, sizes and conflicts; create a reversible snapshot before applying; restore with hash checks. |
+| P1 | Cross-type asset dependencies | Resolve required mod/resource/shader/data-pack dependencies as one reviewed transaction. Current ZIP installs visibly reject required dependencies. |
+| P1 | Per-instance update channels | Choose stable/beta/alpha with per-project exceptions/freezes; show a changelog and compatibility diff before Update all. |
+| P1 | Shader-engine and side checks | Detect Iris/Oculus/OptiFine and client/server requirements from verified metadata; explain prerequisites and offer reviewed alternatives. |
+| P2 | Batch install queue and saved searches | Queue projects, review the combined dependency plan and preserve saved filters/searches per content type. |
+| P2 | Arbitrary page jumps and precise merged totals | Build resumable provider cursor indexes for large direct jumps; expose deduplicated totals when exact, without treating summed source listings as unique projects. |
+| P2 | Instance cloning and profiles | Duplicate a pack with a new Git identity; support client/server/export profiles preserving exact shared pins and explicit overrides. |
+| P2 | Reusable collections | Curate optional groups of mods with compatibility/dependency previews before adding a collection. |
+| P2 | Git-friendly change review | Show added/removed/updated content and config diffs; compare commits and restore a pack version through UI. |
+| P2 | Shared verified content cache | Deduplicate immutable downloads by hash, show disk usage and safely reclaim unreferenced files; never mutate shared bytes. |
+| P2 | Global ZIP data-pack loader integration | Detect or offer a compatible global pack loader; validate pack formats and future-world activation without silently rewriting saves. Instance storage and mod-form variants are implemented. |
+| P3 | Searchable command palette | Jump to instances, worlds, content, configs and common actions with clear context and keyboard shortcuts. |
+
+- Delivered browsing: page-size/sort controls, cached page/scroll restoration, right multi-value compatibility/tag filters, persistent hide/restore menus, instance-scoped Data Packs and the Connector search preference. Precise merged totals/direct page jumps, automatic global ZIP loader provisioning and cross-type ZIP dependency graphs remain follow-up work.

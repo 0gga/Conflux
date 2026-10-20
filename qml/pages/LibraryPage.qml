@@ -74,7 +74,7 @@ Item {
         }
         Item {
             Layout.fillWidth: true; Layout.fillHeight: true
-            ListView {
+            ListView { boundsBehavior: Flickable.StopAtBounds;
                 id: packs; anchors.fill: parent; clip: true; spacing: 12; model: root.rows
                 ScrollBar.vertical: ScrollBar {}
                 delegate: LibraryRow {
@@ -82,7 +82,9 @@ Item {
                     required property var modelData
                     width: packs.width
                     titleText: modelData.title
-                    detailText: (modelData.gameVersion || "Minecraft version unknown") + (modelData.loader ? "  ·  " + modelData.loader : "") + "  ·  " + modelData.modCount + " mods"
+                    detailText: modelData.modCount + (modelData.modCount === 1 ? " mod" : " mods")
+                    minecraft: modelData.gameVersion || ""
+                    loader: modelData.loader || ""
                     source: modelData.provider; thumbnail: modelData.icon || ""; hiddenPack: modelData.hidden
                     onActivated: root.packRequested(modelData.path, false)
                     onExploreRequested: root.packRequested(modelData.path, true)

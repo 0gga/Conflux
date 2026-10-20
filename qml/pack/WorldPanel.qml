@@ -12,7 +12,7 @@ Item {
         RowLayout { Layout.fillWidth: true; Text { Layout.fillWidth: true; text: "Your saved worlds"; color: Theme.colors.text; font.pixelSize: 18; font.weight: Font.DemiBold } ActionButton { text: "Refresh"; iconName: "refresh"; subtle: true; enabled: !root.worlds.busy; onClicked: root.worlds.refresh() } }
         Text { Layout.fillWidth: true; visible: !root.launch.available; text: root.launch.unavailableReason; color: Theme.colors.muted; wrapMode: Text.WordWrap; font.pixelSize: 12 }
         Text { Layout.fillWidth: true; visible: root.launch.status.length > 0; text: root.launch.status; color: Theme.colors.accent; wrapMode: Text.WordWrap; font.pixelSize: 12 }
-        ListView {
+        ListView { boundsBehavior: Flickable.StopAtBounds;
             id: list; Layout.fillWidth: true; Layout.fillHeight: true; model: root.worlds.entries; spacing: 10; clip: true; ScrollBar.vertical: ScrollBar {}
             delegate: Rectangle { id: world; required property var modelData; width: list.width; height: 84; radius: 16; color: Theme.colors.card
                 RowLayout { anchors.fill: parent; anchors.margins: 16; spacing: 14

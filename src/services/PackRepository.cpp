@@ -176,7 +176,9 @@ RepositoryResult PackRepository::create(const QString &root, const QString &name
         return {false, output, path};
     QFile ignore(QDir(path).filePath(".gitignore"));
     if (!ignore.open(QIODevice::WriteOnly) ||
-        ignore.write("mods/\n.minecraft/\nworlds/\nsaves/\nlogs/\ncache/\n.env\n*.jar\n") < 0)
+        ignore.write(
+            "mods/\nresourcepacks/\nshaderpacks/\ndatapacks/\n.minecraft/\nworlds/\nsaves/\nlogs/\ncache/"
+            "\n.env\n*.jar\n") < 0)
         return {false, "Could not create the pack's .gitignore.", path};
     ignore.close();
     return write(path, {{"schemaVersion", 1},
@@ -239,13 +241,48 @@ RepositoryResult PackRepository::pin(const QString &path, const QJsonObject &ref
 }
 RepositoryResult PackRepository::updateContentPins(const QString &path, const QJsonObject &expected,
                                                    const QJsonArray &pins) {
+    return updateContentReferences(path, expected, pins, expected.value("assets").toArray());
+}
+RepositoryResult PackRepository::updateContentReferences(const QString &path, const QJsonObject &expected,
+                                                         const QJsonArray &mods, const QJsonArray &assets) {
     auto current = inspect(path);
     if (!current.ok)
         return current;
     if (current.manifest != expected)
         return {false, "The pack manifest changed outside this operation. Refresh before retrying.", path};
-    current.manifest["mods"] = pins;
-    return write(path, current.manifest);
+    current.manifest["mods"] = mods;
+    if (!assets.isEmpty() || expected.contains("assets"))
+        current.manifest["assets"] = assets;
+    QByteArray originalIgnore, updatedIgnore;
+    const auto ignorePath = QDir(path).filePath(".gitignore");
+    if (!assets.isEmpty()) {
+        QFile ignore(ignorePath);
+        if (QFileInfo(ignorePath).isSymLink() || !ignore.open(QIODevice::ReadOnly) || ignore.size() > 65536)
+            return {false, "The managed .gitignore could not be safely updated.", path};
+        originalIgnore = ignore.readAll();
+        updatedIgnore = originalIgnore;
+        for (const auto &directory :
+             {QByteArray("resourcepacks/"), QByteArray("shaderpacks/"), QByteArray("datapacks/")})
+            if (!originalIgnore.split('\n').contains(directory)) {
+                if (!updatedIgnore.endsWith('\n'))
+                    updatedIgnore += '\n';
+                updatedIgnore += directory + '\n';
+            }
+        if (updatedIgnore != originalIgnore) {
+            QSaveFile ignoreWrite(ignorePath);
+            if (!ignoreWrite.open(QIODevice::WriteOnly) ||
+                ignoreWrite.write(updatedIgnore) != updatedIgnore.size() || !ignoreWrite.commit())
+                return {false, "Could not exclude downloaded packs from Git.", path};
+        }
+    }
+    auto result = write(path, current.manifest);
+    if (!result.ok && updatedIgnore != originalIgnore) {
+        QSaveFile restore(ignorePath);
+        if (!restore.open(QIODevice::WriteOnly) || restore.write(originalIgnore) != originalIgnore.size() ||
+            !restore.commit())
+            result.error += " The previous .gitignore could not be restored.";
+    }
+    return result;
 }
 RepositoryResult PackRepository::remove(const QString &path, const QString &provider,
                                         const QString &projectId) {

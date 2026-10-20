@@ -6,15 +6,16 @@ find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Network C
 qt_standard_project_setup(REQUIRES 6.8)
 qt_add_qml_module(conflux_style STATIC URI Conflux.Style VERSION 1.0
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Conflux/Style
-    SOURCES src/theme/Theme.h src/theme/Theme.cpp
-    RESOURCES themes/dark-grey.json themes/oled.json)
+    SOURCES src/theme/Theme.h src/theme/Theme.cpp src/theme/Branding.h src/theme/Branding.cpp
+    RESOURCES themes/dark-grey.json themes/oled.json themes/brands.json)
 target_link_libraries(conflux_style PRIVATE Qt6::Gui)
-target_include_directories(conflux_style PUBLIC src/theme)
+target_include_directories(conflux_style PUBLIC src/theme PRIVATE src)
 add_library(miniz STATIC third_party/miniz.c third_party/miniz_tdef.c third_party/miniz_tinfl.c third_party/miniz_zip.c)
 target_include_directories(miniz PUBLIC third_party)
 
 qt_add_library(pack_foundation STATIC
-    src/domain/Catalogue.h src/domain/Catalogue.cpp
+    src/domain/Catalogue.h src/domain/Catalogue.cpp src/domain/CatalogueSearch.h
+    src/platform/ReviewedProjectIdentities.h src/platform/ReviewedProjectIdentities.cpp
     src/services/CatalogueClient.h src/services/CatalogueClient.cpp
     src/services/GalleryImages.h src/services/GalleryImages.cpp
     src/services/InstallationDiscovery.h src/services/InstallationDiscovery.cpp
@@ -52,6 +53,12 @@ qt_add_library(conflux_desktop STATIC
     src/features/config/ConfigEditor.h src/features/config/ConfigEditor.cpp)
 target_sources(conflux_desktop PRIVATE
     src/features/content/ContentPorts.h
+    src/features/explore/BrowseInstalls.h src/features/explore/BrowseInstalls.cpp
+    src/features/explore/BrowseCatalogue.h src/features/explore/BrowseCatalogue.cpp
+    src/features/preferences/BrowsePreferences.h src/features/preferences/BrowsePreferences.cpp
+    src/features/preferences/ContentVisibility.h src/features/preferences/ContentVisibility.cpp
+    src/platform/BrowseSettingsStore.h src/platform/BrowseSettingsStore.cpp
+    src/platform/AssetInstaller.h src/platform/AssetInstaller.cpp
     src/features/content/ContentActions.h src/features/content/ContentActions.cpp
     src/features/preferences/ContentPreferences.h src/features/preferences/ContentPreferences.cpp
     src/platform/NativeContentStore.h src/platform/NativeContentStore.cpp
@@ -68,7 +75,7 @@ target_sources(conflux_desktop PRIVATE
     src/platform/InstalledModIdentity.h src/platform/InstalledModIdentity.cpp
     src/platform/CatalogueShowcaseSource.h src/platform/CatalogueShowcaseSource.cpp)
 target_include_directories(conflux_desktop PUBLIC src)
-target_link_libraries(conflux_desktop PUBLIC conflux_content conflux_config pack_foundation Qt6::Concurrent)
+target_link_libraries(conflux_desktop PUBLIC conflux_content conflux_config pack_foundation Qt6::Concurrent PRIVATE miniz)
 qt_add_executable(modpack-studio src/main.cpp src/ApplicationController.h src/ApplicationController.cpp src/verification/DesktopSmokeTest.h src/verification/DesktopSmokeTest.cpp)
 qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     QML_FILES
@@ -83,12 +90,16 @@ qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     qml/pack/LogPanel.qml
     qml/pack/WorldPanel.qml
     qml/pack/VersionPicker.qml
+    qml/settings/BrowseSettings.qml
+    qml/explore/BrowseFilters.qml qml/explore/PaginationBar.qml
     qml/settings/AppearanceSettings.qml
     qml/settings/ConnectionSettings.qml
     qml/settings/WarningSettings.qml
     qml/components/ToggleSwitch.qml
     qml/components/Icon.qml
     qml/components/IconPaths.js
+    qml/components/BrandBadge.qml qml/components/ProjectCard.qml
+    qml/components/CompatibilityBadges.qml qml/components/BoundedScrollView.qml
     qml/components/ContentIcon.qml
     qml/components/SearchField.qml
     qml/components/SelectBox.qml
@@ -126,6 +137,15 @@ if(BUILD_TESTING)
     qt_add_executable(content-actions-tests tests/ContentActionsTests.cpp)
     target_link_libraries(content-actions-tests PRIVATE conflux_desktop Qt6::Test)
     add_test(NAME content-actions COMMAND content-actions-tests)
+    qt_add_executable(browse-installs-tests tests/BrowseInstallsTests.cpp)
+    target_link_libraries(browse-installs-tests PRIVATE conflux_desktop Qt6::Test)
+    add_test(NAME browse-installs COMMAND browse-installs-tests)
+    qt_add_executable(asset-installer-tests tests/AssetInstallerTests.cpp)
+    target_link_libraries(asset-installer-tests PRIVATE conflux_desktop miniz Qt6::Test)
+    add_test(NAME asset-installer COMMAND asset-installer-tests)
+    qt_add_executable(browse-catalogue-tests tests/BrowseCatalogueTests.cpp)
+    target_link_libraries(browse-catalogue-tests PRIVATE conflux_desktop Qt6::Test)
+    add_test(NAME browse-catalogue COMMAND browse-catalogue-tests)
     qt_add_executable(content-interaction-tests tests/ContentInteractionTests.cpp)
     target_link_libraries(content-interaction-tests PRIVATE conflux_desktop conflux_styleplugin Qt6::Quick Qt6::QuickControls2 Qt6::Test)
     target_compile_definitions(content-interaction-tests PRIVATE CONFLUX_QML_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")

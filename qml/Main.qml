@@ -86,7 +86,7 @@ ApplicationWindow {
                 }
                 Text { text: "WORKSPACE"; color: Theme.colors.muted; font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 1.8; Layout.leftMargin: 12; Layout.bottomMargin: 10 }
                 Repeater {
-                    model: [{key:"library", label:"Library", icon:"library"}, {key:"discover", label:"Discover", icon:"compass"}, {key:"workspace", label:"Modpack", icon:"content"}]
+                    model: [{key:"library", label:"Library", icon:"library"}, {key:"discover", label:"Explore content", icon:"compass"}, {key:"workspace", label:"Modpack", icon:"content"}]
                     delegate: NavigationButton {
                         required property var modelData
                         Layout.fillWidth: true
@@ -111,9 +111,9 @@ ApplicationWindow {
                     ActionButton { iconName: "back"; hint: "Back · Alt+Left"; enabled: window.session.navigation.canBack; subtle: true; onClicked: window.session.navigation.back() }
                     ActionButton { iconName: "forward"; hint: "Forward · Alt+Right"; enabled: window.session.navigation.canForward; subtle: true; onClicked: window.session.navigation.forward() }
                     Rectangle { Layout.leftMargin: 8; Layout.rightMargin: 12; implicitWidth: 1; implicitHeight: 18; color: Theme.colors.border }
-                    Text { Layout.maximumWidth: 240; elide: Text.ElideRight; text: window.page === "showcase" ? (window.session.showcase.project.title || "Mod showcase") : window.page === "workspace" ? (window.app.activePack.name || "Modpack") : window.page === "discover" ? "Discover" : window.page === "settings" ? "Settings" : "Library"; font.pixelSize: 13; color: Theme.colors.muted; textFormat: Text.PlainText }
+                    Text { Layout.maximumWidth: 240; elide: Text.ElideRight; text: window.page === "showcase" ? (window.session.showcase.project.title || "Mod showcase") : window.page === "workspace" ? (window.app.activePack.name || "Modpack") : window.page === "discover" ? "Explore content" : window.page === "settings" ? "Settings" : "Library"; font.pixelSize: 13; color: Theme.colors.muted; textFormat: Text.PlainText }
                     Item { Layout.fillWidth: true }
-                    ActionButton { text: "Search mods"; iconName: "search"; hint: "Search mods · Ctrl+K"; subtle: true; onClicked: { if (window.navigate("discover")) discovery.focusSearch() } }
+                    ActionButton { text: "Explore content"; iconName: "search"; hint: "Explore content · Ctrl+K"; subtle: true; onClicked: { if (window.navigate("discover")) discovery.focusSearch() } }
                     ActionButton { text: "New modpack"; iconName: "plus"; primary: true; enabled: !window.session.editor.dirty && !window.session.editor.busy; onClicked: newPack.open() }
                 }
             }
@@ -122,7 +122,7 @@ ApplicationWindow {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 currentIndex: ["library", "discover", "workspace", "settings", "showcase"].indexOf(window.page)
                 LibraryPage { app: window.app; onCreateRequested: newPack.open(); onDiscoverRequested: window.navigate("discover"); onPackRequested: function(path, explore) { window.session.navigation.go({page:explore ? "discover" : "workspace",packPath:path}) } }
-                DiscoverPage { id: discovery; app: window.app; onCreateRequested: newPack.open(); onWorkspaceRequested: window.navigate("workspace"); onShowcaseRequested: function(project) { window.session.navigation.go({page:"showcase",packPath:window.app.activePack.path || "",project:project}) } }
+                DiscoverPage { id: discovery; app: window.app; content: window.session.content; browse: window.session.browse; catalogue: window.session.catalogue; worlds: window.session.worlds; targetPath: window.session.navigation.route.packPath || ""; onInstanceRequested: function(path) { window.session.navigation.go({page:"discover",packPath:path}) } onCreateRequested: newPack.open(); onWorkspaceRequested: window.navigate("workspace"); onShowcaseRequested: function(project) { window.session.navigation.go({page:"showcase",packPath:window.session.navigation.route.packPath || "",project:project}) } }
                 PackPage {
                     app: window.app; session: window.session; onCreateRequested: newPack.open(); onDiscoverRequested: window.navigate("discover")
                     onSectionRequested: function(key) { window.packRoute(key) }
@@ -132,8 +132,8 @@ ApplicationWindow {
                     onWarningSettingsRequested: window.session.navigation.go({page:"settings",settingsTab:"warnings"})
                     onShowcaseRequested: function(path) { window.session.navigation.go({page:"showcase",packPath:window.app.activePack.path,modPath:path}) }
                 }
-                SettingsPage { app: window.app; warnings: window.session.warnings; tab: window.session.navigation.route.settingsTab || "appearance"; onTabRequested: function(key) { window.session.navigation.go({page:"settings",settingsTab:key}) } }
-                ShowcasePage { app: window.app; showcase: window.session.showcase; contentController: window.session.content; tab: window.session.navigation.route.showcaseTab || "description"; onTabRequested: function(key) { const route = Object.assign({},window.session.navigation.route); route.showcaseTab = key; window.session.navigation.go(route) } }
+                SettingsPage { app: window.app; warnings: window.session.warnings; browsePreferences: window.session.browsePreferences; tab: window.session.navigation.route.settingsTab || "appearance"; onTabRequested: function(key) { window.session.navigation.go({page:"settings",settingsTab:key}) } }
+                ShowcasePage { app: window.app; browse: window.session.browse; showcase: window.session.showcase; contentController: window.session.content; tab: window.session.navigation.route.showcaseTab || "description"; onTabRequested: function(key) { const route = Object.assign({},window.session.navigation.route); route.showcaseTab = key; window.session.navigation.go(route) } }
             }
         }
     }
@@ -174,13 +174,13 @@ ApplicationWindow {
             Text { text: "MINECRAFT VERSION"; color: Theme.colors.muted; font.pixelSize: 10; font.letterSpacing: 1.2 }
             SearchField { id: gameVersion; Layout.fillWidth: true; text: "1.21.1"; placeholderText: "e.g. 1.21.1"; maximumLength: 24 }
             Text { text: "MOD LOADER"; color: Theme.colors.muted; font.pixelSize: 10; font.letterSpacing: 1.2 }
-            SelectBox { id: packLoader; Layout.fillWidth: true; model: ["fabric", "neoforge", "forge", "quilt", "vanilla"] }
+            SelectBox { id: packLoader; Layout.fillWidth: true; model: ["Fabric", "NeoForge", "Forge", "Quilt", "Vanilla"] }
             Text { Layout.fillWidth: true; text: "Exact versions and required dependencies are tracked in Git. Downloaded mod files stay local."; color: Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.WordWrap; lineHeight: 1.3 }
             RowLayout {
                 Layout.fillWidth: true; Layout.topMargin: 8
                 ActionButton { text: "Cancel"; enabled: !window.app.repositoryBusy; subtle: true; onClicked: newPack.close() }
                 Item { Layout.fillWidth: true }
-                ActionButton { text: window.app.repositoryBusy ? "Creating…" : "Create modpack"; primary: true; enabled: packName.text.trim().length > 0 && !window.app.repositoryBusy; onClicked: window.app.createPack(packName.text, gameVersion.text, packLoader.currentText) }
+                ActionButton { text: window.app.repositoryBusy ? "Creating…" : "Create modpack"; primary: true; enabled: packName.text.trim().length > 0 && !window.app.repositoryBusy; onClicked: window.app.createPack(packName.text, gameVersion.text, ["fabric","neoforge","forge","quilt","vanilla"][packLoader.currentIndex]) }
             }
         }
         onOpened: packName.forceActiveFocus()

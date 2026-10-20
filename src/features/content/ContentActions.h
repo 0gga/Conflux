@@ -1,5 +1,6 @@
 #pragma once
 #include "ContentPorts.h"
+#include "features/preferences/ContentVisibility.h"
 #include <QObject>
 #include <memory>
 namespace studio {
@@ -52,6 +53,9 @@ class ContentActions final : public QObject {
     bool cancellable() const {
         return m_busy && (!m_mutating || m_installer->cancellable());
     }
+    QVariantList inventory() const {
+        return m_rows;
+    }
     int updateCount() const;
     QString notice() const {
         return m_notice;
@@ -80,6 +84,13 @@ class ContentActions final : public QObject {
         m_selected.clear();
         emit changed();
     }
+    void setVisibility(std::shared_ptr<IContentVisibility> visibility) {
+        m_visibility = std::move(visibility);
+    }
+    void visibilityChanged() {
+        emit changed();
+    }
+    Q_INVOKABLE void hide(const QString &path, bool hidden = true);
     Q_INVOKABLE void refresh(bool checkUpdates = true);
     Q_INVOKABLE void setEnabled(const QString &, bool);
     Q_INVOKABLE void remove(const QString &);
@@ -109,6 +120,7 @@ class ContentActions final : public QObject {
     void runWrite(std::function<ContentWriteResult()>);
     void finishWrite(ContentWriteResult);
     void install(const QVector<ContentInstallRequest> &);
+    std::shared_ptr<IContentVisibility> m_visibility;
     std::shared_ptr<const IContentFileStore> m_files;
     std::shared_ptr<IContentCatalogue> m_catalogue;
     std::shared_ptr<IContentInstaller> m_installer;

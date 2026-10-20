@@ -56,7 +56,7 @@ ContentSnapshot ContentInventory::scan(const QVariantMap &pack) const {
             if (row.value("version").toString().startsWith("${"))
                 row["version"] = "";
             mods.append(row);
-        } else if (category == "shaderpacks" || category == "resourcepacks") {
+        } else if (category == "shaderpacks" || category == "resourcepacks" || category == "datapacks") {
             QByteArray icon;
             if (file.isDir()) {
                 QFile input(NativePackFileStore::resolve(root.path(), relative + "/pack.png"));
@@ -69,7 +69,7 @@ ContentSnapshot ContentInventory::scan(const QVariantMap &pack) const {
         }
         result.files.append(row);
     };
-    for (const auto &category : QStringList{"mods", "shaderpacks", "resourcepacks"}) {
+    for (const auto &category : QStringList{"mods", "shaderpacks", "resourcepacks", "datapacks"}) {
         const auto path = NativePackFileStore::resolve(root.path(), category);
         if (path.isEmpty())
             continue;

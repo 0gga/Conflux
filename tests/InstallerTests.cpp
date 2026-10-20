@@ -8,6 +8,7 @@
 #include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QUrlQuery>
 #include <QtTest>
 
 using namespace studio;
@@ -110,6 +111,38 @@ class InstallerTests : public QObject {
         return done ? result : RepositoryResult{false, "Test timed out"};
     }
   private slots:
+    void fabricBridgeAdmissionIsExplicitAndDependencyQueriesKeepBothLoaders() {
+        FixtureServer server;
+        QTemporaryDir temp;
+        const auto pack = PackRepository::create(temp.path(), "Bridge", "1.21.1", "neoforge");
+        QVERIFY(pack.ok);
+        server.version("library", "library-v1", "library bytes");
+        const auto release =
+            modrinthRelease(server.version("root", "root-v1", "root bytes", {dep("library")}));
+        ModInstaller installer(nullptr, server.base());
+        const auto rejected = install(installer, pack.path, release);
+        QVERIFY(!rejected.ok);
+        RepositoryResult result;
+        bool done = false;
+        connect(&installer, &ModInstaller::finished, &installer, [&](const RepositoryResult &value) {
+            result = value;
+            done = true;
+        });
+        installer.startBatch(pack.path, {{release, "Root", {{"modrinth", "root"}}}}, true);
+        QTRY_VERIFY_WITH_TIMEOUT(done, 10000);
+        QVERIFY2(result.ok, qPrintable(result.error));
+        QCOMPARE(result.manifest.value("loader").toString(), QString("neoforge"));
+        QCOMPARE(result.manifest.value("mods").toArray().size(), 2);
+        bool unionQuery = false;
+        for (const auto &target : server.requests)
+            if (target.contains("/project/library/version")) {
+                const QUrlQuery query(QUrl("http://fixture" + target));
+                const auto loaders =
+                    QJsonDocument::fromJson(query.queryItemValue("loaders").toUtf8()).array();
+                unionQuery = loaders.contains("neoforge") && loaders.contains("fabric");
+            }
+        QVERIFY(unionQuery);
+    }
     void disabledDependenciesAreNotSilentlyEnabledOrTreatedAsActive() {
         FixtureServer server;
         QTemporaryDir temp;

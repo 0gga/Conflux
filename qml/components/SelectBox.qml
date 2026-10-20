@@ -26,6 +26,6 @@ ComboBox {
     popup: Popup {
         y: control.height + 6; width: control.width; padding: 6; implicitHeight: Math.min(list.contentHeight + 12, 280)
         background: Rectangle { radius: 12; color: Theme.colors.card; border.color: Theme.colors.border }
-        contentItem: ListView { id: list; clip: true; implicitHeight: contentHeight; spacing: 2; model: control.popup.visible ? control.delegateModel : null; currentIndex: control.highlightedIndex; ScrollIndicator.vertical: ScrollIndicator {} }
+        contentItem: ListView { boundsBehavior: Flickable.StopAtBounds; id: list; clip: true; implicitHeight: contentHeight; spacing: 2; model: control.popup.visible ? control.delegateModel : null; currentIndex: control.highlightedIndex; ScrollIndicator.vertical: ScrollIndicator {} }
     }
 }

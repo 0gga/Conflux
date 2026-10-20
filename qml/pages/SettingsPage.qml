@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Conflux.Style
 import "../components"
@@ -9,6 +8,7 @@ Item {
     id: root
     required property var app
     required property var warnings
+    required property var browsePreferences
     property string tab: "appearance"
     signal tabRequested(string key)
     ColumnLayout {
@@ -19,21 +19,22 @@ Item {
             ColumnLayout {
                 Layout.preferredWidth: 176; Layout.minimumWidth: 176; Layout.maximumWidth: 176; Layout.fillWidth: false; Layout.fillHeight: true; spacing: 6
                 Repeater {
-                    model: [{category:"GENERAL",key:"appearance",label:"Appearance",icon:"settings"},{category:"MODPACKS",key:"warnings",label:"Warnings",icon:"warning"},{category:"SERVICES",key:"connections",label:"Connections",icon:"compass"}]
+                    model: [{category:"GENERAL",key:"appearance",label:"Appearance",icon:"settings"},{category:"MODPACKS",key:"warnings",label:"Warnings",icon:"warning"},{category:"",key:"browse",label:"Browsing",icon:"compass"},{category:"SERVICES",key:"connections",label:"Connections",icon:"compass"}]
                     delegate: ColumnLayout {
                         required property var modelData
                         Layout.fillWidth: true; spacing: 8
-                        Text { Layout.topMargin: 14; Layout.leftMargin: 14; text: parent.modelData.category; color: Theme.colors.muted; font.pixelSize: 10; font.letterSpacing: 1.3 }
+                        Text { visible: parent.modelData.category.length > 0; Layout.topMargin: 14; Layout.leftMargin: 14; text: parent.modelData.category; color: Theme.colors.muted; font.pixelSize: 10; font.letterSpacing: 1.3 }
                         NavigationButton { Layout.fillWidth: true; text: parent.modelData.label; iconName: parent.modelData.icon; selected: root.tab === parent.modelData.key; onClicked: root.tabRequested(parent.modelData.key) }
                     }
                 }
                 Item { Layout.fillHeight: true }
             }
-            ScrollView {
+            BoundedScrollView {
                 id: scroll; Layout.minimumWidth: 0; Layout.fillWidth: true; Layout.fillHeight: true; clip: true
                 ColumnLayout {
                     width: scroll.availableWidth; spacing: 16
                     AppearanceSettings { visible: root.tab === "appearance"; Layout.fillWidth: true }
+                    BrowseSettings { visible: root.tab === "browse"; Layout.fillWidth: true; preferences: root.browsePreferences }
                     WarningSettings { visible: root.tab === "warnings"; Layout.fillWidth: true; preferences: root.warnings }
                     ConnectionSettings { visible: root.tab === "connections"; Layout.fillWidth: true; app: root.app }
                 }

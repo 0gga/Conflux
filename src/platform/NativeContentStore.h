@@ -14,13 +14,16 @@ class NativeContentStore final : public IContentFileStore {
     // Used by the external install adapter after verified dependency staging.
     ContentWriteResult applyStaged(const QVariantMap &, const QVariantList &expected, const QString &stage,
                                    const QJsonObject &manifest) const;
+    ContentWriteResult installAsset(const QVariantMap &, const QVariantList &, const ContentInstallRequest &,
+                                    const QString &verifiedFile) const;
 
   private:
     struct Edit {
         QString from, to, source, expectedSha1;
     };
     ContentWriteResult apply(const QVariantMap &, const QList<Edit> &,
-                             const QJsonArray *replacementPins = nullptr) const;
+                             const QJsonArray *replacementPins = nullptr,
+                             const QJsonArray *replacementAssets = nullptr) const;
     std::shared_ptr<const IInstalledModIdentity> m_identity;
     QString m_backupRoot;
 };

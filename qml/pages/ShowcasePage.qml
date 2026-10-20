@@ -7,6 +7,7 @@ import "../components"
 
 Item {
     id: root
+    required property var browse
     required property var app
     required property var showcase
     required property var contentController
@@ -26,19 +27,22 @@ Item {
             ColumnLayout {
                 Layout.fillWidth: true; spacing: 8
                 Text { Layout.fillWidth: true; text: root.showcase.project.title || "Mod showcase"; color: Theme.colors.text; font.pixelSize: 29; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
-                RowLayout { Repeater { model: root.showcase.project.sources || []; delegate: SourceBadge { required property string modelData; source: modelData } } }
+                RowLayout { Repeater { model: root.showcase.project.sources || []; delegate: SourceBadge { required property string modelData; source: modelData; iconOnly: true } } }
                 Text { visible: !!root.showcase.project.summary; Layout.fillWidth: true; text: root.showcase.project.summary || ""; color: Theme.colors.muted; font.pixelSize: 13; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
             }
             BusyIndicator { visible: root.showcase.busy; running: visible; Layout.preferredWidth: 32; Layout.preferredHeight: 32 }
             ActionButton { text: "View project page"; subtle: true; visible: !!root.showcase.project.url; onClicked: root.app.openWeb(root.showcase.project.url) }
         }
         SectionTabs { entries: [{key:"description",label:"Description",icon:"info"},{key:"gallery",label:"Gallery",icon:"image"},{key:"versions",label:"Versions",icon:"versions"}]; current: root.tab; onSelected: function(key) { root.tabRequested(key) } }
+        Text { Layout.fillWidth: true; text: root.browse.ready ? "For " + root.browse.pack.name : "Choose an instance in Explore content to install."; color: Theme.colors.muted; font.pixelSize: 12; textFormat: Text.PlainText }
+        Text { Layout.fillWidth: true; visible: root.showcase.project.type === "datapack"; text: "Data Packs are managed per instance. ZIP variants require a global data-pack loader in Minecraft."; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap }
         Text { Layout.fillWidth: true; visible: root.showcase.notice.length > 0; text: root.showcase.notice; color: Theme.colors.warning; font.pixelSize: 12; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
+        Text { Layout.fillWidth: true; visible: root.browse.notice.length > 0; text: root.browse.notice; color: Theme.colors.warning; font.pixelSize: 12; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
         Text { Layout.fillWidth: true; visible: root.contentController.notice.length > 0; text: root.contentController.notice; color: Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
         StackLayout {
             Layout.fillWidth: true; Layout.fillHeight: true
             currentIndex: ["description","gallery","versions"].indexOf(root.tab)
-            ScrollView {
+            BoundedScrollView {
                 id: descriptionScroll; clip: true
                 TextEdit {
                     width: descriptionScroll.availableWidth; height: contentHeight
@@ -49,14 +53,14 @@ Item {
                 }
             }
             Item {
-                GridView {
+                GridView { boundsBehavior: Flickable.StopAtBounds;
                     id: gallery; anchors.fill: parent; clip: true; model: root.showcase.gallery
                     cellWidth: width / Math.max(1,Math.floor(width / 340)); cellHeight: 250
                     ScrollBar.vertical: ScrollBar {}
                     delegate: Rectangle {
                         required property string modelData
                         width: gallery.cellWidth - 12; height: gallery.cellHeight - 12; radius: 14; color: Theme.colors.card; border.color: Theme.colors.border
-                        Image { anchors.fill: parent; anchors.margins: 8; source: parent.modelData; asynchronous: true; fillMode: Image.PreserveAspectFit }
+                        ContentIcon { anchors.fill: parent; anchors.margins: 8; source: parent.modelData; preserveAspectFit: true; kind: "image"; radius: 12 }
                     }
                 }
                 EmptyState { anchors.centerIn: parent; visible: !root.showcase.busy && root.showcase.gallery.length === 0; title: "No gallery images"; message: "This project has no available gallery images."; symbol: "image" }
@@ -68,23 +72,27 @@ Item {
                     Text { Layout.fillWidth: true; text: root.versions.length + " versions · matching this pack's Minecraft version and loader"; color: Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.WordWrap }
                     SelectBox { model: ["All sources", "Modrinth", "CurseForge"]; onActivated: root.versionSource = ["all","modrinth","curseforge"][currentIndex] }
                 }
-                ListView {
+                ListView { boundsBehavior: Flickable.StopAtBounds;
                     id: versionList; Layout.fillWidth: true; Layout.fillHeight: true; spacing: 10; clip: true; model: root.versions; ScrollBar.vertical: ScrollBar {}
                     delegate: Rectangle {
                         id: version; required property var modelData
                         property int variantIndex: 0
                         readonly property var release: modelData.variants[Math.min(variantIndex,modelData.variants.length - 1)] || ({})
-                        width: versionList.width; height: version.modelData.variants.length > 1 ? 132 : 96; radius: 14; color: Theme.colors.card; border.color: Theme.colors.border
+                        readonly property bool installed: { const ready=root.browse.ready; const busy=root.browse.busy; return root.browse.installed(release,root.showcase.project.type || "mod") }
+                        readonly property bool groupInstalled: { const ready=root.browse.ready; const busy=root.browse.busy; return modelData.variants.some(function(item) { return root.browse.installed(item,root.showcase.project.type || "mod") }) }
+                        width: versionList.width; height: version.modelData.variants.length > 1 ? 148 : 112; radius: 14; color: Theme.colors.card; border.color: Theme.colors.border
                         RowLayout {
                             anchors.fill: parent; anchors.margins: 16; spacing: 16
                             ColumnLayout {
                                 Layout.fillWidth: true; spacing: 8
                                 Text { Layout.fillWidth: true; text: version.modelData.label; color: Theme.colors.text; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
-                                Text { Layout.fillWidth: true; text: (version.release.loaders || []).join(" / ") + " · " + (version.release.gameVersions || []).join(", ") + " · " + (version.release.published || ""); color: Theme.colors.muted; font.pixelSize: 12; elide: Text.ElideRight }
+                                CompatibilityBadges { minecraft: root.browse.ready ? (root.browse.pack.minecraft || "") : ((version.release.gameVersions || [])[0] || ""); loader: (version.release.loaders || []).indexOf(root.browse.pack.loader) !== -1 ? root.browse.pack.loader : ((version.release.loaders || []).filter(function(loader) { return loader !== "minecraft" && loader !== "datapack" })[0] || "") }
+                                Text { Layout.fillWidth: true; text: version.release.published ? "Published " + version.release.published : ""; color: Theme.colors.muted; font.pixelSize: 11; elide: Text.ElideRight }
                                 SelectBox { visible: version.modelData.variants.length > 1; Layout.fillWidth: true; model: version.modelData.variants.map(function(row) { return (row.provider === "modrinth" ? "Modrinth" : "CurseForge") + " · " + row.filename }); onActivated: version.variantIndex = currentIndex }
                             }
-                            SourceBadge { source: version.release.provider || "modrinth" }
-                            ActionButton { text: "Add to pack"; iconName: "plus"; primary: true; visible: !!root.app.activePack.path && version.release.provider === "modrinth"; enabled: !root.contentController.busy && !root.app.repositoryBusy; onClicked: root.contentController.installRelease(version.release,root.showcase.project) }
+                            SourceBadge { source: version.release.provider || "modrinth"; iconOnly: true }
+                            Text { visible: version.groupInstalled; text: "Installed"; color: Theme.colors.accent; font.pixelSize: 12 }
+                            ActionButton { text: version.installed ? "Installed" : "Install version"; iconName: version.installed ? "check" : "plus"; primary: !version.installed; visible: version.release.provider === "modrinth"; enabled: root.browse.ready && !root.browse.busy && !root.app.repositoryBusy && !version.installed; onClicked: root.browse.installVersion(version.release,root.showcase.project) }
                             ActionButton { text: "View release"; onClicked: root.app.openWeb(version.release.pageUrl) }
                         }
                     }

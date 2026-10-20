@@ -1,4 +1,6 @@
 #include "ContentActions.h"
+#include "domain/ContentCompatibility.h"
+#include "domain/ContentTypes.h"
 #include <QFutureWatcher>
 #include <QPointer>
 #include <QSet>
@@ -161,7 +163,10 @@ QVariantList ContentActions::versionGroups() const {
 QVariantList ContentActions::rows() const {
     QVariantList result;
     for (const auto &value : m_rows) {
-        const auto row = value.toMap();
+        auto row = value.toMap();
+        row["hidden"] = m_visibility && m_visibility->hidden(row, m_pack.value("path").toString());
+        if (row.value("hidden").toBool() != m_filters.value("hidden").toBool())
+            continue;
         if (m_category != "all" && row.value("category") != m_category)
             continue;
         if (!(row.value("title").toString() + ' ' + row.value("fileName").toString() + ' ' +
@@ -225,6 +230,14 @@ void ContentActions::setSort(const QString &value) {
         emit changed();
     }
 }
+void ContentActions::hide(const QString &path, bool hidden) {
+    const auto row = find(path);
+    if (m_visibility && !row.isEmpty())
+        m_visibility->setHidden(row, hidden, m_pack.value("path").toString());
+    if (hidden)
+        m_selected.removeAll(path);
+    emit changed();
+}
 void ContentActions::setFilter(const QString &key, const QVariant &value) {
     if (m_filters.contains(key)) {
         m_filters[key] = value;
@@ -232,8 +245,8 @@ void ContentActions::setFilter(const QString &key, const QVariant &value) {
     }
 }
 void ContentActions::clearFilters() {
-    m_filters = {{"author", ""},     {"environment", ""},   {"state", ""},
-                 {"updates", false}, {"openSource", false}, {"external", false}};
+    m_filters = {{"author", ""},        {"environment", ""}, {"state", ""},    {"updates", false},
+                 {"openSource", false}, {"external", false}, {"hidden", false}};
     emit changed();
 }
 void ContentActions::select(const QString &path, bool value) {
@@ -368,7 +381,7 @@ void ContentActions::openVersions(const QString &path) {
     emit changed();
     const QPointer<ContentActions> guard(this);
     m_catalogue->versions(m_versionTarget, m_pack.value("minecraft").toString(),
-                          m_pack.value("loader").toString(),
+                          compatibleLoaders(m_pack.value("loader").toString(), m_rows).join('|'),
                           [guard, generation](QVector<Release> releases, QString error) {
                               if (!guard || generation != guard->m_versionGeneration)
                                   return;
@@ -383,10 +396,20 @@ void ContentActions::openVersions(const QString &path) {
 void ContentActions::installVersion(int index) {
     if (index < 0 || index >= m_versions.size() || m_versionTarget.value("frozen").toBool())
         return;
-    install({{releaseFromVariant(m_versions.at(index).toMap()), m_versionTarget.value("title").toString(),
-              QJsonObject::fromVariantMap(m_versionTarget.value("sourceIds").toMap())}});
+    auto project = m_versionTarget;
+    project["type"] = categoryType(m_versionTarget.value("category").toString());
+    installRelease(m_versions.at(index).toMap(), project);
 }
 void ContentActions::installRelease(const QVariantMap &release, const QVariantMap &project) {
+    auto type = project.value("type", "mod").toString();
+    if (type == "datapack" && release.value("filename").toString().endsWith(".jar", Qt::CaseInsensitive))
+        type = "mod";
+    if (hasDataPackFormatConflict(contentCategory(type), project.value("sourceIds").toMap(), m_rows)) {
+        m_notice = "This project is installed in another format. Remove that copy before switching between "
+                   "ZIP and mod variants.";
+        emit changed();
+        return;
+    }
     const auto id = project.value("sourceIds").toMap().value("modrinth").toString();
     for (const auto &value : m_rows)
         if (value.toMap().value("sourceIds").toMap().value("modrinth").toString() == id &&
@@ -396,7 +419,7 @@ void ContentActions::installRelease(const QVariantMap &release, const QVariantMa
             return;
         }
     install({{releaseFromVariant(release), project.value("title").toString(),
-              QJsonObject::fromVariantMap(project.value("sourceIds").toMap())}});
+              QJsonObject::fromVariantMap(project.value("sourceIds").toMap()), type}});
 }
 void ContentActions::copyLink(const QString &path) {
     const auto row = find(path);

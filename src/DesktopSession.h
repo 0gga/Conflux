@@ -2,9 +2,12 @@
 #include "features/config/ConfigEditor.h"
 #include "features/config/ConfigLibrary.h"
 #include "features/content/ContentActions.h"
+#include "features/explore/BrowseCatalogue.h"
+#include "features/explore/BrowseInstalls.h"
 #include "features/launch/WorldLaunch.h"
 #include "features/navigation/NavigationHistory.h"
 #include "features/navigation/NavigationInput.h"
+#include "features/preferences/BrowsePreferences.h"
 #include "features/preferences/WarningPreferences.h"
 #include "features/showcase/ProjectShowcase.h"
 #include "features/workspace/PackFileBrowser.h"
@@ -30,6 +33,9 @@ class DesktopSession final : public QObject {
     Q_PROPERTY(studio::WorldLaunch *launch READ launch CONSTANT)
     Q_PROPERTY(studio::ProjectShowcase *showcase READ showcase CONSTANT)
     Q_PROPERTY(studio::ContentActions *content READ content CONSTANT)
+    Q_PROPERTY(studio::BrowseInstalls *browse READ browse CONSTANT)
+    Q_PROPERTY(studio::BrowseCatalogue *catalogue READ catalogue CONSTANT)
+    Q_PROPERTY(studio::BrowsePreferences *browsePreferences READ browsePreferences CONSTANT)
   public:
     explicit DesktopSession(QObject *parent = nullptr, QString settingsFile = {}, QString backupRoot = {});
     NavigationHistory *navigation() {
@@ -65,9 +71,20 @@ class DesktopSession final : public QObject {
     ContentActions *content() {
         return &m_content;
     }
+    BrowseInstalls *browse() {
+        return &m_browse;
+    }
+    BrowseCatalogue *catalogue() {
+        return &m_catalogue;
+    }
+    BrowsePreferences *browsePreferences() {
+        return &m_browsePreferences;
+    }
     void setCurseforgeKey(const QByteArray &key) {
+        m_catalogue.setKey(key);
         m_showcase.setCurseforgeKey(key);
         m_content.setCurseforgeKey(key);
+        m_browse.setCurseforgeKey(key);
     }
     void setPack(const QVariantMap &);
     void attachWindow(QObject &window) {
@@ -75,6 +92,8 @@ class DesktopSession final : public QObject {
     }
 
   private:
+    std::shared_ptr<IBrowseSettingsStore> m_browseStore;
+    std::shared_ptr<ContentVisibility> m_visibility;
     std::shared_ptr<const NativePackFileStore> m_fileStore;
     std::shared_ptr<const NativeContentStore> m_contentFiles;
     std::shared_ptr<ContentInstaller> m_contentInstaller;
@@ -90,6 +109,9 @@ class DesktopSession final : public QObject {
     WorldLaunch m_launch;
     ProjectShowcase m_showcase;
     ContentActions m_content;
+    BrowseInstalls m_browse;
+    BrowsePreferences m_browsePreferences;
+    BrowseCatalogue m_catalogue;
     PackChangeMonitor m_changes;
     bool m_pendingScan = false;
     void activateRoute();

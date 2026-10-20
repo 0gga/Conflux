@@ -1,4 +1,5 @@
 #include "ModInstaller.h"
+#include "domain/ContentCompatibility.h"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -81,7 +82,8 @@ void ModInstaller::start(const QString &path, const Release &release, const QStr
                          const QJsonObject &projectIds) {
     startBatch(path, {{release, title, projectIds}});
 }
-void ModInstaller::startBatch(const QString &path, const QVector<ContentInstallRequest> &requests) {
+void ModInstaller::startBatch(const QString &path, const QVector<ContentInstallRequest> &requests,
+                              bool allowFabricBridge) {
     if (m_busy)
         return;
     m_busy = true;
@@ -117,6 +119,9 @@ void ModInstaller::startBatch(const QString &path, const QVector<ContentInstallR
         }
     m_game = m_expected.value("minecraft").toString();
     m_loader = m_expected.value("loader").toString();
+    m_allowedLoaders = {m_loader};
+    if (allowFabricBridge && QStringList{"forge", "neoforge"}.contains(m_loader))
+        m_allowedLoaders << "fabric";
     m_rootIdentities.clear();
     for (const auto &request : requests)
         m_rootIdentities[request.release.projectId] = request.sourceIds;
@@ -167,13 +172,13 @@ bool ModInstaller::addResolved(const Release &release) {
         return false;
     }
     if (release.projectId.isEmpty() || release.id.isEmpty() || !release.gameVersions.contains(m_game) ||
-        !release.loaders.contains(m_loader)) {
+        !sharesLoader(release.loaders, m_allowedLoaders)) {
         fail("A required release is incompatible with Minecraft " + m_game + " / " + m_loader +
              ". No changes were made.");
         return false;
     }
     if (!QRegularExpression("^[a-fA-F0-9]{40}$").match(release.sha1).hasMatch() ||
-        release.filename.isEmpty() || !safeDownloadUrl(QUrl(release.url))) {
+        !release.filename.endsWith(".jar", Qt::CaseInsensitive) || !safeDownloadUrl(QUrl(release.url))) {
         fail("A required release has no verifiable downloadable mod file.");
         return false;
     }
@@ -282,7 +287,9 @@ void ModInstaller::resolveNext() {
             "game_versions",
             QString::fromUtf8(QJsonDocument(QJsonArray{m_game}).toJson(QJsonDocument::Compact)));
         query.addQueryItem(
-            "loaders", QString::fromUtf8(QJsonDocument(QJsonArray{m_loader}).toJson(QJsonDocument::Compact)));
+            "loaders",
+            QString::fromUtf8(
+                QJsonDocument(QJsonArray::fromStringList(m_allowedLoaders)).toJson(QJsonDocument::Compact)));
         url.setQuery(query);
     }
     get(url, [this, task](const QJsonDocument &doc) {
@@ -294,7 +301,8 @@ void ModInstaller::resolveNext() {
             for (const auto &value : doc.array()) {
                 const auto candidate = value.toObject();
                 const auto release = modrinthRelease(candidate);
-                if (!release.gameVersions.contains(m_game) || !release.loaders.contains(m_loader))
+                if (!release.gameVersions.contains(m_game) ||
+                    !sharesLoader(release.loaders, m_allowedLoaders))
                     continue;
                 const bool stable = candidate.value("version_type").toString() == "release",
                            oldStable = chosen.value("version_type").toString() == "release";

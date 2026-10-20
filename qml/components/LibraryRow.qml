@@ -7,6 +7,8 @@ Rectangle {
     property string titleText: ""
     property string detailText: ""
     property string thumbnail: ""
+    property string loader: ""
+    property string minecraft: ""
     property string source: "conflux"
     property bool entireRowInteractive: true
     property bool hiddenPack: false
@@ -29,18 +31,22 @@ Rectangle {
         anchors.left: icon.right; anchors.leftMargin: 16; anchors.right: sourceColumn.left; anchors.rightMargin: 20
         anchors.verticalCenter: parent.verticalCenter; spacing: 7
         Text { objectName: "libraryRowTitle"; width: parent.width; text: row.titleText; color: Theme.colors.text; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
-        Text { objectName: "libraryRowDetails"; width: parent.width; text: row.detailText; color: Theme.colors.muted; font.pixelSize: 12; elide: Text.ElideRight; textFormat: Text.PlainText }
+        Row {
+            width: parent.width; height: 26; spacing: 8
+            CompatibilityBadges { id: compatibility; objectName: "libraryRowCompatibility"; minecraft: row.minecraft; loader: row.loader; showUnknownVersion: true }
+            Text { objectName: "libraryRowDetails"; width: Math.max(0,parent.width-compatibility.width-8); anchors.verticalCenter: parent.verticalCenter; text: row.detailText; color: Theme.colors.muted; font.pixelSize: 12; elide: Text.ElideRight; textFormat: Text.PlainText }
+        }
     }
     Item {
         id: sourceColumn; objectName: "libraryRowSourceColumn"
         anchors.right: explore.left; anchors.rightMargin: 20; anchors.verticalCenter: parent.verticalCenter
-        width: 94; height: 24
+        width: 118; height: 26
         SourceBadge { anchors.left: parent.left; source: row.source }
     }
     ActionButton {
         id: explore; objectName: "libraryRowExplore"
         anchors.right: hide.left; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
-        width: 136; text: "Explore mods"; iconName: "compass"; subtle: true; onClicked: row.exploreRequested()
+        width: 154; text: "Explore content"; iconName: "compass"; subtle: true; onClicked: row.exploreRequested()
     }
     ActionButton {
         id: hide; objectName: "libraryRowHide"

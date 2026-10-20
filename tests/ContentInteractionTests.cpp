@@ -28,6 +28,53 @@ class ContentInteractionTests : public QObject {
     void initTestCase() {
         QQuickStyle::setStyle("Basic");
     }
+    void browseCardInstallClickDoesNotOpenTheProject() {
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/components/ProjectCard.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        auto *card = qobject_cast<QQuickItem *>(component.createWithInitialProperties(
+            {{"project", QVariantMap{{"title", "Example"},
+                                     {"author", "Author"},
+                                     {"summary", "A test project"},
+                                     {"loaders", QStringList{"fabric", "neoforge"}},
+                                     {"downloadStats", QVariantList{QVariantMap{{"provider", "modrinth"},
+                                                                                {"count", "123K"}}}}}},
+             {"installState", QVariantMap{{"canInstall", true}, {"label", "Install"}}}}));
+        QVERIFY2(card, qPrintable(component.errorString()));
+        QQuickWindow window;
+        window.setWidth(1100);
+        window.setHeight(190);
+        card->setParent(&window);
+        card->setParentItem(window.contentItem());
+        card->setWidth(1100);
+        card->setHeight(170);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QSignalSpy opens(card, SIGNAL(opened()));
+        QSignalSpy installs(card, SIGNAL(installRequested()));
+        auto *button = findItem(window.contentItem(), "browseInstallButton");
+        QVERIFY(button);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          button->mapToScene(QPointF(button->width() / 2, button->height() / 2)).toPoint());
+        QTRY_COMPARE(installs.count(), 1);
+        QCOMPARE(opens.count(), 0);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          card->mapToScene(QPointF(160, 30)).toPoint());
+        QTRY_COMPARE(opens.count(), 1);
+        QSignalSpy visibility(card, SIGNAL(visibilityRequested(bool)));
+        auto *more = findItem(window.contentItem(), "browseMoreButton");
+        QVERIFY(more);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          more->mapToScene(QPointF(more->width() / 2, more->height() / 2)).toPoint());
+        QTRY_VERIFY(findItem(window.contentItem(), "browseHideContent"));
+        auto *hide = findItem(window.contentItem(), "browseHideContent");
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          hide->mapToScene(QPointF(hide->width() / 2, hide->height() / 2)).toPoint());
+        QTRY_COMPARE(visibility.count(), 1);
+        QCOMPARE(opens.count(), 1);
+        QCOMPARE(installs.count(), 1);
+    }
     void configCardsShowTheActualFilePath() {
         QTemporaryDir temp;
         ConfigLibrary model(std::make_shared<SettingsConfigOwnershipStore>(temp.path() + "/owners.ini"));

@@ -1,4 +1,5 @@
 #include "CatalogueClient.h"
+#include "domain/ContentCompatibility.h"
 #include <QJsonArray>
 #include <QNetworkReply>
 #include <QUrlQuery>
@@ -45,102 +46,283 @@ void CatalogueClient::get(const QUrl &url, bool cf, JsonCallback callback, bool 
         reply->deleteLater();
     });
 }
-void CatalogueClient::search(const QString &query, const QString &source, const QString &game,
-                             const QString &loader, int generation) {
+static QString compactJson(const QJsonArray &values) {
+    return QString::fromUtf8(QJsonDocument(values).toJson(QJsonDocument::Compact));
+}
+QUrl CatalogueClient::searchUrl(const CatalogueQuery &query, int offset, int limit, int classId) {
+    const bool cf = query.provider == "curseforge";
+    QUrl url(cf ? "https://api.curseforge.com/v1/mods/search" : "https://api.modrinth.com/v2/search");
+    QUrlQuery params;
+    if (!cf) {
+        QJsonArray filters{
+            QJsonArray{(query.type == "datapack" ? "all_project_types:" : "project_type:") + query.type}};
+        auto group = [&filters](const QString &key, const QStringList &values) {
+            QJsonArray options;
+            for (const auto &value : values)
+                if (!value.isEmpty())
+                    options << key + ':' + value;
+            if (!options.isEmpty())
+                filters << options;
+        };
+        group("versions", query.versions);
+        group("project_id", query.projectIds);
+        if (query.type == "mod")
+            group("categories", query.loaders);
+        QStringList tags;
+        for (const auto &tag : query.tags)
+            if (tag.startsWith("mr:"))
+                tags << tag.mid(3);
+        group("categories", tags);
+        params.addQueryItem("facets", compactJson(filters));
+        params.addQueryItem("query", query.text);
+        params.addQueryItem("index", query.sort);
+        params.addQueryItem("offset", QString::number(qMax(0, offset)));
+        params.addQueryItem("limit", QString::number(qBound(1, limit, 100)));
+    } else {
+        params.addQueryItem("gameId", "432");
+        params.addQueryItem("classId", QString::number(classId));
+        params.addQueryItem("searchFilter", query.text);
+        params.addQueryItem("index", QString::number(qMax(0, offset)));
+        params.addQueryItem("pageSize", QString::number(qBound(1, limit, 50)));
+        params.addQueryItem("sortOrder", "desc");
+        params.addQueryItem(
+            "sortField",
+            QString::number(QMap<QString, int>{
+                {"relevance", 1}, {"downloads", 6}, {"follows", 2}, {"newest", 11}, {"updated", 3}}
+                                .value(query.sort, 1)));
+        if (!query.versions.isEmpty())
+            params.addQueryItem("gameVersions",
+                                compactJson(QJsonArray::fromStringList(query.versions.mid(0, 4))));
+        QJsonArray loaders;
+        if (query.type == "mod")
+            for (const auto &loader : query.loaders)
+                if (loaderNumber(loader))
+                    loaders << loaderNumber(loader);
+        if (!loaders.isEmpty())
+            params.addQueryItem("modLoaderTypes", compactJson(loaders));
+        QJsonArray tags;
+        for (const auto &tag : query.tags)
+            if (tag.startsWith("cf:"))
+                tags << tag.mid(3).toInt();
+        if (!tags.isEmpty())
+            params.addQueryItem("categoryIds", compactJson(tags));
+    }
+    url.setQuery(params);
+    return url;
+}
+void CatalogueClient::fetch(const CatalogueQuery &query, int offset, int limit, Callback callback) {
+    const bool cf = query.provider == "curseforge";
+    if (cf && !hasCurseforgeKey()) {
+        callback({{}, 0, "CurseForge needs an approved API key."});
+        return;
+    }
+    // Each provider uses its own taxonomy. Selections across providers form a union.
+    bool ownTag = false;
+    for (const auto &tag : query.tags)
+        if (tag.startsWith(cf ? "cf:" : "mr:"))
+            ownTag = true;
+    if (!query.tags.isEmpty() && !ownTag) {
+        callback({{}, 0, {}});
+        return;
+    }
+    if (cf && (query.versions.size() > 4 || query.tags.size() > 10)) {
+        callback({{}, 0, "CurseForge supports at most four selected versions and ten tags per request."});
+        return;
+    }
+    auto search = [this, query, offset, limit, callback, cf](int classId) {
+        get(searchUrl(query, offset, limit, classId), cf,
+            [query, callback, cf](const QJsonDocument &doc, const QString &error) {
+                CataloguePage result;
+                result.error = error;
+                result.total =
+                    cf ? doc.object().value("pagination").toObject().value("totalCount").toInteger()
+                       : doc.object().value("total_hits").toInteger();
+                if (error.isEmpty())
+                    for (const auto &value :
+                         (cf ? doc.object().value("data").toArray() : doc.object().value("hits").toArray())) {
+                        const auto row = value.toObject();
+                        Project p;
+                        p.provider = query.provider;
+                        p.type = query.type;
+                        p.id = cf ? QString::number(row.value("id").toInteger())
+                                  : row.value("project_id").toString();
+                        p.title = row.value(cf ? "name" : "title").toString();
+                        p.summary = row.value(cf ? "summary" : "description").toString();
+                        p.updated = row.value(cf ? "dateModified" : "date_modified").toString();
+                        p.created = row.value(cf ? "dateCreated" : "date_created").toString();
+                        p.downloads = row.value(cf ? "downloadCount" : "downloads").toInteger();
+                        p.followers = row.value("follows").toInteger();
+                        p.icon = cf ? row.value("logo").toObject().value("url").toString()
+                                    : row.value("icon_url").toString();
+                        p.url = cf ? row.value("links").toObject().value("websiteUrl").toString()
+                                   : "https://modrinth.com/" + query.type + "/" + p.id;
+                        p.author = cf ? (row.value("authors").toArray().isEmpty() ? QString{}
+                                                                                  : row.value("authors")
+                                                                                        .toArray()
+                                                                                        .first()
+                                                                                        .toObject()
+                                                                                        .value("name")
+                                                                                        .toString())
+                                      : row.value("author").toString();
+                        p.sourceIds[p.provider] = p.id;
+                        p.sourceDownloads[p.provider] = p.downloads;
+                        if (cf) {
+                            for (const auto &category : row.value("categories").toArray())
+                                p.categories << category.toObject().value("name").toString();
+                            for (const auto &version : row.value("latestFilesIndexes").toArray()) {
+                                const auto loader =
+                                    QMap<int, QString>{
+                                        {1, "forge"}, {4, "fabric"}, {5, "quilt"}, {6, "neoforge"}}
+                                        .value(version.toObject().value("modLoader").toInt());
+                                if (!loader.isEmpty() && !p.loaders.contains(loader))
+                                    p.loaders << loader;
+                            }
+                        } else {
+                            p.categories = strings(row.value("display_categories").toArray());
+                            for (const auto &tag : strings(row.value("categories").toArray()))
+                                if (QStringList{"fabric", "forge", "neoforge", "quilt", "iris", "optifine",
+                                                "datapack"}
+                                        .contains(tag))
+                                    p.loaders << tag;
+                            const auto environment = row.value("environment");
+                            if (environment.isArray()) {
+                                const auto sides = strings(environment.toArray());
+                                p.environment =
+                                    sides.contains("client_and_server") || sides.contains("client_or_server")
+                                        ? "both"
+                                    : sides.contains("client_only") ? "client"
+                                    : sides.contains("server_only") ? "server"
+                                                                    : "unknown";
+                            } else
+                                p.environment = environment.toString();
+                        }
+                        result.projects << p;
+                    }
+                callback(std::move(result));
+            });
+    };
+    if (cf && query.type == "datapack")
+        get(QUrl("https://api.curseforge.com/v1/categories?gameId=432&classesOnly=true"), true,
+            [search, callback](QJsonDocument doc, QString error) {
+                for (const auto &v : doc.object().value("data").toArray())
+                    if (v.toObject().value("slug") == "data-packs") {
+                        search(v.toObject().value("id").toInt());
+                        return;
+                    }
+                callback({{}, 0, error.isEmpty() ? "CurseForge did not expose a Data Packs class." : error});
+            });
+    else
+        search(query.type == "resourcepack" ? 12 : query.type == "shader" ? 6552 : 6);
+}
+void CatalogueClient::search(const QString &text, const QString &source, const QString &game,
+                             const QString &loader, int generation, const QString &type) {
     struct Batch {
         int pending = 0;
-        QVector<Project> projects;
+        QVector<Project> rows;
         QStringList errors;
     };
     auto batch = std::make_shared<Batch>();
-    const bool mr = source != "curseforge", cf = source != "modrinth" && hasCurseforgeKey();
-    batch->pending = int(mr) + int(cf);
+    QStringList providers;
+    if (source != "curseforge")
+        providers << "modrinth";
+    if (source != "modrinth" && hasCurseforgeKey())
+        providers << "curseforge";
     if (source != "modrinth" && !hasCurseforgeKey())
         batch->errors << "CurseForge needs an approved API key. Available results are from Modrinth.";
-    auto done = [this, batch, generation] {
-        if (--batch->pending == 0)
-            emit searchFinished(generation, batch->projects, batch->errors);
-    };
-    if (batch->pending == 0) {
+    batch->pending = providers.size();
+    if (!batch->pending) {
         emit searchFinished(generation, {}, batch->errors);
         return;
     }
-    if (mr) {
-        QUrl url("https://api.modrinth.com/v2/search");
-        QJsonArray facets{QJsonArray{"project_type:mod"}};
+    for (const auto &provider : providers) {
+        CatalogueQuery query;
+        query.text = text;
+        query.provider = provider;
+        query.type = type;
+        query.sort = text.isEmpty() ? "downloads" : "relevance";
         if (!game.isEmpty())
-            facets.append(QJsonArray{"versions:" + game});
+            query.versions << game;
         if (!loader.isEmpty() && loader != "vanilla")
-            facets.append(QJsonArray{"categories:" + loader});
-        QUrlQuery params;
-        params.addQueryItem("query", query);
-        params.addQueryItem("limit", "40");
-        params.addQueryItem("index", query.isEmpty() ? "downloads" : "relevance");
-        params.addQueryItem("facets",
-                            QString::fromUtf8(QJsonDocument(facets).toJson(QJsonDocument::Compact)));
-        url.setQuery(params);
-        get(url, false, [batch, done](const QJsonDocument &doc, const QString &error) {
-            if (!error.isEmpty())
-                batch->errors << "Modrinth: " + error;
-            else
-                for (const auto &value : doc.object().value("hits").toArray()) {
-                    const auto row = value.toObject();
-                    Project p;
-                    p.provider = "modrinth";
-                    p.id = row.value("project_id").toString();
-                    p.title = row.value("title").toString();
-                    p.summary = row.value("description").toString();
-                    p.author = row.value("author").toString();
-                    p.icon = row.value("icon_url").toString();
-                    p.url = "https://modrinth.com/mod/" + p.id;
-                    p.downloads = row.value("downloads").toInteger();
-                    p.categories = strings(row.value("display_categories").toArray());
-                    batch->projects.append(p);
-                }
-            done();
-        });
-    }
-    if (cf) {
-        QUrl url("https://api.curseforge.com/v1/mods/search");
-        QUrlQuery params;
-        params.addQueryItem("gameId", "432");
-        params.addQueryItem("classId", "6");
-        params.addQueryItem("searchFilter", query);
-        params.addQueryItem("pageSize", "40");
-        params.addQueryItem("sortField", "2");
-        params.addQueryItem("sortOrder", "desc");
-        if (!game.isEmpty())
-            params.addQueryItem("gameVersion", game);
-        if (loaderNumber(loader))
-            params.addQueryItem("modLoaderType", QString::number(loaderNumber(loader)));
-        url.setQuery(params);
-        get(url, true, [batch, done](const QJsonDocument &doc, const QString &error) {
-            if (!error.isEmpty())
-                batch->errors << "CurseForge: " + error;
-            else
-                for (const auto &value : doc.object().value("data").toArray()) {
-                    const auto row = value.toObject();
-                    Project p;
-                    p.provider = "curseforge";
-                    p.id = QString::number(row.value("id").toInteger());
-                    p.title = row.value("name").toString();
-                    p.summary = row.value("summary").toString();
-                    p.icon = row.value("logo").toObject().value("url").toString();
-                    p.url = row.value("links").toObject().value("websiteUrl").toString();
-                    p.downloads = row.value("downloadCount").toInteger();
-                    const auto authors = row.value("authors").toArray();
-                    if (!authors.isEmpty())
-                        p.author = authors.first().toObject().value("name").toString();
-                    for (const auto &category : row.value("categories").toArray())
-                        p.categories << category.toObject().value("name").toString();
-                    batch->projects.append(p);
-                }
-            done();
+            query.loaders << loader;
+        fetch(query, 0, 40, [this, batch, generation](CataloguePage page) {
+            batch->rows += page.projects;
+            if (!page.error.isEmpty())
+                batch->errors << page.error;
+            if (--batch->pending == 0)
+                emit searchFinished(generation, batch->rows, batch->errors);
         });
     }
 }
-void CatalogueClient::loadProject(const Project &project, const QString &game, const QString &loader,
+void CatalogueClient::facets(std::function<void(QVariantMap, QString)> callback) {
+    struct Batch {
+        int pending = 2;
+        QVariantMap options;
+        QStringList errors;
+    };
+    auto batch = std::make_shared<Batch>();
+    if (hasCurseforgeKey())
+        ++batch->pending;
+    auto done = [batch, callback] {
+        if (--batch->pending == 0)
+            callback(batch->options, batch->errors.join('\n'));
+    };
+    if (hasCurseforgeKey())
+        get(QUrl("https://api.curseforge.com/v1/categories?gameId=432"), true,
+            [batch, done](QJsonDocument doc, QString error) {
+                QMap<int, QString> classes{{6, "mod"}, {12, "resourcepack"}, {6552, "shader"}};
+                for (const auto &value : doc.object().value("data").toArray())
+                    if (value.toObject().value("slug") == "data-packs")
+                        classes[value.toObject().value("id").toInt()] = "datapack";
+                QVariantList tags;
+                for (const auto &value : doc.object().value("data").toArray()) {
+                    const auto row = value.toObject();
+                    const auto type = classes.value(row.value("classId").toInt());
+                    if (!row.value("isClass").toBool() && !type.isEmpty())
+                        tags << QVariantMap{{"key", "cf:" + QString::number(row.value("id").toInt())},
+                                            {"title", row.value("name").toString().toLower()},
+                                            {"type", type},
+                                            {"provider", "curseforge"}};
+                }
+                batch->options["curseforgeTags"] = tags;
+                if (!error.isEmpty())
+                    batch->errors << "CurseForge tags: " + error;
+                done();
+            });
+    get(QUrl("https://api.modrinth.com/v2/tag/game_version"), false,
+        [batch, done](QJsonDocument doc, QString error) {
+            QStringList versions;
+            for (const auto &value : doc.array())
+                if (value.toObject().value("version_type") == "release")
+                    versions << value.toObject().value("version").toString();
+            batch->options["versions"] = versions;
+            if (!error.isEmpty())
+                batch->errors << error;
+            done();
+        });
+    get(QUrl("https://api.modrinth.com/v2/tag/category"), false,
+        [batch, done](QJsonDocument doc, QString error) {
+            QVariantList tags;
+            for (const auto &value : doc.array()) {
+                const auto row = value.toObject();
+                if (row.value("header") == "categories" || row.value("header") == "features" ||
+                    row.value("header") == "resolutions" || row.value("header") == "performance impact")
+                    tags << QVariantMap{{"key", "mr:" + row.value("name").toString()},
+                                        {"title", row.value("name").toString()},
+                                        {"type", row.value("project_type").toString()},
+                                        {"provider", "modrinth"}};
+            }
+            batch->options["tags"] = tags;
+            if (!error.isEmpty())
+                batch->errors << error;
+            done();
+        });
+}
+
+void CatalogueClient::loadProject(const Project &project, const QString &game, const QString &requestedLoader,
                                   int generation) {
+    const auto loader = project.type == "mod"        ? requestedLoader
+                        : project.type == "datapack" ? QString("datapack")
+                                                     : QString{};
     struct Batch {
         int pending = 0;
         ProjectDetail detail;
@@ -204,54 +386,66 @@ void CatalogueClient::loadProject(const Project &project, const QString &game, c
         if (!loader.isEmpty() && loader != "vanilla") {
             if (cf && loaderNumber(loader))
                 params.addQueryItem("modLoaderType", QString::number(loaderNumber(loader)));
-            if (!cf)
-                params.addQueryItem("loaders", jsonArray(loader));
+            if (!cf) {
+                QJsonArray loaders = QJsonArray::fromStringList(loader.split('|', Qt::SkipEmptyParts));
+                if (project.type == "datapack")
+                    for (const auto &candidate : requestedLoader.split('|', Qt::SkipEmptyParts))
+                        if (candidate != "vanilla")
+                            loaders << candidate;
+                params.addQueryItem("loaders", compactJson(loaders));
+            }
         }
         if (cf)
             params.addQueryItem("pageSize", "50");
         versions.setQuery(params);
-        get(versions, cf, [batch, done, cf, id, loader](const QJsonDocument &doc, const QString &error) {
-            if (!error.isEmpty())
-                batch->detail.errors << error;
-            else
-                for (const auto &item : (cf ? doc.object().value("data").toArray() : doc.array())) {
-                    const auto row = item.toObject();
-                    Release r;
-                    r.provider = cf ? "curseforge" : "modrinth";
-                    r.projectId = id;
-                    r.id = cf ? QString::number(row.value("id").toInteger()) : row.value("id").toString();
-                    r.version = row.value(cf ? "displayName" : "version_number").toString();
-                    r.title = row.value(cf ? "displayName" : "name").toString();
-                    r.published = row.value(cf ? "fileDate" : "date_published").toString();
-                    r.gameVersions = strings(row.value(cf ? "gameVersions" : "game_versions").toArray());
-                    if (cf) {
-                        // CF gameVersions contains loader labels too; retain only Minecraft version strings.
-                        QStringList games;
-                        for (const auto &version : r.gameVersions)
-                            if (version.startsWith("1."))
-                                games << version;
-                        r.gameVersions = games;
-                        for (const auto &label : strings(row.value("gameVersions").toArray())) {
-                            const auto candidate = label.toLower();
-                            if (QStringList{"fabric", "forge", "neoforge", "quilt"}.contains(candidate))
-                                r.loaders << candidate;
+        get(versions, cf,
+            [batch, done, cf, id, loader, type = project.type](const QJsonDocument &doc,
+                                                               const QString &error) {
+                if (!error.isEmpty())
+                    batch->detail.errors << error;
+                else
+                    for (const auto &item : (cf ? doc.object().value("data").toArray() : doc.array())) {
+                        const auto row = item.toObject();
+                        Release r;
+                        r.provider = cf ? "curseforge" : "modrinth";
+                        r.projectId = id;
+                        r.id = cf ? QString::number(row.value("id").toInteger()) : row.value("id").toString();
+                        r.version = row.value(cf ? "displayName" : "version_number").toString();
+                        r.title = row.value(cf ? "displayName" : "name").toString();
+                        r.published = row.value(cf ? "fileDate" : "date_published").toString();
+                        r.gameVersions = strings(row.value(cf ? "gameVersions" : "game_versions").toArray());
+                        if (cf) {
+                            // CF gameVersions contains loader labels too; retain only Minecraft version
+                            // strings.
+                            QStringList games;
+                            for (const auto &version : r.gameVersions)
+                                if (version.startsWith("1."))
+                                    games << version;
+                            r.gameVersions = games;
+                            for (const auto &label : strings(row.value("gameVersions").toArray())) {
+                                const auto candidate = label.toLower();
+                                if (QStringList{"fabric", "forge", "neoforge", "quilt"}.contains(candidate))
+                                    r.loaders << candidate;
+                            }
+                            r.filename = row.value("fileName").toString();
+                            r.url = row.value("downloadUrl").toString();
+                            for (const auto &hash : row.value("hashes").toArray())
+                                if (hash.toObject().value("algo").toInt() == 1)
+                                    r.sha1 = hash.toObject().value("value").toString();
+                            for (const auto &dep : row.value("dependencies").toArray())
+                                if (dep.toObject().value("relationType").toInt() == 3)
+                                    r.requiredDependencies
+                                        << QString::number(dep.toObject().value("modId").toInteger());
+                        } else {
+                            r = modrinthRelease(row);
                         }
-                        r.filename = row.value("fileName").toString();
-                        r.url = row.value("downloadUrl").toString();
-                        for (const auto &hash : row.value("hashes").toArray())
-                            if (hash.toObject().value("algo").toInt() == 1)
-                                r.sha1 = hash.toObject().value("value").toString();
-                        for (const auto &dep : row.value("dependencies").toArray())
-                            if (dep.toObject().value("relationType").toInt() == 3)
-                                r.requiredDependencies
-                                    << QString::number(dep.toObject().value("modId").toInteger());
-                    } else {
-                        r = modrinthRelease(row);
+                        if (cf && type == "mod" && !loader.isEmpty() && loader != "vanilla" &&
+                            !sharesLoader(r.loaders, loader.split('|', Qt::SkipEmptyParts)))
+                            continue;
+                        batch->detail.releases.append(r);
                     }
-                    batch->detail.releases.append(r);
-                }
-            done();
-        });
+                done();
+            });
     }
 }
 void CatalogueClient::resolveProject(const QString &sha1, QMap<QString, QString> ids, int generation) {
@@ -303,12 +497,16 @@ void CatalogueClient::resolveProject(const QString &sha1, QMap<QString, QString>
                         Project p;
                         p.provider = provider;
                         p.id = cf ? QString::number(row.value("id").toInteger()) : row.value("id").toString();
+                        p.type = cf ? (row.value("classId").toInt() == 12     ? "resourcepack"
+                                       : row.value("classId").toInt() == 6552 ? "shader"
+                                                                              : "mod")
+                                    : row.value("project_type").toString("mod");
                         p.title = row.value(cf ? "name" : "title").toString();
                         p.summary = row.value(cf ? "summary" : "description").toString();
                         p.icon = cf ? row.value("logo").toObject().value("url").toString()
                                     : row.value("icon_url").toString();
                         p.url = cf ? row.value("links").toObject().value("websiteUrl").toString()
-                                   : "https://modrinth.com/mod/" + p.id;
+                                   : "https://modrinth.com/" + p.type + "/" + p.id;
                         if (!p.id.isEmpty() && p.id != "0")
                             batch->projects << p;
                     }

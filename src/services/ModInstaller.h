@@ -24,7 +24,8 @@ class ModInstaller : public QObject {
     }
     void start(const QString &path, const Release &release, const QString &title,
                const QJsonObject &projectIds);
-    void startBatch(const QString &path, const QVector<ContentInstallRequest> &requests);
+    void startBatch(const QString &path, const QVector<ContentInstallRequest> &requests,
+                    bool allowFabricBridge = false);
     void cancel();
   signals:
     void progress(QString status);
@@ -40,6 +41,7 @@ class ModInstaller : public QObject {
     int m_generation = 0, m_downloadIndex = 0;
     bool m_busy = false, m_applying = false;
     QString m_path, m_game, m_loader;
+    QStringList m_allowedLoaders;
     QJsonObject m_expected;
     QQueue<Task> m_tasks;
     QMap<QString, Release> m_resolved;

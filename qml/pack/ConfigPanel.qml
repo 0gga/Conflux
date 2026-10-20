@@ -23,7 +23,7 @@ Item {
             ActionButton { text: "All configs"; selected: root.category === "all"; compact: true; onClicked: root.category = "all" }
         }
         Text { Layout.fillWidth: true; text: "Edit settings using toggles, fields and lists. Needs review lets you identify a file's related mod and shows unsupported formats."; color: Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.WordWrap }
-        ListView {
+        ListView { boundsBehavior: Flickable.StopAtBounds;
             id: list; Layout.fillWidth: true; Layout.fillHeight: true; clip: true; model: root.rows; spacing: 8; ScrollBar.vertical: ScrollBar {}
             delegate: Rectangle {
                 id: entry; required property var modelData; width: list.width; height: 88; radius: 14; color: hover.hovered ? Theme.colors.hover : Theme.colors.card

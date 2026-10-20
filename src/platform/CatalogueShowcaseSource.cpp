@@ -1,4 +1,5 @@
 #include "CatalogueShowcaseSource.h"
+#include "ReviewedProjectIdentities.h"
 #include <QDir>
 #include <QFile>
 #include <QJsonObject>
@@ -30,35 +31,10 @@ CatalogueShowcaseSource::CatalogueShowcaseSource(QObject *parent)
                     callback(detail);
             });
 }
-static QMap<QString, QString> expandedSources(QMap<QString, QString> ids) {
-    QFile file(QDir(QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation))
-                   .filePath("project-identities.json"));
-    if (!file.open(QIODevice::ReadOnly) || file.size() > 1024 * 1024)
-        return ids;
-    const auto mappings = QJsonDocument::fromJson(file.readAll()).object();
-    QSet<QString> groups;
-    for (auto it = ids.begin(); it != ids.end(); ++it) {
-        const auto group = mappings.value(it.key() + ':' + it.value()).toString();
-        if (!group.isEmpty())
-            groups.insert(group);
-    }
-    QMap<QString, QSet<QString>> candidates;
-    for (auto it = mappings.begin(); it != mappings.end(); ++it) {
-        if (!groups.contains(it.value().toString()))
-            continue;
-        const auto provider = it.key().section(':', 0, 0), id = it.key().section(':', 1);
-        if ((provider == "modrinth" || provider == "curseforge") && !id.isEmpty())
-            candidates[provider].insert(id);
-    }
-    for (auto it = candidates.begin(); it != candidates.end(); ++it)
-        if (!ids.contains(it.key()) && it.value().size() == 1)
-            ids[it.key()] = *it.value().begin();
-    return ids;
-}
 void CatalogueShowcaseSource::resolve(const InstalledModIdentity &identity, ResolveCallback callback) {
     const int generation = ++m_generation;
     m_resolves[generation] = [this, callback = std::move(callback)](Project project, QString error) {
-        const auto expanded = expandedSources(project.sourceIds);
+        const auto expanded = ReviewedProjectIdentities::expand(project.sourceIds);
         if (!project.id.isEmpty() && expanded.size() > project.sourceIds.size()) {
             const int second = ++m_generation;
             m_resolves[second] = [callback, project, error](Project merged, QString secondaryError) {
@@ -73,7 +49,7 @@ void CatalogueShowcaseSource::resolve(const InstalledModIdentity &identity, Reso
         } else
             callback(project, error);
     };
-    m_client.resolveProject(identity.sha1, expandedSources(identity.sourceIds), generation);
+    m_client.resolveProject(identity.sha1, ReviewedProjectIdentities::expand(identity.sourceIds), generation);
 }
 void CatalogueShowcaseSource::load(const Project &project, const QString &game, const QString &loader,
                                    DetailCallback callback) {

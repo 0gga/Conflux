@@ -42,8 +42,9 @@ class LibraryRowTests : public QObject {
             row->setHeight(84);
             row->setProperty("titleText", titles.at(index));
             row->setProperty("source", sources.at(index));
-            row->setProperty("detailText", index == 0 ? "Minecraft version unknown · 61 mod files"
-                                                      : "1.21.1 · neoforge-21.1.234 · 310 mod files");
+            row->setProperty("detailText", "310 mods");
+            row->setProperty("minecraft", index == 0 ? "" : "1.21.1");
+            row->setProperty("loader", index == 0 ? "fabric" : "neoforge");
             rows << row;
         }
         window.show();
@@ -58,9 +59,19 @@ class LibraryRowTests : public QObject {
                 auto *badge = row->findChild<QQuickItem *>("libraryRowSourceColumn");
                 auto *explore = row->findChild<QQuickItem *>("libraryRowExplore");
                 auto *hide = row->findChild<QQuickItem *>("libraryRowHide");
-                QVERIFY(title && detail && badge && explore && hide);
+                auto *compatibility = row->findChild<QQuickItem *>("libraryRowCompatibility");
+                auto *minecraft = row->findChild<QQuickItem *>("compatibilityMinecraft");
+                auto *loader = row->findChild<QQuickItem *>("compatibilityLoader");
+                QVERIFY(title && detail && badge && explore && hide && compatibility && minecraft && loader);
                 QCOMPARE(title->mapToItem(row, QPointF{}).x(), 80.0);
-                QCOMPARE(detail->mapToItem(row, QPointF{}).x(), 80.0);
+                QCOMPARE(compatibility->mapToItem(row, QPointF{}).x(), 80.0);
+                QCOMPARE(loader->x(), minecraft->width() + 6.0);
+                QCOMPARE(loader->y(), minecraft->y());
+                QCOMPARE(loader->height(), minecraft->height());
+                QVERIFY(compatibility->mapToItem(row, QPointF{}).x() + compatibility->width() <=
+                        badge->x() - 20.0);
+                QVERIFY(detail->mapToItem(row, QPointF{}).x() >=
+                        compatibility->mapToItem(row, QPointF{}).x() + compatibility->width());
                 QCOMPARE(hide->x() + hide->width(), width - 16.0);
                 QVERIFY(explore->x() + explore->width() < hide->x());
                 QCOMPARE(badge->x() + badge->width(), explore->x() - 20.0);

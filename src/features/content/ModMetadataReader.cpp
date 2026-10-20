@@ -1,4 +1,5 @@
 #include "ModMetadataReader.h"
+#include "domain/LicensePolicy.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -23,6 +24,22 @@ QVariantMap ModMetadataReader::read(const QString &path) const {
     // Universal JARs can declare more than one loader. Do not flag their Fabric
     // metadata as a mismatch when Forge-family metadata is present too.
     QStringList loaders;
+    if (!fabric.isEmpty() || !quilt.isEmpty()) {
+        const auto metadata = fabric.isEmpty() ? quilt.value("metadata").toObject() : fabric;
+        QStringList authors;
+        for (const auto &author : metadata.value("authors").toArray())
+            authors << (author.isString() ? author.toString() : author.toObject().value("name").toString());
+        if (!authors.isEmpty())
+            result["author"] = authors.join(", ");
+        const auto environment = fabric.value("environment").toString("*");
+        result["environment"] = environment == "*" ? "both" : environment;
+        const auto license = metadata.value("license");
+        result["openSource"] = license.isString() ? isKnownOpenSourceLicense(license.toString()) : false;
+        if (license.isArray())
+            for (const auto &value : license.toArray())
+                if (isKnownOpenSourceLicense(value.toString()))
+                    result["openSource"] = true;
+    }
     if (!fabric.isEmpty())
         loaders << "fabric";
     if (!quilt.isEmpty())
@@ -36,11 +53,16 @@ QVariantMap ModMetadataReader::read(const QString &path) const {
                 .captured(1);
         };
         if (!value("modId").isEmpty()) {
+            if (result.value("author").toString().isEmpty())
+                result["author"] = value("authors");
+            if (!result.contains("openSource"))
+                result["openSource"] = isKnownOpenSourceLicense(value("license"));
             loaders << entry.second;
-            if (result.isEmpty())
-                result = {{"modId", value("modId")},
-                          {"title", value("displayName")},
-                          {"version", value("version")}};
+            if (result.value("modId").toString().isEmpty()) {
+                result["modId"] = value("modId");
+                result["title"] = value("displayName");
+                result["version"] = value("version");
+            }
         }
     }
     result["loaders"] = loaders;

@@ -11,8 +11,8 @@ ColumnLayout {
                         id: themeSettings; anchors.fill: parent; anchors.margins: 24; spacing: 12
                         Text { text: "Appearance"; color: Theme.colors.text; font.pixelSize: 19; font.weight: Font.DemiBold }
                         Text { Layout.fillWidth: true; text: "OLED pairs a true black canvas with raised grey controls. Copy oled.json in the themes folder to make it your own."; color: Theme.colors.muted; font.pixelSize: 13; wrapMode: Text.WordWrap }
+                        SelectBox { id: themeChoice; Layout.fillWidth: true; model: Theme.available; currentIndex: Math.max(0, Theme.available.indexOf(Theme.file)); onActivated: Theme.select(currentText) }
                         RowLayout {
-                            SelectBox { id: themeChoice; Layout.preferredWidth: 240; model: Theme.available; currentIndex: Math.max(0, Theme.available.indexOf(Theme.file)); onActivated: Theme.select(currentText) }
                             ActionButton { text: "Reload theme"; onClicked: Theme.reload() }
                             ActionButton { text: "Open themes folder"; subtle: true; onClicked: Theme.openFolder() }
                         }

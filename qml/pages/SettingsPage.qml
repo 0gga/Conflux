@@ -14,14 +14,29 @@ Item {
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 28; spacing: 22
         RowLayout { Layout.fillWidth: true; Icon { name: "settings"; size: 26 } Text { text: "Settings"; color: Theme.colors.text; font.pixelSize: 29; font.weight: Font.DemiBold } }
-        SectionTabs { entries: [{key:"appearance",label:"Appearance",icon:"settings"},{key:"warnings",label:"Warnings",icon:"warning"},{key:"connections",label:"Connections",icon:"compass"}]; current: root.tab; onSelected: function(key) { root.tabRequested(key) } }
-        ScrollView {
-            id: scroll; Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+        RowLayout {
+            Layout.fillWidth: true; Layout.fillHeight: true; spacing: 24
             ColumnLayout {
-                width: scroll.availableWidth; spacing: 16
-                AppearanceSettings { visible: root.tab === "appearance"; Layout.fillWidth: true }
-                WarningSettings { visible: root.tab === "warnings"; Layout.fillWidth: true; preferences: root.warnings }
-                ConnectionSettings { visible: root.tab === "connections"; Layout.fillWidth: true; app: root.app }
+                Layout.preferredWidth: 176; Layout.minimumWidth: 176; Layout.maximumWidth: 176; Layout.fillWidth: false; Layout.fillHeight: true; spacing: 6
+                Repeater {
+                    model: [{category:"GENERAL",key:"appearance",label:"Appearance",icon:"settings"},{category:"MODPACKS",key:"warnings",label:"Warnings",icon:"warning"},{category:"SERVICES",key:"connections",label:"Connections",icon:"compass"}]
+                    delegate: ColumnLayout {
+                        required property var modelData
+                        Layout.fillWidth: true; spacing: 8
+                        Text { Layout.topMargin: 14; Layout.leftMargin: 14; text: parent.modelData.category; color: Theme.colors.muted; font.pixelSize: 10; font.letterSpacing: 1.3 }
+                        NavigationButton { Layout.fillWidth: true; text: parent.modelData.label; iconName: parent.modelData.icon; selected: root.tab === parent.modelData.key; onClicked: root.tabRequested(parent.modelData.key) }
+                    }
+                }
+                Item { Layout.fillHeight: true }
+            }
+            ScrollView {
+                id: scroll; Layout.minimumWidth: 0; Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+                ColumnLayout {
+                    width: scroll.availableWidth; spacing: 16
+                    AppearanceSettings { visible: root.tab === "appearance"; Layout.fillWidth: true }
+                    WarningSettings { visible: root.tab === "warnings"; Layout.fillWidth: true; preferences: root.warnings }
+                    ConnectionSettings { visible: root.tab === "connections"; Layout.fillWidth: true; app: root.app }
+                }
             }
         }
     }

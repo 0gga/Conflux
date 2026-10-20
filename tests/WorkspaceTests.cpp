@@ -37,6 +37,25 @@ class WorkspaceTests : public QObject {
         QVERIFY(mz_zip_writer_end(&zip));
     }
   private slots:
+    void forgeIdentityIsPreservedWithAuthorMetadata() {
+        const auto path = storage.path() + "/forge-authors";
+        QDir().mkpath(path + "/mods");
+        const QByteArray metadata = "license=\"MIT\"\n[[mods]]\nmodId=\"example\"\ndisplayName=\"Example "
+                                    "Forge mod\"\nversion=\"1.0\"\nauthors=\"Author\"\n";
+        mz_zip_archive zip{};
+        QVERIFY(mz_zip_writer_init_file(&zip, (path + "/mods/example.jar").toUtf8().constData(), 0));
+        QVERIFY(mz_zip_writer_add_mem(&zip, "META-INF/neoforge.mods.toml", metadata.constData(),
+                                      size_t(metadata.size()), MZ_BEST_COMPRESSION));
+        QVERIFY(mz_zip_writer_finalize_archive(&zip));
+        QVERIFY(mz_zip_writer_end(&zip));
+        const auto result = PackContent::scan({{"path", path}, {"loader", "neoforge"}});
+        QCOMPARE(result.files.size(), 1);
+        const auto mod = result.files.first().toMap();
+        QCOMPARE(mod.value("modId").toString(), QString("example"));
+        QCOMPARE(mod.value("author").toString(), QString("Author"));
+        QVERIFY(mod.value("openSource").toBool());
+        QVERIFY(result.coverage.startsWith("1 / 1"));
+    }
     void initTestCase() {
         QStandardPaths::setTestModeEnabled(true);
         QSettings::setDefaultFormat(QSettings::IniFormat);

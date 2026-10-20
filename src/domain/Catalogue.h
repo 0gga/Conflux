@@ -1,7 +1,7 @@
 #pragma once
 #include <QHash>
-#include <QJsonObject>
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QStringList>
 #include <QVariantMap>
 #include <QVector>
@@ -12,6 +12,7 @@ struct Project {
     QStringList categories;
     qint64 downloads = 0;
     QMap<QString, QString> sourceIds;
+    QMap<QString, QString> sourceUrls;
     QVariantMap toVariant() const;
 };
 struct Release {
@@ -22,11 +23,25 @@ struct Release {
     QMap<QString, QString> sourceIds;
     QVariantMap toVariant() const;
 };
+struct ProjectDetail {
+    QString description;
+    QStringList images, errors;
+    QVector<Release> releases;
+};
+struct ContentInstallRequest {
+    Release release;
+    QString title;
+    QJsonObject sourceIds;
+};
 // Only explicit, reviewed provider:id -> shared identity mappings may collapse projects.
-QVector<Project> mergeProjects(const QVector<Project>& projects, const QHash<QString, QString>& identities = {});
+QVector<Project> mergeProjects(const QVector<Project> &projects,
+                               const QHash<QString, QString> &identities = {});
 // Equal display labels do not establish equivalence. Equal files and compatibility do.
-QVector<Release> mergeReleases(const QVector<Release>& releases);
-Release modrinthRelease(const QJsonObject& version);
-QByteArray decodedImageFingerprint(const QByteArray& encodedImage);
+QVector<Release> mergeReleases(const QVector<Release> &releases);
+Release modrinthRelease(const QJsonObject &version, const QString &fileSha1 = {});
+bool isNewerRelease(const Release &installed, const Release &candidate);
+QVariantList groupReleaseVariants(const QVector<Release> &releases);
+Release releaseFromVariant(const QVariantMap &value);
+QByteArray decodedImageFingerprint(const QByteArray &encodedImage);
 QString compactCount(qint64 value);
-}
+} // namespace studio

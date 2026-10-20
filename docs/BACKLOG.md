@@ -12,6 +12,10 @@ Requests are prioritized here; listing an idea does not mean it is implemented. 
 - Visual JSON/TOML/properties forms, typed controls, lists, TOML documented ranges/choices, explicit saves, backups and external-change detection.
 - Separate storage, content, config and desktop libraries with injected interfaces and feature-specific presentation models.
 
+- Vertical Settings categories; native Description/Gallery/Versions showcases; verified Modrinth Play/world handoff.
+- Modrinth-style content search, sorting, category/advanced filters, selection, version switching, stable updates, enable/disable, file imports/removal and freeze preferences.
+- Warning badge beside the pack name; content file events refresh locally, with explicit provider Refresh.
+
 ## Next additions
 
 | Priority | Addition | Acceptance criteria |
@@ -24,15 +28,22 @@ Requests are prioritized here; listing an idea does not mean it is implemented. 
 | P1 | GitHub sign-in and sync | OAuth, repository creation, push/pull and conflicts through UI; credentials stay outside repositories. |
 | P1 | Approved CurseForge downloads | Verify live integration after API approval, enforce distribution settings and resolve required dependencies through a provider adapter. |
 | P2 | Dependency and incompatibility graph | Separate rules evaluate version constraints, duplicate/nested IDs, optional dependencies and explicit incompatibilities with evidence. Static results do not promise a successful game launch. |
-| P2 | Game installation and launch | Resolve loader/Java versions and account authentication; display launch progress and failures without editing other launchers' data. |
+| P1 | Independent Conflux and CurseForge world launch | Add supported runtime/account/provider adapters, loader/Java resolution and real launch-state/error verification. Do not treat content API approval as a game-launch API. Current direct handoff supports verified Modrinth instances only. |
 | P2 | Richer mod identity and icons | Resolve nested-JAR identity/icons and verified provider artwork; retain a clear generic fallback. Cache with size limits and invalidation. |
 | P2 | Log tools | Search/filter/copy, live tail with cancellation, gzip log archives and explicit privacy controls before sharing. |
 | P2 | World metadata and backups | Read level.dat through a bounded NBT adapter, show actual world names/version/last played, and provide explicit backup/restore flows. |
 | P2 | Config editing history | Undo/redo across search/filter changes, schema-aware list controls and richer nested objects/tables and comment-preserving collection edits. |
 | P2 | Pack Overview / Changes tabs | Summarize pack metadata, health and reviewed changes in independent panels; avoid duplicating Content or Git state. |
-| P2 | Import/export and provider merging | Standard Modrinth/CurseForge formats, reviewed identity mappings, license/distribution rules and gallery deduplication. |
+| P2 | Pack import/export and broader identity matching | Standard Modrinth/CurseForge pack formats, reviewed identity mappings, distribution rules, pagination and conservative resized/recompressed image matching. Current native galleries remove exact decoded-pixel duplicates. |
 | P3 | Accessibility and performance | Keyboard/screen-reader review, scaling, contrast, large-library benchmarks, paged config inventory and cancellable scans. |
 | P3 | Distribution | Reproducible Windows packaging, dependency/license notices and releases; expand platform support only with real build/runtime verification. |
+
+## Content follow-ups
+
+- Complete approved CurseForge downloads/updates and live API validation. Current provider-only showcases require an approved key; Modrinth-backed files use Modrinth first.
+- Add safe folder-pack mutations and provider-aware resource/shader version management; current local JAR/ZIP actions do not imply a universal shader-settings adapter.
+- Add shared Git freeze-policy files, richer update channels and backup restore/retention UI. Current freeze preferences are local.
+- Add full NBT world names/metadata and game-process observation; handing a URL to a launcher is not proof of a successful game launch.
 
 ## Current editing limits
 

@@ -1,5 +1,8 @@
 .pragma library
 var paths = {
+ "more":"M12 5 L12 5.1 M12 12 L12 12.1 M12 19 L12 19.1", "switch":"M4 7 L20 7 L16 3 M20 17 L4 17 L8 21", "copy":"M8 8 L20 8 L20 21 L8 21 Z M4 16 L3 16 L3 3 L15 3 L15 4", "lock":"M6 10 L18 10 L18 21 L6 21 Z M8 10 L8 6 A4 4 0 0 1 16 6 L16 10",
+ "play":"M7 3 L21 12 L7 21 Z", "image":"M3 4 L21 4 L21 20 L3 20 Z M3 16 L9 10 L14 15 L17 12 L21 16 M17 8 L17 8.1",
+ "versions":"M5 4 L19 4 L19 20 L5 20 Z M8 8 L16 8 M8 12 L16 12 M8 16 L13 16",
  "back":"M15 5 L8 12 L15 19", "forward":"M9 5 L16 12 L9 19", "up":"M6 14 L12 8 L18 14", "down":"M7 10 L12 15 L17 10",
  "library":"M4 4 L4 20 M9 4 L9 20 M14 4 L14 20 M18 4 L22 19",
  "compass":"M21 12 A9 9 0 1 1 3 12 A9 9 0 1 1 21 12 M15 9 L13 13 L9 15 L11 11 Z",

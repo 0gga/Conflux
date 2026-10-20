@@ -1,6 +1,7 @@
 #include "ApplicationController.h"
 #include "DesktopSession.h"
 #include "verification/DesktopSmokeTest.h"
+#include <QClipboard>
 #include <QDir>
 #include <QFile>
 #include <QFontDatabase>
@@ -41,6 +42,14 @@ int main(int argc, char *argv[]) {
         verification.enabled() ? verification.storagePath() + "/backups" : QString{});
     QObject::connect(&controller, &studio::ApplicationController::stateChanged, &session,
                      [&controller, &session] { session.setPack(controller.activePack()); });
+    QObject::connect(&controller, &studio::ApplicationController::curseforgeKeyConfigured, &session,
+                     &studio::DesktopSession::setCurseforgeKey);
+    QObject::connect(session.content(), &studio::ContentActions::contentChanged, &controller,
+                     &studio::ApplicationController::refreshActivePack);
+    QObject::connect(session.content(), &studio::ContentActions::changed, &controller,
+                     [&controller, &session] { controller.setContentBusy(session.content()->busy()); });
+    QObject::connect(session.content(), &studio::ContentActions::copyRequested, &application,
+                     [](const QString &text) { QGuiApplication::clipboard()->setText(text); });
     QQmlApplicationEngine engine;
     engine.setInitialProperties(
         {{"app", QVariant::fromValue(&controller)}, {"session", QVariant::fromValue(&session)}});

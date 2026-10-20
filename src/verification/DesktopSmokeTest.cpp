@@ -7,6 +7,7 @@
 #include <QGuiApplication>
 #include <QMouseEvent>
 #include <QProcess>
+#include <QQuickItem>
 #include <QQuickWindow>
 #include <QTimer>
 #include <atomic>
@@ -14,6 +15,15 @@
 namespace studio {
 static QString smokeLogPath;
 static std::atomic_bool smokeRuntimeError{false};
+static QQuickItem *findVisualItem(QQuickItem *root, const QString &name) {
+    if (root->objectName() == name && root->isVisible())
+        return root;
+    for (auto *child : root->childItems())
+        if (auto *found = findVisualItem(child, name))
+            return found;
+    return nullptr;
+}
+
 DesktopSmokeTest::DesktopSmokeTest(const QStringList &arguments, QObject *parent) : QObject(parent) {
     const auto index = arguments.indexOf("--smoke-test");
     if (index < 0 || arguments.size() <= index + 1)
@@ -46,6 +56,7 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
     struct SmokeState {
         int phase = 0;
         QString managedPath;
+        QString selectedMod;
         QElapsedTimer elapsed;
     };
     auto state = std::make_shared<SmokeState>();
@@ -53,7 +64,7 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
     QObject::connect(
         timer, &QTimer::timeout, &application,
         [window, folder, timer, state, &application, &controller, &session] {
-            if (state->elapsed.elapsed() > 65000 || !window) {
+            if (state->elapsed.elapsed() > 120000 || !window) {
                 application.exit(2);
                 return;
             }
@@ -87,10 +98,16 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     return;
                 }
                 controller.selectProject(0);
+                session.navigation()->go(
+                    {{"page", "showcase"}, {"packPath", ""}, {"project", controller.projects().first()}});
                 break;
             case 2:
-                if (controller.detailBusy())
+                if (controller.detailBusy() || session.showcase()->busy())
                     return;
+                if (session.showcase()->project().value("provider") != "modrinth") {
+                    fail("Catalogue showcase failed without an active pack");
+                    return;
+                }
                 if (!capture("project")) {
                     fail("Project render failed");
                     return;
@@ -174,7 +191,7 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                 break;
             }
             case 7:
-                if (session.workspace()->busy())
+                if (session.workspace()->busy() || session.content()->busy())
                     return;
                 if (!capture("workspace")) {
                     fail("Workspace render failed");
@@ -207,26 +224,36 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                         {{"page", "workspace"}, {"packPath", controller.activePack().value("path")}});
                 break;
             case 10:
-                if (session.workspace()->busy())
+                if (session.workspace()->busy() || session.content()->busy())
                     return;
                 if (!capture("launcher-content")) {
                     fail("Launcher content render failed");
                     return;
                 }
-                if (auto *workspace = window->findChild<QObject *>("packWorkspace"))
-                    workspace->setProperty("showIssues", true);
+                if (auto *workspace = window->findChild<QObject *>("packWarnings"))
+                    QMetaObject::invokeMethod(workspace, "open");
                 window->setWidth(1080);
                 window->setHeight(720);
                 break;
             case 11:
+                if (auto *popup = window->findChild<QObject *>("packWarnings");
+                    popup && popup->property("opened").toBool()) {
+                    auto *item = popup->property("contentItem").value<QQuickItem *>();
+                    const auto point = item ? item->mapToScene(QPointF{}) : QPointF{-1, -1};
+                    if (!item || point.x() < 0 || point.y() < 0 ||
+                        point.x() + item->width() > window->width() + 1) {
+                        fail("Warning popup escaped the narrow window");
+                        return;
+                    }
+                }
                 if (!capture("launcher-content-narrow")) {
                     fail("Narrow content render failed");
                     return;
                 }
                 window->setWidth(1360);
                 window->setHeight(900);
-                if (auto *workspace = window->findChild<QObject *>("packWorkspace"))
-                    workspace->setProperty("showIssues", false);
+                if (auto *workspace = window->findChild<QObject *>("packWarnings"))
+                    QMetaObject::invokeMethod(workspace, "close");
                 session.navigation()->go(
                     {{"page", "workspace"}, {"packPath", state->managedPath}, {"section", "configs"}});
                 break;
@@ -260,8 +287,7 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     return;
                 }
                 session.navigation()->cancelPending();
-                if (window->close() || !window->isVisible() ||
-                    !window->property("closeRequested").toBool()) {
+                if (window->close() || !window->isVisible() || !window->property("closeRequested").toBool()) {
                     fail("Unsaved config window closing was not guarded");
                     return;
                 }
@@ -349,17 +375,135 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     fail("Window mouse Forward did not restore warning settings");
                     return;
                 }
+                session.navigation()->go(
+                    {{"page", "workspace"}, {"packPath", state->managedPath}, {"section", "content"}});
+                break;
+            }
+            case 19:
+                if (controller.repositoryBusy() || session.workspace()->busy() || session.content()->busy())
+                    return;
+                if (session.content()->rows().isEmpty()) {
+                    fail("Content actions did not load the installed fixture");
+                    return;
+                }
+                state->selectedMod =
+                    session.content()->rows().first().toMap().value("relativePath").toString();
+                session.content()->select(state->selectedMod, true);
+                session.content()->freeze(state->selectedMod, true);
+                break;
+            case 20:
+                if (!capture("content-selected")) {
+                    fail("Content selection render failed");
+                    return;
+                }
+                if (auto *popup = window->findChild<QObject *>("contentFilter"))
+                    QMetaObject::invokeMethod(popup, "open");
+                else {
+                    fail("Content filter popup missing");
+                    return;
+                }
+                break;
+            case 21:
+                if (!capture("content-filter")) {
+                    fail("Content filter render failed");
+                    return;
+                }
+                if (auto *popup = window->findChild<QObject *>("contentFilter"))
+                    QMetaObject::invokeMethod(popup, "close");
+                session.content()->freeze(state->selectedMod, false);
+                session.content()->openVersions(state->selectedMod);
+                if (auto *popup = window->findChild<QObject *>("versionPicker"))
+                    QMetaObject::invokeMethod(popup, "open");
+                else {
+                    fail("Version picker missing");
+                    return;
+                }
+                break;
+            case 22: {
+                if (session.content()->versionsBusy())
+                    return;
+                if (session.content()->versions().isEmpty()) {
+                    fail("No compatible switch versions: " + session.content()->versionError());
+                    return;
+                }
+                if (!capture("version-picker")) {
+                    fail("Version picker render failed");
+                    return;
+                }
+                if (auto *popup = window->findChild<QObject *>("versionPicker"))
+                    QMetaObject::invokeMethod(popup, "close");
+                break;
+            }
+            case 23: {
+                auto *panel = findVisualItem(window->contentItem(), "contentPanel");
+                if (!panel || !QMetaObject::invokeMethod(panel, "showcaseRequested",
+                                                         Q_ARG(QString, state->selectedMod))) {
+                    fail("Installed content showcase signal is unavailable");
+                    return;
+                }
+                break;
+            }
+            case 24:
+                if (session.showcase()->busy() || session.workspace()->busy() || session.content()->busy())
+                    return;
+                if (session.navigation()->route().value("page") != "showcase" ||
+                    session.showcase()->project().value("provider") != "modrinth" ||
+                    session.showcase()->description().isEmpty()) {
+                    fail("Clicking installed content did not load its native verified showcase: " +
+                         session.showcase()->notice());
+                    return;
+                }
+                if (!capture("showcase-description")) {
+                    fail("Showcase description render failed");
+                    return;
+                }
+                {
+                    auto route = session.navigation()->route();
+                    route["showcaseTab"] = "gallery";
+                    session.navigation()->go(route);
+                }
+                break;
+            case 25:
+                if (!capture("showcase-gallery")) {
+                    fail("Showcase gallery render failed");
+                    return;
+                }
+                {
+                    auto route = session.navigation()->route();
+                    route["showcaseTab"] = "versions";
+                    session.navigation()->go(route);
+                }
+                break;
+            case 26:
+                if (!capture("showcase-versions")) {
+                    fail("Showcase version render failed");
+                    return;
+                }
+                session.navigation()->go({{"page", "settings"}, {"settingsTab", "appearance"}});
+                break;
+            case 27:
+                if (!capture("settings-vertical")) {
+                    fail("Vertical settings render failed");
+                    return;
+                }
+                window->setWidth(1080);
+                window->setHeight(720);
+                break;
+            case 28:
+                if (!capture("settings-vertical-narrow")) {
+                    fail("Narrow settings render failed");
+                    return;
+                }
                 if (smokeRuntimeError) {
                     fail("QML runtime warnings occurred; inspect smoke.log");
                     return;
                 }
-                qInfo("PASS: live API/install/Git, navigation, pack sections, identified config icons, "
-                      "visual TOML editing with preserved comments/backups, logs, worlds and warnings "
-                      "renders");
+                qInfo("PASS: live API/install/Git, native installed-mod showcase, content "
+                      "selection/filter/version picker, vertical Settings, navigation, visual config saves, "
+                      "worlds and warnings renders");
                 timer->stop();
                 application.exit(0);
                 return;
-            }
             }
             ++state->phase;
         });

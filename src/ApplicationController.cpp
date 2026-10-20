@@ -237,6 +237,12 @@ void ApplicationController::refreshLibrary() {
     });
     watcher->setFuture(QtConcurrent::run(&InstallationDiscovery::scan, modrinthRoot(), curseforgeRoot()));
 }
+void ApplicationController::refreshActivePack() {
+    const auto path = m_activePack.value("path").toString();
+    if (m_activePack.value("managed").toBool() && !path.isEmpty())
+        runRepository([path] { return PackRepository::inspect(path); });
+    refreshLibrary();
+}
 void ApplicationController::search(const QString &query, const QString &source, const QString &game,
                                    const QString &loader) {
     closeProject();
@@ -352,6 +358,7 @@ void ApplicationController::setInstallationRoots(const QString &mr, const QStrin
     emit stateChanged();
 }
 void ApplicationController::configureCurseforge(const QString &key) {
+    emit curseforgeKeyConfigured(key.trimmed().toUtf8());
     m_client.setCurseforgeKey(key.trimmed().toUtf8());
     emit stateChanged();
 }

@@ -28,7 +28,7 @@ bool NavigationHistory::request(const QVariantMap &target, int historyIndex) {
     return true;
 }
 bool NavigationHistory::go(QVariantMap target) {
-    if (!QStringList{"library", "discover", "workspace", "settings"}.contains(
+    if (!QStringList{"library", "discover", "workspace", "settings", "showcase"}.contains(
             target.value("page").toString()))
         return false;
     if (!target.contains("section"))

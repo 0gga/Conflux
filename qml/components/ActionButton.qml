@@ -9,10 +9,12 @@ Button {
     property bool selected: false
     property bool compact: false
     property bool alignLeft: false
+    property bool pill: false
+    property bool accented: false
     property string iconName: ""
     property string hint: ""
     readonly property color foreground: primary ? Theme.colors.accentText
-        : selected || !subtle || hovered || down ? Theme.colors.text : Theme.colors.muted
+        : accented ? Theme.colors.accent : selected || !subtle || hovered || down ? Theme.colors.text : Theme.colors.muted
     implicitHeight: compact ? 36 : 40
     implicitWidth: Math.max(text.length ? 64 : implicitHeight, contentItem.implicitWidth + leftPadding + rightPadding)
     leftPadding: text.length ? (compact ? 12 : 16) : 10
@@ -42,7 +44,7 @@ Button {
         }
     }
     background: Rectangle {
-        radius: control.compact ? 9 : 11
+        radius: control.pill ? height/2 : control.compact ? 9 : 11
         color: control.primary ? (control.down ? Qt.darker(Theme.colors.accent, 1.15) : control.hovered ? Qt.lighter(Theme.colors.accent, 1.07) : Theme.colors.accent)
             : control.down ? Qt.darker(Theme.colors.selection, 1.2)
             : control.selected ? (control.hovered ? Qt.lighter(Theme.colors.selection, 1.15) : Theme.colors.selection)

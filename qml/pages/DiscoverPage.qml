@@ -11,6 +11,7 @@ Item {
     property string source: "merged"
     signal createRequested()
     signal workspaceRequested()
+    signal showcaseRequested(var project)
     function runSearch() { app.search(query.text, source, game.text, loader.currentIndex === 0 ? "" : loader.currentText) }
     function focusSearch() { query.forceActiveFocus() }
     Component.onCompleted: runSearch()
@@ -110,7 +111,7 @@ Item {
                                 }
                             }
                         }
-                        MouseArea { id: resultMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.app.selectProject(resultCard.index) }
+                        MouseArea { id: resultMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.showcaseRequested(resultCard.modelData) }
                     }
                 }
                 EmptyState {

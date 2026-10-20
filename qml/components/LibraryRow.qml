@@ -8,7 +8,6 @@ Rectangle {
     property string detailText: ""
     property string thumbnail: ""
     property string source: "conflux"
-    property string actionText: "Configure"
     property bool entireRowInteractive: true
     property bool hiddenPack: false
     signal activated()
@@ -40,13 +39,8 @@ Rectangle {
     }
     ActionButton {
         id: explore; objectName: "libraryRowExplore"
-        anchors.right: action.left; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
-        width: 136; text: "Explore mods"; iconName: "compass"; subtle: true; onClicked: row.exploreRequested()
-    }
-    ActionButton {
-        id: action; objectName: "libraryRowAction"
         anchors.right: hide.left; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
-        width: 124; text: row.actionText; iconName: "settings"; onClicked: row.activated()
+        width: 136; text: "Explore mods"; iconName: "compass"; subtle: true; onClicked: row.exploreRequested()
     }
     ActionButton {
         id: hide; objectName: "libraryRowHide"

@@ -97,7 +97,7 @@ class ApplicationController : public QObject {
         return m_detailBusy;
     }
     bool repositoryBusy() const {
-        return m_repositoryBusy || m_installer.busy();
+        return m_repositoryBusy || m_installer.busy() || m_contentBusy;
     }
     bool installBusy() const {
         return m_installer.busy();
@@ -115,6 +115,13 @@ class ApplicationController : public QObject {
     QString curseforgeRoot() const;
     QString packsRoot() const;
     Q_INVOKABLE void refreshLibrary();
+    void refreshActivePack();
+    void setContentBusy(bool busy) {
+        if (m_contentBusy != busy) {
+            m_contentBusy = busy;
+            emit stateChanged();
+        }
+    }
     Q_INVOKABLE void search(const QString &query, const QString &source, const QString &game,
                             const QString &loader);
     Q_INVOKABLE void selectProject(int index);
@@ -137,6 +144,7 @@ class ApplicationController : public QObject {
     void stateChanged();
     void packOpened();
     void exploreRequested();
+    void curseforgeKeyConfigured(QByteArray key);
 
   private:
     CatalogueClient m_client;
@@ -155,6 +163,7 @@ class ApplicationController : public QObject {
     QString m_installationStatus;
     int m_searchGeneration = 0, m_detailGeneration = 0;
     bool m_libraryBusy = false, m_catalogueBusy = false, m_detailBusy = false, m_repositoryBusy = false;
+    bool m_contentBusy = false;
     void refreshPacks();
     void runRepository(std::function<RepositoryResult()> operation, bool navigate = false);
 };

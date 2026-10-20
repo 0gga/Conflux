@@ -91,7 +91,7 @@ ApplicationWindow {
                         required property var modelData
                         Layout.fillWidth: true
                         text: modelData.label; iconName: modelData.icon
-                        selected: window.page === modelData.key
+                        selected: window.page === modelData.key || (window.page === "showcase" && modelData.key === (window.session.navigation.route.modPath ? "workspace" : "discover"))
                         onClicked: window.navigate(modelData.key)
                     }
                 }
@@ -111,7 +111,7 @@ ApplicationWindow {
                     ActionButton { iconName: "back"; hint: "Back · Alt+Left"; enabled: window.session.navigation.canBack; subtle: true; onClicked: window.session.navigation.back() }
                     ActionButton { iconName: "forward"; hint: "Forward · Alt+Right"; enabled: window.session.navigation.canForward; subtle: true; onClicked: window.session.navigation.forward() }
                     Rectangle { Layout.leftMargin: 8; Layout.rightMargin: 12; implicitWidth: 1; implicitHeight: 18; color: Theme.colors.border }
-                    Text { Layout.maximumWidth: 240; elide: Text.ElideRight; text: window.page === "workspace" ? (window.app.activePack.name || "Modpack") : window.page === "discover" ? "Discover" : window.page === "settings" ? "Settings" : "Library"; font.pixelSize: 13; color: Theme.colors.muted; textFormat: Text.PlainText }
+                    Text { Layout.maximumWidth: 240; elide: Text.ElideRight; text: window.page === "showcase" ? (window.session.showcase.project.title || "Mod showcase") : window.page === "workspace" ? (window.app.activePack.name || "Modpack") : window.page === "discover" ? "Discover" : window.page === "settings" ? "Settings" : "Library"; font.pixelSize: 13; color: Theme.colors.muted; textFormat: Text.PlainText }
                     Item { Layout.fillWidth: true }
                     ActionButton { text: "Search mods"; iconName: "search"; hint: "Search mods · Ctrl+K"; subtle: true; onClicked: { if (window.navigate("discover")) discovery.focusSearch() } }
                     ActionButton { text: "New modpack"; iconName: "plus"; primary: true; enabled: !window.session.editor.dirty && !window.session.editor.busy; onClicked: newPack.open() }
@@ -120,9 +120,9 @@ ApplicationWindow {
             Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.border }
             StackLayout {
                 Layout.fillWidth: true; Layout.fillHeight: true
-                currentIndex: ["library", "discover", "workspace", "settings"].indexOf(window.page)
+                currentIndex: ["library", "discover", "workspace", "settings", "showcase"].indexOf(window.page)
                 LibraryPage { app: window.app; onCreateRequested: newPack.open(); onDiscoverRequested: window.navigate("discover"); onPackRequested: function(path, explore) { window.session.navigation.go({page:explore ? "discover" : "workspace",packPath:path}) } }
-                DiscoverPage { id: discovery; app: window.app; onCreateRequested: newPack.open(); onWorkspaceRequested: window.navigate("workspace") }
+                DiscoverPage { id: discovery; app: window.app; onCreateRequested: newPack.open(); onWorkspaceRequested: window.navigate("workspace"); onShowcaseRequested: function(project) { window.session.navigation.go({page:"showcase",packPath:window.app.activePack.path || "",project:project}) } }
                 PackPage {
                     app: window.app; session: window.session; onCreateRequested: newPack.open(); onDiscoverRequested: window.navigate("discover")
                     onSectionRequested: function(key) { window.packRoute(key) }
@@ -130,8 +130,10 @@ ApplicationWindow {
                     onFolderRequested: function(path) { window.packRoute("files",{folder:path}) }
                     onLogRequested: function(path) { window.packRoute("logs",{logPath:path}) }
                     onWarningSettingsRequested: window.session.navigation.go({page:"settings",settingsTab:"warnings"})
+                    onShowcaseRequested: function(path) { window.session.navigation.go({page:"showcase",packPath:window.app.activePack.path,modPath:path}) }
                 }
                 SettingsPage { app: window.app; warnings: window.session.warnings; tab: window.session.navigation.route.settingsTab || "appearance"; onTabRequested: function(key) { window.session.navigation.go({page:"settings",settingsTab:key}) } }
+                ShowcasePage { app: window.app; showcase: window.session.showcase; contentController: window.session.content; tab: window.session.navigation.route.showcaseTab || "description"; onTabRequested: function(key) { const route = Object.assign({},window.session.navigation.route); route.showcaseTab = key; window.session.navigation.go(route) } }
             }
         }
     }

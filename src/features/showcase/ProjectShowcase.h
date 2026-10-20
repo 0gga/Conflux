@@ -8,6 +8,7 @@ class ProjectShowcase final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantMap project READ project NOTIFY changed)
     Q_PROPERTY(QString description READ description NOTIFY changed)
+    Q_PROPERTY(QVariantList descriptionBlocks READ descriptionBlocks NOTIFY changed)
     Q_PROPERTY(QStringList gallery READ gallery NOTIFY changed)
     Q_PROPERTY(QVariantList versions READ versions NOTIFY changed)
     Q_PROPERTY(QString notice READ notice NOTIFY changed)
@@ -28,6 +29,9 @@ class ProjectShowcase final : public QObject {
     }
     QString description() const {
         return m_description;
+    }
+    QVariantList descriptionBlocks() const {
+        return m_descriptionBlocks;
     }
     QStringList gallery() const {
         return m_gallery;
@@ -57,7 +61,7 @@ class ProjectShowcase final : public QObject {
     QString m_description, m_notice, m_filePath, m_requestKey;
     void resolve(const InstalledModIdentity &, const QVariantMap &, int generation);
     QStringList m_gallery;
-    QVariantList m_versions;
+    QVariantList m_versions, m_descriptionBlocks;
     bool m_busy = false;
     int m_generation = 0;
 };

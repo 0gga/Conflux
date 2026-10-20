@@ -32,6 +32,204 @@ class ContentInteractionTests : public QObject {
         QQuickStyle::setStyle("Basic");
         qputenv("CONFLUX_STYLE_SETTINGS_DIR", styleStorage.path().toUtf8());
     }
+    void sharedSelectBoxKeepsKeyboardSelectionWithGutter() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(400, 250);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/components/SelectBox.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> box(qobject_cast<QQuickItem *>(
+            component.createWithInitialProperties({{"model", QStringList{"First", "Second", "Third"}}})));
+        QVERIFY(box);
+        box->setParentItem(window.contentItem());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          QPoint(box->width() / 2, box->height() / 2));
+        auto *popup = box->property("popup").value<QObject *>();
+        QVERIFY(popup);
+        QTRY_VERIFY(popup->property("opened").toBool());
+        QTest::keyClick(&window, Qt::Key_Down);
+        QTest::keyClick(&window, Qt::Key_Return);
+        QTRY_COMPARE(box->property("currentIndex").toInt(), 1);
+        QSignalSpy activated(box.get(), SIGNAL(activated(int)));
+        QVERIFY(activated.isValid());
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          QPoint(box->width() / 2, box->height() / 2));
+        QTRY_VERIFY(findItem(window.contentItem(), "selectBoxOption-2"));
+        auto *option = findItem(window.contentItem(), "selectBoxOption-2");
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          option->mapToScene(QPointF(option->width() / 2, option->height() / 2)).toPoint());
+        QTRY_COMPARE(box->property("currentIndex").toInt(), 2);
+        QCOMPARE(activated.count(), 1);
+    }
+    void searchClearKeepsFocusAndNotifiesSearchBindings() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(400, 100);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/components/SearchField.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> field(qobject_cast<QQuickItem *>(
+            component.createWithInitialProperties({{"text", "needle"}, {"leadingIcon", "search"}})));
+        QVERIFY(field);
+        field->setParentItem(window.contentItem());
+        field->setWidth(350);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QSignalSpy edited(field.get(), SIGNAL(textEdited()));
+        QVERIFY(edited.isValid());
+        auto *clear = findItem(window.contentItem(), "clearSearchButton");
+        QVERIFY(clear);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          clear->mapToScene(QPointF(clear->width() / 2, clear->height() / 2)).toPoint());
+        QTRY_VERIFY(field->property("text").toString().isEmpty());
+        QCOMPARE(edited.count(), 1);
+        QVERIFY(field->hasActiveFocus());
+        QVERIFY(!clear->isVisible());
+    }
+    void filterChipHoverAndPressKeepOneStablePillSilhouette() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(250, 100);
+        window.setColor(Qt::green);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/components/FilterChip.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> chip(
+            qobject_cast<QQuickItem *>(component.createWithInitialProperties({{"text", "NeoForge"}})));
+        QVERIFY(chip);
+        chip->setParentItem(window.contentItem());
+        chip->setX(20);
+        chip->setY(20);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *remove = findItem(window.contentItem(), "filterChipRemove");
+        QVERIFY(remove);
+        const auto size = chip->size();
+        const auto radius = chip->property("radius");
+        auto *background = remove->property("background").value<QQuickItem *>();
+        QVERIFY(background);
+        QCOMPARE(background->property("radius").toReal(), remove->height() / 2);
+        QTest::mouseMove(&window, QPoint(220, 80));
+        QTest::qWait(120);
+        const auto before = window.grabWindow();
+        const auto point = remove->mapToScene(QPointF(remove->width() / 2, remove->height() / 2)).toPoint();
+        QTest::mouseMove(&window, point);
+        QTest::qWait(120);
+        QCOMPARE(chip->size(), size);
+        QCOMPARE(chip->property("radius"), radius);
+        const auto after = window.grabWindow();
+        for (const QPoint corner : {QPoint(20, 20), QPoint(20 + qRound(chip->width()) - 1, 20),
+                                    QPoint(20 + qRound(chip->width()) - 1, 47)})
+            QCOMPARE(after.pixelColor(corner), before.pixelColor(corner));
+        QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, point);
+        QCOMPARE(chip->size(), size);
+        QCOMPARE(chip->property("radius"), radius);
+        QCOMPARE(background->property("radius").toReal(), remove->height() / 2);
+        QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, point);
+    }
+    void descriptionViewLoadsNestedTableBlocks() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(600, 400);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/showcase/DescriptionView.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        const QVariantList text{
+            QVariantMap{{"kind", "text"}, {"html", "<p><strong>Readable table cell</strong></p>"}}};
+        const QVariantList cells{QVariantMap{{"blocks", text}}};
+        const QVariantList rows{QVariantMap{{"cells", cells}}};
+        const QVariantList blocks{QVariantMap{{"kind", "table"}, {"rows", rows}}};
+        std::unique_ptr<QQuickItem> view(
+            qobject_cast<QQuickItem *>(component.createWithInitialProperties({{"blocks", blocks}})));
+        QVERIFY2(view, qPrintable(component.errorString()));
+        view->setParentItem(window.contentItem());
+        view->setWidth(550);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTRY_VERIFY(findItem(window.contentItem(), "descriptionTextBlock"));
+        QVERIFY(findItem(window.contentItem(), "descriptionTextBlock")
+                    ->property("text")
+                    .toString()
+                    .contains("Readable table cell"));
+        QVERIFY(view->implicitHeight() > 0);
+    }
+    void galleryViewerSupportsZoomNavigationAndEscape() {
+        QTemporaryDir dir;
+        QImage image(300, 180, QImage::Format_ARGB32);
+        image.fill(Qt::blue);
+        QVERIFY(image.save(dir.path() + "/first.png"));
+        image.fill(Qt::red);
+        QVERIFY(image.save(dir.path() + "/second.png"));
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(900, 600);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/showcase/GalleryViewer.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QObject> viewer(component.createWithInitialProperties(
+            {{"parent", QVariant::fromValue(window.contentItem())},
+             {"images", QStringList{QUrl::fromLocalFile(dir.path() + "/first.png").toString(),
+                                    QUrl::fromLocalFile(dir.path() + "/second.png").toString()}}}));
+        QVERIFY2(viewer, qPrintable(component.errorString()));
+        QVERIFY(QMetaObject::invokeMethod(viewer.get(), "open"));
+        QTRY_VERIFY(viewer->property("activeFocus").toBool());
+        const auto click = [&window](QQuickItem *item) {
+            QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                              item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+        };
+        QTRY_VERIFY(findItem(window.contentItem(), "galleryZoomIn"));
+        click(findItem(window.contentItem(), "galleryZoomIn"));
+        QTRY_VERIFY(viewer->property("zoom").toReal() > 1);
+        click(findItem(window.contentItem(), "galleryNext"));
+        QTRY_COMPARE(viewer->property("currentIndex").toInt(), 1);
+        QCOMPARE(viewer->property("zoom").toReal(), 1);
+        QTest::keyClick(&window, Qt::Key_Left);
+        QTRY_COMPARE(viewer->property("currentIndex").toInt(), 0);
+        QTest::keyClick(&window, Qt::Key_Escape);
+        QTRY_VERIFY(!viewer->property("visible").toBool());
+    }
+    void scrollingCardsReserveScrollbarSpaceAndKeepClippedCornersRounded() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(620, 150);
+        window.setColor(Qt::green);
+        QQmlComponent component(&engine);
+        component.setData(R"(
+import QtQuick
+import "components"
+ContentListView {
+    width: 600; height: 120; outsideColor: "lime"; model: 3; spacing: 8
+    delegate: ProjectCard {
+        objectName: "fixtureCard"; width: ListView.view.width
+        project: ({title:"Example",author:"Author",summary:"Summary"})
+        installState: ({canInstall:true,label:"Install"})
+    }
+})",
+                          QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/ScrollFixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> list(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY(list);
+        list->setParentItem(window.contentItem());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTRY_VERIFY(findItem(window.contentItem(), "fixtureCard"));
+        auto *card = findItem(window.contentItem(), "fixtureCard");
+        auto *bar = findItem(window.contentItem(), "contentScrollBar");
+        QVERIFY(bar);
+        QVERIFY(card->mapToScene(QPointF(card->width(), 0)).x() + 6 <= bar->mapToScene(QPointF{}).x());
+        list->setProperty("contentY", 50);
+        QTest::mouseMove(&window, QPoint(240, 20));
+        QTest::qWait(120);
+        const auto screenshot = window.grabWindow();
+        QCOMPARE(screenshot.pixelColor(0, 0), QColor(Qt::green));
+        QCOMPARE(screenshot.pixelColor(qRound(card->width()) - 2, 20),
+                 card->property("color").value<QColor>());
+    }
     void focusedPopupBlocksBackgroundScrollAndTyping() {
         QQmlEngine engine;
         QQuickWindow window;
@@ -193,6 +391,10 @@ Item {
             auto *art = card->findChild<QQuickItem *>("browseArtwork");
             QVERIFY(art);
             QCOMPARE(art->x(), art->y());
+            auto *title = findItem(card.get(), "browseTitle"), *author = findItem(card.get(), "browseAuthor");
+            QVERIFY(title && author);
+            QVERIFY(qAbs(title->mapToScene(QPointF(0, title->baselineOffset())).y() -
+                         author->mapToScene(QPointF(0, author->baselineOffset())).y()) < 1);
             QVERIFY(qAbs(card->height() - art->height() - 2 * art->x()) < 0.1);
             auto *loader = findItem(card.get(), "browseLoaderBadge");
             QVERIFY(loader);
@@ -215,6 +417,15 @@ Item {
         }
         appearance->reset();
         QVERIFY(card->height() < 130);
+        card->setProperty("installState",
+                          QVariantMap{{"canInstall", false}, {"installed", false}, {"label", "Unavailable"}});
+        QTRY_COMPARE(card->opacity(), 0.5);
+        QVERIFY(appearance->setValue("unavailableOpacity", 70));
+        QTRY_COMPARE(card->opacity(), 0.7);
+        card->setProperty("installState",
+                          QVariantMap{{"canInstall", false}, {"installed", true}, {"label", "Installed"}});
+        QTRY_COMPARE(card->opacity(), 1.0);
+        appearance->reset();
     }
     void browseCardInstallClickDoesNotOpenTheProject() {
         QQmlEngine engine;
@@ -365,6 +576,14 @@ Item {
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
         QSignalSpy showcase(panel, SIGNAL(showcaseRequested(QString)));
+        auto *hidden = findItem(window.contentItem(), "contentHiddenFilter");
+        auto *updates = findItem(window.contentItem(), "contentUpdatesFilter");
+        auto *all = findItem(window.contentItem(), "contentUpdateAll");
+        auto *refresh = findItem(window.contentItem(), "contentRefresh");
+        QVERIFY(hidden && updates && all && refresh);
+        QVERIFY(hidden->mapToScene(QPointF{}).x() < updates->mapToScene(QPointF{}).x());
+        QVERIFY(updates->mapToScene(QPointF{}).x() < all->mapToScene(QPointF{}).x());
+        QVERIFY(qAbs(refresh->mapToScene(QPointF(refresh->width(), 0)).x() - panel->width()) < 2);
         auto *row = findItem(window.contentItem(), "contentRow");
         QVERIFY(row);
         QVERIFY(row->property("radius").toReal() > 0);

@@ -6,9 +6,12 @@ Rectangle {
     property string kind: "file"
     property real size: 42
     property bool preserveAspectFit: false
+    property bool intrinsicSize: false
+    readonly property int status: art.status
+    readonly property size naturalSize: Qt.size(art.implicitWidth,art.implicitHeight)
     implicitWidth: size; implicitHeight: size; radius: Math.min(12,size*0.2); color: art.status === Image.Ready ? "transparent" : Theme.colors.input
     Icon { anchors.centerIn: parent; name: root.kind; size: root.size * 0.5; visible: art.status !== Image.Ready }
-    Image { id: art; objectName: "artworkSource"; source: root.source; sourceSize: Qt.size(Math.min(2048,Math.ceil(root.width*2)),Math.min(2048,Math.ceil(root.height*2))); asynchronous: true; visible: false; onStatusChanged: { if (status === Image.Ready) crop.loadImage(root.source); crop.requestPaint() } }
+    Image { id: art; objectName: "artworkSource"; source: root.source; sourceSize: root.intrinsicSize ? Qt.size(0,0) : Qt.size(Math.min(2048,Math.ceil(root.width*2)),Math.min(2048,Math.ceil(root.height*2))); asynchronous: true; visible: false; onStatusChanged: { if (status === Image.Ready) crop.loadImage(root.source); crop.requestPaint() } }
     Canvas {
         id: crop; objectName: "artworkCrop"; anchors.fill: parent; visible: art.status === Image.Ready
         property string previousSource: ""

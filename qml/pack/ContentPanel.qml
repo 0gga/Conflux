@@ -25,18 +25,32 @@ Item {
         }
         Flow {
             id: filterBar
-            Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.preferredWidth: root.width; spacing: 6
-            SelectBox { width: 145; implicitHeight: 36; model: ["Name (A–Z)","Name (Z–A)","Author (A–Z)","File name","Updates first"]; currentIndex: Math.max(0,["name-asc","name-desc","author","filename","updates"].indexOf(root.controller.sort)); onActivated: root.controller.sort = ["name-asc","name-desc","author","filename","updates"][currentIndex] }
-            Rectangle { implicitWidth: 1; implicitHeight: 22; color: Theme.colors.border; Layout.leftMargin: 3; Layout.rightMargin: 3 }
-            Repeater {
-                model: [{key:"all",label:"All"},{key:"mods",label:"Mods"},{key:"resourcepacks",label:"Resource Packs"},{key:"shaderpacks",label:"Shaders"}]
-                delegate: ActionButton { required property var modelData; text: modelData.label; compact: true; pill: true; subtle: true; selected: root.controller.category === modelData.key; onClicked: root.controller.category = modelData.key }
+            Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: 12
+            Flow {
+                id: leftControls; spacing: 6
+                function naturalWidth() { let size=0,count=0;for(const child of children) if(child.visible && child.width>0) {size+=child.width;++count}return size+spacing*Math.max(0,count-1) }
+                width: Math.min(filterBar.width,naturalWidth()); height: childrenRect.height
+                SelectBox { width: 145; implicitHeight: 36; model: ["Name (A–Z)","Name (Z–A)","Author (A–Z)","File name","Updates first"]; currentIndex: Math.max(0,["name-asc","name-desc","author","filename","updates"].indexOf(root.controller.sort)); onActivated: root.controller.sort = ["name-asc","name-desc","author","filename","updates"][currentIndex] }
+                Repeater {
+                    model: [{key:"all",label:"All"},{key:"mods",label:"Mods"},{key:"resourcepacks",label:"Resource Packs"},{key:"shaderpacks",label:"Shaders"}]
+                    delegate: ActionButton { required property var modelData; text: modelData.label; compact: true; pill: true; subtle: true; selected: root.controller.category === modelData.key; onClicked: root.controller.category = modelData.key }
+                }
+                ActionButton { text: "Clear"; compact: true; subtle: true; visible: !!root.controller.filters.author || !!root.controller.filters.environment || !!root.controller.filters.state || root.controller.filters.openSource || root.controller.filters.external; onClicked: root.controller.clearFilters() }
+                PopupButton { id: filterButton; popup: filters; text: "Filter"; iconName: "plus"; compact: true }
             }
-            ActionButton { id: filterButton; text: "Filter"; iconName: "plus"; compact: true; onClicked: { const point = mapToItem(root,0,height); filters.x = Math.min(point.x,root.width-filters.width); filters.y = point.y+6; filters.open() } }
-            ActionButton { text: root.controller.filters.hidden ? "Hidden content" : "Hidden"; iconName: "hide"; compact: true; subtle: true; selected: !!root.controller.filters.hidden; onClicked: root.controller.setFilter("hidden",!root.controller.filters.hidden) }
-            ActionButton { text: "Clear"; compact: true; subtle: true; visible: !!root.controller.filters.author || !!root.controller.filters.environment || !!root.controller.filters.state || root.controller.filters.updates || root.controller.filters.openSource || root.controller.filters.external; onClicked: root.controller.clearFilters() }
-            ActionButton { iconName: "download"; text: "Update all"; compact: true; subtle: true; accented: true; enabled: root.controller.updateCount > 0 && !root.controller.busy; hint: root.controller.updateCount + " compatible updates · frozen versions are skipped"; onClicked: root.controller.updateAll() }
-            ActionButton { iconName: "refresh"; text: "Refresh"; compact: true; subtle: true; enabled: !root.controller.busy; onClicked: root.controller.refresh() }
+            Item {
+                width: filterBar.width-leftControls.width-filterBar.spacing >= actions.implicitWidth+18 ? filterBar.width-leftControls.width-filterBar.spacing : filterBar.width
+                height: 36
+                RowLayout {
+                    id: actions; anchors.fill: parent; spacing: 6
+                    Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 22; Layout.leftMargin: 4; Layout.rightMargin: 10; color: Theme.colors.border }
+                    ActionButton { objectName: "contentHiddenFilter"; text: "Hidden"; hint: root.controller.filters.hidden ? "Showing hidden content" : "Show hidden content"; iconName: "hide"; compact: true; subtle: true; selected: !!root.controller.filters.hidden; onClicked: root.controller.setFilter("hidden",!root.controller.filters.hidden) }
+                    ActionButton { objectName: "contentUpdatesFilter"; text: "Updates"; iconName: "download"; hint: "Show content with updates"; compact: true; subtle: true; selected: !!root.controller.filters.updates; onClicked: root.controller.setFilter("updates",!root.controller.filters.updates) }
+                    ActionButton { objectName: "contentUpdateAll"; iconName: "download"; text: "Update all"; compact: true; subtle: true; accented: true; enabled: root.controller.updateCount > 0 && !root.controller.busy; hint: root.controller.updateCount + " compatible updates · frozen versions are skipped"; onClicked: root.controller.updateAll() }
+                    Item { Layout.fillWidth: true }
+                    ActionButton { objectName: "contentRefresh"; iconName: "refresh"; text: "Refresh"; compact: true; subtle: true; enabled: !root.controller.busy; onClicked: root.controller.refresh() }
+                }
+            }
         }
         RowLayout {
             visible: root.controller.selected.length > 0; Layout.fillWidth: true
@@ -59,7 +73,7 @@ Item {
                     Layout.fillWidth: true; implicitHeight: 48; color: Theme.colors.card; radius: 16
                     Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 24; color: Theme.colors.card }
                     RowLayout {
-                        anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 16; spacing: 12
+                        anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 32; spacing: 12
                         SelectionBox { checked: root.rows.length > 0 && root.visibleSelected === root.rows.length; partial: root.visibleSelected > 0 && root.visibleSelected < root.rows.length; Accessible.name: "Select visible content"; onClicked: root.controller.selectVisible(root.visibleSelected !== root.rows.length) }
                         Text { Layout.fillWidth: true; text: "Project"; color: Theme.colors.muted; font.pixelSize: 12; font.weight: Font.DemiBold }
                         Text { Layout.preferredWidth: Math.max(150,root.width*0.29); text: "Version"; color: Theme.colors.muted; font.pixelSize: 12; font.weight: Font.DemiBold }
@@ -68,13 +82,13 @@ Item {
                 }
                 Item {
                     Layout.fillWidth: true; Layout.fillHeight: true
-                    ListView { boundsBehavior: Flickable.StopAtBounds;
-                        id: list; anchors.fill: parent; clip: true; model: root.rows; ScrollBar.vertical: ScrollBar {}
+                    ContentListView {
+                        id: list; outsideColor: Theme.colors.panel; cornerRadius: 10; anchors.fill: parent; clip: true; model: root.rows;
                         delegate: Rectangle {
                             id: entry; objectName: "contentRow"
                             required property var modelData
                             readonly property bool selected: root.controller.selected.indexOf(modelData.relativePath) !== -1
-                            width: list.width; height: 82; radius: 10
+                            width: list.viewportWidth; height: 82; radius: 10
                             color: selected ? Theme.colors.input : hover.hovered ? Theme.colors.card : "transparent"
                             HoverHandler { id: hover }
                             MouseArea { anchors.fill: parent; enabled: entry.modelData.category === "mods"; cursorShape: Qt.PointingHandCursor; onClicked: root.showcaseRequested(entry.modelData.relativePath) }
@@ -125,7 +139,7 @@ Item {
             }
         }
     }
-    ContentFilter { id: filters; objectName: "contentFilter"; controller: root.controller }
+    ContentFilter { id: filters; objectName: "contentFilter"; parent: filterButton; y: filterButton.height+6; controller: root.controller }
     VersionPicker { id: versions; objectName: "versionPicker"; controller: root.controller; minecraft: root.minecraft; preferredLoader: root.loader }
     FileDialog { id: upload; title: "Add content to this pack"; fileMode: FileDialog.OpenFiles; nameFilters: ["Mods (*.jar)","Resource packs (*.zip)","Shader packs (*.zip)"]; onAccepted: root.controller.importFiles(selectedFiles,["mods","resourcepacks","shaderpacks"][selectedNameFilter.index]) }
     FocusDialog {

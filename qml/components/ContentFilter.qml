@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Conflux.Style
 FocusPopup {
@@ -27,7 +26,7 @@ FocusPopup {
             }
             Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.border; Layout.topMargin: 4; Layout.bottomMargin: 4 }
             Repeater {
-                model: [{key:"updates",label:"Update available"},{key:"openSource",label:"Open source"},{key:"external",label:"External"}]
+                model: [{key:"openSource",label:"Open source"},{key:"external",label:"External"}]
                 delegate: ActionButton {
                     required property var modelData
                     text: modelData.label; subtle: true; alignLeft: true; Layout.fillWidth: true

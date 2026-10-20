@@ -61,6 +61,9 @@ class AppearanceTests final : public QObject {
         QTemporaryDir dir;
         Appearance layout(nullptr, dir.path());
         QCOMPARE(layout.values().value("artworkSize").toInt(), 88);
+        QCOMPARE(layout.values().value("unavailableOpacity").toInt(), 50);
+        QVERIFY(layout.setValue("unavailableOpacity", 65));
+        QVERIFY(!layout.setValue("unavailableOpacity", 10));
         QVERIFY(layout.setValue("uiScale", 125));
         QVERIFY(layout.setValue("contentScale", 120));
         QVERIFY(layout.setValue("filterScale", 85));

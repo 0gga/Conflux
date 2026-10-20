@@ -23,7 +23,14 @@ Rectangle {
     implicitHeight: Math.max(Appearance.values.artworkSize * contentScale, heading.implicitHeight + 34 * contentScale, actions.implicitHeight) + 2 * inset
     radius: 14
     color: hover.containsMouse ? Theme.colors.hover : Theme.colors.card
-    border.color: Theme.colors.border
+    border.width: 0
+    readonly property bool unavailable: !installState.canInstall && !installState.installed
+    opacity: unavailable ? Appearance.values.unavailableOpacity / 100 : 1
+    function updatedAge(value) {
+        const days=Math.max(0,Math.floor((Date.now()-Date.parse(value))/86400000))
+        if (!isFinite(days)) return ""
+        return days===0 ? "Today" : days===1 ? "1 day ago" : days<60 ? days+" days ago" : days<730 ? Math.floor(days/30)+" months ago" : Math.floor(days/365)+" years ago"
+    }
     MouseArea { id: hover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.opened() }
     ContentIcon {
         id: artwork; objectName: "browseArtwork"
@@ -40,8 +47,8 @@ Rectangle {
         spacing: 4 * root.contentScale
         Row {
             width: parent.width; spacing: 7 * root.contentScale
-            Text { id: title; text: root.project.title; width: Math.min(implicitWidth,parent.width * 0.68); color: Theme.colors.text; font.pixelSize: 18 * root.contentScale; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
-            Text { width: Math.max(0,parent.width-title.width-parent.spacing); text: "by " + (root.project.author || "Unknown author"); color: Theme.colors.muted; font.pixelSize: 12 * root.contentScale; elide: Text.ElideRight; textFormat: Text.PlainText }
+            Text { id: title; objectName: "browseTitle"; text: root.project.title; width: Math.min(implicitWidth,parent.width*0.68); color: Theme.colors.text; font.pixelSize: 18 * root.contentScale; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
+            Text { objectName: "browseAuthor"; anchors.baseline: title.baseline; width: Math.max(0,parent.width-title.width-parent.spacing); text: "by " + (root.project.author || "Unknown author"); color: Theme.colors.muted; font.pixelSize: 12 * root.contentScale; elide: Text.ElideRight; textFormat: Text.PlainText }
         }
         Text { width: parent.width; text: root.project.summary || ""; color: Theme.colors.muted; font.pixelSize: 12 * root.contentScale; elide: Text.ElideRight; textFormat: Text.PlainText }
     }
@@ -73,9 +80,10 @@ Rectangle {
             Rectangle {
                 objectName: "browseEnvironmentBadge"
                 visible: !!root.project.environment && root.project.environment !== "unknown"
-                width: environment.implicitWidth + 30 * root.contentScale; height: tags.height; radius: height/2; color: Theme.colors.input
-                Icon { anchors.left: parent.left; anchors.leftMargin: 7 * root.contentScale; anchors.verticalCenter: parent.verticalCenter; name: "world"; size: 14 * root.contentScale }
-                Text { id: environment; anchors.left: parent.left; anchors.leftMargin: 25 * root.contentScale; anchors.verticalCenter: parent.verticalCenter; text: Branding.label(root.project.environment || ""); color: Theme.colors.muted; font.pixelSize: 11 * root.contentScale }
+                width: tags.height; height: tags.height; radius: height/2; color: Theme.colors.input
+                Icon { anchors.centerIn: parent; name: root.project.environment === "client" ? "monitor" : "world"; size: 14 * root.contentScale }
+                HoverHandler { id: environmentHover }
+                RoundedToolTip { visible: environmentHover.hovered; text: Branding.label(root.project.environment || "") }
             }
             Repeater {
                 model: (root.project.categories || []).filter(function(tag) { return (root.project.loaders || []).indexOf(tag) === -1 })
@@ -101,14 +109,15 @@ Rectangle {
             text: root.installState.label || "Install"; iconName: root.installState.installed ? "check" : "plus"
             accented: true; compact: true; font.pixelSize: 12 * root.contentScale; implicitHeight: 32 * root.contentScale
             enabled: !!root.installState.canInstall; onClicked: root.installRequested()
-            opacity: root.installState.installed ? 1 : enabled ? 1 : 0.38
+            opacity: root.installState.installed || enabled ? 1 : 0.7
         }
         Item { Layout.fillHeight: true }
         Row {
             Layout.alignment: Qt.AlignRight; spacing: 8 * root.contentScale
             Repeater { model: root.project.downloadStats || []; delegate: BrandBadge { required property var modelData; brand: modelData.provider; text: modelData.count; framed: false; badgeScale: root.contentScale } }
+            ContentStatistic { visible: (root.project.followersRaw || 0)>0; iconName: "heart"; text: root.project.followers || ""; hint: "Followers"; statisticScale: root.contentScale }
         }
-        Text { Layout.alignment: Qt.AlignRight; text: root.project.updated ? "Updated " + root.project.updated.slice(0,10) : ""; color: Theme.colors.muted; font.pixelSize: 10 * root.contentScale }
+        ContentStatistic { Layout.alignment: Qt.AlignRight; visible: !!root.project.updated; iconName: "history"; text: root.updatedAge(root.project.updated || ""); hint: root.project.updated || ""; statisticScale: root.contentScale }
     }
     PopupButton {
         popup: menu

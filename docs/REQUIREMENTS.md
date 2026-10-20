@@ -89,3 +89,7 @@ The source statements and reference images distinguish these requirements from i
 - Three-dot action buttons toggle their open menu closed on a second click. Discovery shows active filter chips, locking only instance-controlled selections. Keep routine explanatory paragraphs out of content views; retain meaningful errors and warnings.
 
 - Popups take focus and block background interaction, including conflict-warning popups. Instance content tables have no outer outline; row hover stays rounded. Unavailable actions, including Installed, have no hover response.
+
+- Reserve scrollbar space beside cards and other scrollable content; clipped hover backgrounds retain rounded viewport corners. Align content author and title baselines. Use icon-led card statistics and configurable unavailable-content opacity with a live Appearance preview.
+- Preserve source description imagery and useful markup in the native theme. Gallery images open in a focused enlarged viewer with navigation and zoom.
+- Shared hover/press behavior must preserve control geometry and pill silhouettes. Search fields have an internal trailing clear button. In instance content, put Updates between Hidden and Update all, use a padded short divider after Filter and put Refresh at the far right.

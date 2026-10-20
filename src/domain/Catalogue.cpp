@@ -52,6 +52,7 @@ QVariantMap Project::toVariant() const {
             {"updated", updated},
             {"created", created},
             {"followers", compactCount(followers)},
+            {"followersRaw", followers},
             {"downloadStats", statistics}};
 }
 QVariantMap Release::toVariant() const {

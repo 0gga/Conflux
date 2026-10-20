@@ -18,13 +18,13 @@ FocusDialog {
         width: parent.width; height: parent.height; spacing: 14
         Text { visible: root.controller.versionError.length > 0; Layout.fillWidth: true; text: root.controller.versionError; color: Theme.colors.warning; font.pixelSize: 12; wrapMode: Text.WordWrap }
         BusyIndicator { visible: root.controller.versionsBusy; running: visible; Layout.alignment: Qt.AlignHCenter }
-        ListView { boundsBehavior: Flickable.StopAtBounds;
-            id: list; Layout.fillWidth: true; Layout.fillHeight: true; clip: true; model: root.controller.versionGroups; spacing: 6; ScrollBar.vertical: ScrollBar {}
+        ContentListView { outsideColor: Theme.colors.card; cornerRadius: 8;
+            id: list; Layout.fillWidth: true; Layout.fillHeight: true; clip: true; model: root.controller.versionGroups; spacing: 6;
             delegate: Rectangle {
                 id: version; required property var modelData; required property int index
                 property int variantIndex: 0
                 readonly property var release: modelData.variants[Math.min(variantIndex,modelData.variants.length-1)]
-                width: list.width; height: modelData.variants.length > 1 ? 136 : 98; radius: 10; color: root.selectedVersion === release.releaseIndex ? Theme.colors.selection : Theme.colors.input; border.color: root.selectedVersion === release.releaseIndex ? Theme.colors.accent : Theme.colors.border
+                width: list.viewportWidth; height: modelData.variants.length > 1 ? 136 : 98; radius: 10; color: root.selectedVersion === release.releaseIndex ? Theme.colors.selection : Theme.colors.input; border.color: root.selectedVersion === release.releaseIndex ? Theme.colors.accent : Theme.colors.border
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.selectedVersion = version.release.releaseIndex }
                 RowLayout { anchors.fill: parent; anchors.margins: 12
                     ColumnLayout { Layout.fillWidth: true; spacing: 6

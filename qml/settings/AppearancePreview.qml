@@ -34,8 +34,8 @@ Rectangle {
             }
             ProjectCard {
                 width: parent.width; minecraft: "1.21.1"; selectedLoaders: example.filters.loaders
-                project: ({title:"Another project",author:"Example author",summary:"Installed content uses the same layout.",provider:"modrinth",sources:["modrinth"],loaders:["neoforge"],environment:"client-server",categories:["technology"]})
-                installState: ({label:"Installed",installed:true,canInstall:false})
+                project: ({title:"Unavailable project",author:"Example author",summary:"Preview the opacity of unavailable content.",provider:"modrinth",sources:["modrinth"],loaders:["neoforge"],environment:"client-server",categories:["technology"]})
+                installState: ({label:"Unavailable",installed:false,canInstall:false})
             }
         }
     }

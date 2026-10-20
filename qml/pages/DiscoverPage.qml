@@ -61,15 +61,15 @@ Item {
                 }
                 Item {
                     Layout.fillWidth: true; Layout.fillHeight: true
-                    ListView {
+                    ContentListView {
                         id: results; objectName: "browseResults"; anchors.fill: parent; clip: true; spacing: Appearance.values.cardGap
-                        boundsBehavior: Flickable.StopAtBounds; model: root.catalogue.projects
+                        model: root.catalogue.projects
                         onContentYChanged: if(moving && root.visible)root.catalogue.scrollPosition=Math.max(0,contentY)
                         onMovementEnded: root.catalogue.scrollPosition=Math.max(0,contentY)
-                        ScrollBar.vertical: ScrollBar {}
+
                         delegate: ProjectCard {
                             required property var modelData
-                            width: results.width; project: modelData
+                            width: results.viewportWidth; project: modelData
                             minecraft: (root.catalogue.filters.versions || [])[0] || ""
                             preferredLoader: root.browse.pack.loader || ""
                             selectedLoaders: root.catalogue.filters.loaders || []

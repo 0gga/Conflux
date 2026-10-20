@@ -74,13 +74,13 @@ Item {
         }
         Item {
             Layout.fillWidth: true; Layout.fillHeight: true
-            ListView { boundsBehavior: Flickable.StopAtBounds;
+            ContentListView {
                 id: packs; anchors.fill: parent; clip: true; spacing: 12; model: root.rows
-                ScrollBar.vertical: ScrollBar {}
+
                 delegate: LibraryRow {
                     id: packRow
                     required property var modelData
-                    width: packs.width
+                    width: packs.viewportWidth
                     titleText: modelData.title
                     detailText: modelData.modCount + (modelData.modCount === 1 ? " mod" : " mods")
                     minecraft: modelData.gameVersion || ""

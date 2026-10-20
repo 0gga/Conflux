@@ -12,6 +12,7 @@ QVariantList Appearance::controls() const {
     add("contentScale", "Content size", "Content cards", 75, 150, 5, 100, "%");
     add("artworkSize", "Artwork size", "Content cards", 64, 144, 4, 88, " px");
     add("cardPadding", "Card padding", "Content cards", 4, 24, 1, 10, " px");
+    add("unavailableOpacity", "Unavailable content opacity", "Content cards", 25, 100, 5, 50, "%");
     add("cardGap", "Space between cards", "Content cards", 4, 24, 1, 8, " px");
     add("filterScale", "Filter size", "Filters", 75, 150, 5, 100, "%");
     add("filterWidth", "Filter panel width", "Filters", 200, 360, 8, 232, " px");

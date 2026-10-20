@@ -4,6 +4,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Conflux.Style
 import "../components"
+import "../showcase"
 
 Item {
     id: root
@@ -12,6 +13,7 @@ Item {
     required property var showcase
     required property var contentController
     property string tab: "description"
+    onVisibleChanged: if (!visible) enlarged.close()
     required property var releaseFilters
     signal tabRequested(string key)
     readonly property var versions: releaseFilters.rows
@@ -38,25 +40,14 @@ Item {
             currentIndex: ["description","gallery","versions"].indexOf(root.tab)
             BoundedScrollView {
                 id: descriptionScroll; clip: true
-                TextEdit {
-                    width: descriptionScroll.availableWidth; height: contentHeight
-                    text: root.showcase.description ? root.showcase.description.replace(/<a /g,'<a style="color: ' + Theme.colors.accent + ';" ') : (root.showcase.busy ? "Finding the verified project and loading its showcase…" : "No description is available.")
-                    color: Theme.colors.text; selectionColor: Theme.colors.selection; selectedTextColor: Theme.colors.text
-                    font.pixelSize: 14; textFormat: TextEdit.RichText; readOnly: true; selectByMouse: true; wrapMode: TextEdit.Wrap
-                    onLinkActivated: function(link) { root.app.openWeb(link) }
+                DescriptionView {
+                    width: descriptionScroll.availableWidth; blocks: root.showcase.descriptionBlocks || []
+                    onLinkActivated: function(url) { root.app.openWeb(url) }
+                    onImageRequested: function(url) { enlarged.show([url],0) }
                 }
             }
             Item {
-                GridView { boundsBehavior: Flickable.StopAtBounds;
-                    id: gallery; anchors.fill: parent; clip: true; model: root.showcase.gallery
-                    cellWidth: width / Math.max(1,Math.floor(width / 340)); cellHeight: 250
-                    ScrollBar.vertical: ScrollBar {}
-                    delegate: Rectangle {
-                        required property string modelData
-                        width: gallery.cellWidth - 12; height: gallery.cellHeight - 12; radius: 14; color: Theme.colors.card; border.color: Theme.colors.border
-                        ContentIcon { anchors.fill: parent; anchors.margins: 8; source: parent.modelData; preserveAspectFit: true; kind: "image"; radius: 12 }
-                    }
-                }
+                GalleryView { anchors.fill: parent; images: root.showcase.gallery; onImageRequested: function(index) { enlarged.show(root.showcase.gallery,index) } }
                 EmptyState { anchors.centerIn: parent; visible: !root.showcase.busy && root.showcase.gallery.length === 0; title: "No gallery images"; message: "This project has no available gallery images."; symbol: "image" }
             }
             ColumnLayout {
@@ -70,15 +61,15 @@ Item {
                     ActionButton { text: "Clear"; subtle: true; compact: true; onClicked: root.releaseFilters.clear() }
                 }
                 Text { visible: !root.showcase.busy && root.versions.length === 0; text: "No matching versions"; color: Theme.colors.muted; font.pixelSize: 13 }
-                ListView { boundsBehavior: Flickable.StopAtBounds;
-                    id: versionList; Layout.fillWidth: true; Layout.fillHeight: true; spacing: 10; clip: true; model: root.versions; ScrollBar.vertical: ScrollBar {}
+                ContentListView {
+                    id: versionList; Layout.fillWidth: true; Layout.fillHeight: true; spacing: 10; clip: true; model: root.versions;
                     delegate: Rectangle {
                         id: version; required property var modelData
                         property int variantIndex: 0
                         readonly property var release: modelData.variants[Math.min(variantIndex,modelData.variants.length - 1)] || ({})
                         readonly property bool installed: { const ready=root.browse.ready; const busy=root.browse.busy; return root.browse.installed(release,root.showcase.project.type || "mod") }
                         readonly property bool groupInstalled: { const ready=root.browse.ready; const busy=root.browse.busy; return modelData.variants.some(function(item) { return root.browse.installed(item,root.showcase.project.type || "mod") }) }
-                        width: versionList.width; height: version.modelData.variants.length > 1 ? 148 : 112; radius: 14; color: Theme.colors.card; border.color: Theme.colors.border
+                        width: versionList.viewportWidth; height: version.modelData.variants.length > 1 ? 148 : 112; radius: 14; color: Theme.colors.card; border.color: Theme.colors.border
                         RowLayout {
                             anchors.fill: parent; anchors.margins: 16; spacing: 16
                             ColumnLayout {
@@ -98,4 +89,5 @@ Item {
             }
         }
     }
+    GalleryViewer { id: enlarged; onExternalRequested: function(url) { root.app.openWeb(url) } }
 }

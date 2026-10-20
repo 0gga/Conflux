@@ -11,6 +11,7 @@ Button {
     property bool alignLeft: false
     property bool pill: false
     property bool accented: false
+    property bool focusIndicator: true
     property string iconName: ""
     property string hint: ""
     readonly property bool interactiveHover: enabled && hovered
@@ -46,7 +47,7 @@ Button {
         }
     }
     background: Rectangle {
-        radius: control.pill ? height/2 : control.compact ? 9 : 11
+        radius: control.pill || !control.text.length ? height/2 : control.compact ? 9 : 11
         color: control.primary ? (control.interactiveDown ? Qt.darker(Theme.colors.accent, 1.15) : control.interactiveHover ? Qt.lighter(Theme.colors.accent, 1.07) : Theme.colors.accent)
             : control.interactiveDown ? Qt.darker(Theme.colors.selection, 1.2)
             : control.selected ? (control.interactiveHover ? Qt.lighter(Theme.colors.selection, 1.15) : Theme.colors.selection)
@@ -58,7 +59,7 @@ Button {
         Rectangle {
             anchors.fill: parent; anchors.margins: -3; radius: parent.radius + 3
             color: "transparent"; border.width: 1; border.color: Theme.colors.accent
-            visible: control.enabled && control.visualFocus
+            visible: control.focusIndicator && control.enabled && control.visualFocus
         }
     }
 }

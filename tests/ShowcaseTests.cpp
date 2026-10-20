@@ -116,6 +116,49 @@ class ShowcaseTests : public QObject {
         filters.setContext("next", {}, {"1.20.1"}, {"forge"});
         QCOMPARE(filters.filters().value("loaders").toStringList(), QStringList{"forge"});
     }
+    void sourceFormattingKeepsImageRowsLinksTablesAndCode() {
+        const auto rendered = describeContent(
+            "![Banner](https://example.invalid/banner.png)\n\n<p align='center'><a "
+            "href='https://example.invalid/community'><img src='https://example.invalid/community.png' "
+            "alt='Community'></a> <img "
+            "src='https://example.invalid/source.png'></p>\n\n<br>![Divider](https://example.invalid/"
+            "divider.png)\n\n### Features\n- **Visible text**\n\n| Game | Status |\n| --- | --- |\n| 1.21.1 "
+            "| Supported |\n\n```xml\n<keep>This is code</keep>\n```",
+            true);
+        QVERIFY(rendered.html.contains("Visible text"));
+        QVERIFY(rendered.html.contains("Features"));
+        QVERIFY(rendered.html.contains("Supported"));
+        QVERIFY(rendered.html.contains("&lt;keep&gt;"));
+        int images = 0, maxRow = 0;
+        bool socialLink = false, table = false;
+        for (const auto &value : rendered.blocks) {
+            const auto block = value.toMap();
+            table |= block.value("kind") == "table";
+            maxRow = qMax(maxRow, int(block.value("items").toList().size()));
+            for (const auto &item : block.value("items").toList()) {
+                ++images;
+                socialLink |= item.toMap().value("link") == "https://example.invalid/community";
+            }
+        }
+        QCOMPARE(images, 4);
+        QCOMPARE(maxRow, 2);
+        QVERIFY(socialLink);
+        QVERIFY(table);
+    }
+    void descriptionRejectsLocalImagesScriptsAndProviderPalette() {
+        const auto rendered = describeContent(
+            "<div style='color:black'><script>secret()</script><img src='file:///private.png'><img "
+            "src='data:image/png;base64,no'><p><b>Readable</b></p><img "
+            "src='https://example.invalid/banner.png' onerror='secret()'></div>",
+            false);
+        QVERIFY(rendered.html.contains("Readable"));
+        QVERIFY(!rendered.html.contains("style="));
+        const auto json = QJsonDocument::fromVariant(rendered.blocks).toJson();
+        QVERIFY(!json.contains("file:///"));
+        QVERIFY(!json.contains("data:image"));
+        QVERIFY(!json.contains("secret()"));
+        QVERIFY(json.contains("https://example.invalid/banner.png"));
+    }
     void mixedHtmlImageBannersDoNotEraseMarkdownText() {
         const auto html = renderDescription(
             "![Header](https://example.invalid/banner.png)\n\n<p align=\"center\"><a "

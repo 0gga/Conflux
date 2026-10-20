@@ -47,15 +47,15 @@ BoundedScrollView {
             Layout.fillWidth: true
             implicitHeight: Math.min(Appearance.values.versionListHeight, versionsList.contentHeight + 12)
             radius: 10; color: Theme.colors.input
-            ListView {
-                id: versionsList; objectName: "browseVersionList"
+            ContentListView {
+                id: versionsList; outsideColor: Theme.colors.input; cornerRadius: 6; objectName: "browseVersionList"
                 anchors.fill: parent; anchors.margins: 6
-                clip: true; boundsBehavior: Flickable.StopAtBounds; spacing: 3
+                clip: true; spacing: 3
                 model: (root.catalogue.options.versions || []).filter(function(version) { return version.indexOf(versionsSearch.text)!==-1 })
-                ScrollBar.vertical: ScrollBar {}
+
                 delegate: ActionButton {
                     required property string modelData
-                    width: versionsList.width
+                    width: versionsList.viewportWidth
                     text: modelData; compact: true; subtle: true; alignLeft: true
                     selected: (root.catalogue.filters.versions || []).indexOf(modelData)!==-1
                     iconName: selected ? "check" : ""

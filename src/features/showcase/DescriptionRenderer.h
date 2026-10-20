@@ -1,6 +1,12 @@
 #pragma once
 #include <QString>
+#include <QVariantList>
 namespace studio {
-// Provider markup becomes a small native, palette-independent rich-text subset.
+struct RenderedDescription {
+    QString html;
+    QVariantList blocks;
+};
+// Parse provider markup once into themed native text, image rows and table cells.
+RenderedDescription describeContent(const QString &source, bool markdown);
 QString renderDescription(const QString &source, bool markdown);
 } // namespace studio

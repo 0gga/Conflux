@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Conflux.Style
 import "." as Components
@@ -34,10 +33,10 @@ PopupButton {
                 ActionButton { text: "Clear"; subtle: true; compact: true; enabled: root.values.length>0; onClicked: root.selectionRequested([]) }
             }
             Components.SearchField { id: search; visible: root.choices.length>8; Layout.fillWidth: true; placeholderText: "Search..."; leadingIcon: "search" }
-            ListView {
-                Layout.fillWidth: true; implicitHeight: Math.min(280,contentHeight); clip: true; boundsBehavior: Flickable.StopAtBounds
+            ContentListView { outsideColor: Theme.colors.card; cornerRadius: 8;
+                Layout.fillWidth: true; implicitHeight: Math.min(280,contentHeight); clip: true
                 model: root.choices.filter(function(value) {return root.formatValue(value).toLowerCase().indexOf(search.text.toLowerCase())!==-1})
-                ScrollBar.vertical: ScrollBar {}
+
                 delegate: ActionButton {
                     required property string modelData
                     objectName: "releaseFilterOption-" + modelData

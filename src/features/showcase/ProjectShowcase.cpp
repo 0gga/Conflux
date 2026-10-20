@@ -13,6 +13,7 @@ void ProjectShowcase::close() {
     m_project.clear();
     m_versions.clear();
     m_description.clear();
+    m_descriptionBlocks.clear();
     m_gallery.clear();
     m_notice.clear();
     m_filePath.clear();
@@ -90,7 +91,9 @@ void ProjectShowcase::resolve(const InstalledModIdentity &identity, const QVaria
                 if (!guard || guard->m_generation != generation)
                     return;
                 auto *self = guard.data();
-                self->m_description = renderDescription(detail.description, project.provider == "modrinth");
+                const auto description = describeContent(detail.description, project.provider == "modrinth");
+                self->m_description = description.html;
+                self->m_descriptionBlocks = description.blocks;
                 self->m_gallery = detail.images;
                 if (!detail.errors.isEmpty()) {
                     if (!self->m_notice.isEmpty())

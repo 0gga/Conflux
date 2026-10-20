@@ -903,11 +903,74 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     fail("Instance-locked active filter chip missing");
                     return;
                 }
+                session.navigation()->go({{"page", "showcase"},
+                                          {"packPath", state->managedPath},
+                                          {"project", QVariantMap{{"provider", "modrinth"},
+                                                                  {"id", "NNAgCjsB"},
+                                                                  {"type", "mod"},
+                                                                  {"title", "Entity Culling"}}},
+                                          {"showcaseTab", "description"}});
+                break;
+            }
+            case 57: {
+                if (session.showcase()->busy())
+                    return;
+                auto *banner = findVisualItem(window->contentItem(), "descriptionImage");
+                if (banner && banner->property("status").toInt() == 2)
+                    return;
+                if (!banner || banner->property("status").toInt() != 1 ||
+                    session.showcase()->descriptionBlocks().isEmpty() ||
+                    !capture("entity-culling-description")) {
+                    fail("Source description banner or content blocks missing");
+                    return;
+                }
+                auto route = session.navigation()->route();
+                route["showcaseTab"] = "gallery";
+                session.navigation()->go(route);
+                break;
+            }
+            case 58: {
+                if (session.showcase()->gallery().isEmpty() || !capture("entity-culling-gallery")) {
+                    fail("Entity Culling gallery missing");
+                    return;
+                }
+                auto *gallery = findVisualItem(window->contentItem(), "showcaseGallery");
+                if (!gallery || !QMetaObject::invokeMethod(gallery, "imageRequested", Q_ARG(int, 0))) {
+                    fail("Gallery thumbnail action missing");
+                    return;
+                }
+                break;
+            }
+            case 59: {
+                auto *viewer = window->findChild<QObject *>("galleryViewer");
+                if (!viewer || !viewer->property("activeFocus").toBool() || !capture("gallery-enlarged")) {
+                    fail("Enlarged focused gallery missing");
+                    return;
+                }
+                auto *zoom = findVisualItem(window->contentItem(), "galleryZoomIn");
+                if (!zoom || !QMetaObject::invokeMethod(zoom, "clicked")) {
+                    fail("Gallery zoom control missing");
+                    return;
+                }
+                break;
+            }
+            case 60: {
+                if (!capture("gallery-enlarged-zoom")) {
+                    fail("Gallery zoom render failed");
+                    return;
+                }
+                auto *close = findVisualItem(window->contentItem(), "galleryClose");
+                if (!close || !QMetaObject::invokeMethod(close, "clicked")) {
+                    fail("Gallery close control missing");
+                    return;
+                }
                 if (smokeRuntimeError) {
                     fail("QML runtime warning in Explore content");
                     return;
                 }
-                qInfo("PASS: channel/game/loader version filters, active discovery chips and toggle menus; "
+                qInfo("PASS: source images/formatted descriptions, enlarged gallery zoom, reserved scroll "
+                      "gutters, stable hover; channel/game/loader version filters, active discovery chips "
+                      "and toggle menus; "
                       "candy-red theme, live appearance preview, independent UI/content/filter sizing, "
                       "compact cards and scaled menus; compact contextual top bar, scrollable versions and "
                       "rounded tooltips; provider "

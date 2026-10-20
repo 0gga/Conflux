@@ -279,6 +279,10 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
             case 11:
                 if (auto *popup = window->findChild<QObject *>("packWarnings");
                     popup && popup->property("opened").toBool()) {
+                    if (!popup->property("modal").toBool() || !popup->property("activeFocus").toBool()) {
+                        fail("Warning popup did not take exclusive focus");
+                        return;
+                    }
                     auto *item = popup->property("contentItem").value<QQuickItem *>();
                     const auto point = item ? item->mapToScene(QPointF{}) : QPointF{-1, -1};
                     if (!item || point.x() < 0 || point.y() < 0 ||
@@ -857,11 +861,54 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     fail("Theme status colors render failed");
                     return;
                 }
+                session.navigation()->go({{"page", "showcase"},
+                                          {"packPath", state->managedPath},
+                                          {"modPath", state->selectedMod},
+                                          {"showcaseTab", "versions"}});
+                break;
+            case 54: {
+                if (session.showcase()->busy())
+                    return;
+                auto *channel = findVisualItem(window->contentItem(), "versionChannelFilter");
+                if (!channel || session.releaseFilters()->rows().isEmpty() ||
+                    !session.releaseFilters()->filters().value("loaders").toStringList().contains("fabric") ||
+                    session.releaseFilters()->options().value("versions").toStringList().size() < 2 ||
+                    !QMetaObject::invokeMethod(channel, "clicked")) {
+                    fail("Version channel filter or unfiltered release options missing");
+                    return;
+                }
+                break;
+            }
+            case 55: {
+                if (!capture("showcase-version-filters")) {
+                    fail("Release filters render failed");
+                    return;
+                }
+                auto *channel = findVisualItem(window->contentItem(), "versionChannelFilter");
+                auto *popup = channel->property("popup").value<QObject *>();
+                QMetaObject::invokeMethod(channel, "clicked");
+                if (!popup || popup->property("visible").toBool()) {
+                    fail("Filter menu did not toggle closed");
+                    return;
+                }
+                session.navigation()->go({{"page", "discover"}, {"packPath", state->managedPath}});
+                session.catalogue()->configure({{"type", "mod"}, {"unlocked", false}});
+                break;
+            }
+            case 56: {
+                if (session.catalogue()->busy())
+                    return;
+                auto *chip = findVisualItem(window->contentItem(), "activeGameFilter");
+                if (!chip || !chip->property("locked").toBool() || !capture("browse-active-filter-chips")) {
+                    fail("Instance-locked active filter chip missing");
+                    return;
+                }
                 if (smokeRuntimeError) {
                     fail("QML runtime warning in Explore content");
                     return;
                 }
-                qInfo("PASS: candy-red theme, live appearance preview, independent UI/content/filter sizing, "
+                qInfo("PASS: channel/game/loader version filters, active discovery chips and toggle menus; "
+                      "candy-red theme, live appearance preview, independent UI/content/filter sizing, "
                       "compact cards and scaled menus; compact contextual top bar, scrollable versions and "
                       "rounded tooltips; provider "
                       "pagination and page/scroll restoration, right filters, stop-at-bounds "
@@ -874,6 +921,7 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                 timer->stop();
                 application.exit(0);
                 return;
+            }
             }
             ++state->phase;
         });

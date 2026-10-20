@@ -163,7 +163,7 @@ ApplicationWindow {
                     onShowcaseRequested: function(path) { window.session.navigation.go({page:"showcase",packPath:window.app.activePack.path,modPath:path}) }
                 }
                 SettingsPage { app: window.app; warnings: window.session.warnings; browsePreferences: window.session.browsePreferences; tab: window.session.navigation.route.settingsTab || "appearance"; onTabRequested: function(key) { window.session.navigation.go({page:"settings",settingsTab:key}) } }
-                ShowcasePage { app: window.app; browse: window.session.browse; showcase: window.session.showcase; contentController: window.session.content; tab: window.session.navigation.route.showcaseTab || "description"; onTabRequested: function(key) { const route = Object.assign({},window.session.navigation.route); route.showcaseTab = key; window.session.navigation.go(route) } }
+                ShowcasePage { app: window.app; browse: window.session.browse; showcase: window.session.showcase; releaseFilters: window.session.releaseFilters; contentController: window.session.content; tab: window.session.navigation.route.showcaseTab || "description"; onTabRequested: function(key) { const route = Object.assign({},window.session.navigation.route); route.showcaseTab = key; window.session.navigation.go(route) } }
             }
         }
     }
@@ -175,7 +175,7 @@ ApplicationWindow {
         Text { id: noticeLabel; anchors.left: parent.left; anchors.right: dismiss.left; anchors.margins: 18; anchors.verticalCenter: parent.verticalCenter; text: window.app.notice; color: Theme.colors.text; font.pixelSize: 13; wrapMode: Text.WordWrap }
         ActionButton { id: dismiss; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Dismiss"; subtle: true; onClicked: window.app.clearNotice() }
     }
-    Dialog {
+    FocusDialog {
         id: unsaved; objectName: "unsavedConfigDialog"; modal: true; anchors.centerIn: parent; width: 480; padding: 24; title: "Unsaved config changes"
         closePolicy: Popup.NoAutoClose
         background: Rectangle { radius: 18; color: Theme.colors.card; border.color: Theme.colors.border }
@@ -190,7 +190,7 @@ ApplicationWindow {
             }
         }
     }
-    Dialog {
+    FocusDialog {
         id: newPack
         modal: true; anchors.centerIn: parent; width: 470; padding: 28
         title: "Create a modpack"

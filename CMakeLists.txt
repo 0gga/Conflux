@@ -75,6 +75,7 @@ target_sources(conflux_desktop PRIVATE
     src/platform/ConfigOwnershipStore.h src/platform/ConfigOwnershipStore.cpp
     src/features/showcase/ProjectShowcaseSource.h
     src/features/showcase/ProjectShowcase.h src/features/showcase/ProjectShowcase.cpp
+    src/features/showcase/ReleaseFilters.h src/features/showcase/ReleaseFilters.cpp
     src/platform/InstalledModIdentity.h src/platform/InstalledModIdentity.cpp
     src/platform/CatalogueShowcaseSource.h src/platform/CatalogueShowcaseSource.cpp)
 target_include_directories(conflux_desktop PUBLIC src)
@@ -104,7 +105,9 @@ qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     qml/components/IconPaths.js
     qml/components/BrandBadge.qml qml/components/ProjectCard.qml
     qml/components/CompatibilityBadges.qml qml/components/BoundedScrollView.qml
-    qml/components/RoundedToolTip.qml
+    qml/components/FocusPopup.qml qml/components/FocusDialog.qml
+    qml/components/RoundedToolTip.qml qml/components/PopupButton.qml qml/components/ChoiceFilter.qml qml/components/FilterChip.qml
+    qml/explore/ActiveBrowseFilters.qml
     qml/components/ContentIcon.qml
     qml/components/SearchField.qml
     qml/components/SelectBox.qml

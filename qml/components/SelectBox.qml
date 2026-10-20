@@ -23,7 +23,7 @@ ComboBox {
         background: Rectangle { radius: 8; color: option.highlighted ? Theme.colors.selection : option.index === control.currentIndex ? Theme.colors.input : "transparent" }
         Icon { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; name: "check"; size: 15; color: Theme.colors.accent; visible: option.index === control.currentIndex }
     }
-    popup: Popup {
+    popup: FocusPopup {
         y: control.height + 6; width: control.width; padding: 6; implicitHeight: Math.min(list.contentHeight + 12, 280)
         background: Rectangle { radius: 12; color: Theme.colors.card; border.color: Theme.colors.border }
         contentItem: ListView { boundsBehavior: Flickable.StopAtBounds; id: list; clip: true; implicitHeight: contentHeight; spacing: 2; model: control.popup.visible ? control.delegateModel : null; currentIndex: control.highlightedIndex; ScrollIndicator.vertical: ScrollIndicator {} }

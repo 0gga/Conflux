@@ -44,7 +44,7 @@ Item {
         }
         Text { visible: root.rows.length === 0; text: root.category === "editable" ? "No matching editable configs. Use Needs review to identify supported files." : "No matching config files."; color: Theme.colors.muted; font.pixelSize: 13 }
     }
-    Dialog {
+    FocusDialog {
         id: identify
         property string path: ""
         modal: true; anchors.centerIn: parent; width: 480; padding: 24

@@ -52,6 +52,20 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
     };
     connect(&m_browse, &BrowseInstalls::changed, this, updateBrowseContext);
     connect(&m_browsePreferences, &BrowsePreferences::changed, this, updateBrowseContext);
+    auto updateReleaseFilters = [this] {
+        const auto pack = m_browse.pack();
+        // Wait for resolved project type before seeding loader defaults.
+        const auto game =
+            m_showcase.project().contains("type") ? pack.value("minecraft").toString() : QString{};
+        const auto loaders = m_showcase.project().value("type") == "mod"
+                                 ? m_browse.versionLoaders().split('|', Qt::SkipEmptyParts)
+                                 : QStringList{};
+        m_releaseFilters.setContext(
+            m_navigation.route().value("packPath").toString() + '|' + m_showcase.requestKey(),
+            m_showcase.versions(), game.isEmpty() ? QStringList{} : QStringList{game}, loaders);
+    };
+    connect(&m_showcase, &ProjectShowcase::changed, this, updateReleaseFilters);
+    connect(&m_browse, &BrowseInstalls::changed, this, updateReleaseFilters);
     m_catalogue.setKey(qgetenv("CURSEFORGE_API_KEY"));
     updateBrowseContext();
     m_navigation.setLeaveGuard([this] { return !m_editor.dirty(); });

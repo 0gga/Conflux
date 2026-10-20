@@ -8,6 +8,7 @@
 #include <QImage>
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QQmlProperty>
 #include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
@@ -30,6 +31,134 @@ class ContentInteractionTests : public QObject {
     void initTestCase() {
         QQuickStyle::setStyle("Basic");
         qputenv("CONFLUX_STYLE_SETTINGS_DIR", styleStorage.path().toUtf8());
+    }
+    void focusedPopupBlocksBackgroundScrollAndTyping() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(600, 400);
+        QQmlComponent component(&engine);
+        component.setData(
+            R"(
+import QtQuick
+import QtQuick.Controls
+import "components"
+Item {
+    width: 600; height: 400
+    Flickable {
+        objectName: "backgroundScroller"; anchors.fill: parent; contentHeight: 1200
+        boundsBehavior: Flickable.StopAtBounds
+        TextField { objectName: "backgroundInput"; width: 200; height: 40 }
+        ScrollBar.vertical: ScrollBar {}
+    }
+    FocusPopup {
+        objectName: "focusTestPopup"; x: 180; y: 80; width: 240; height: 180
+        contentItem: TextField { objectName: "popupInput"; focus: true }
+    }
+})",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/PopupFocusFixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> fixture(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY2(fixture, qPrintable(component.errorString()));
+        fixture->setParentItem(window.contentItem());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *background = findItem(window.contentItem(), "backgroundScroller");
+        auto wheel = [&window] {
+            const QPointF point(40, 280);
+            QWheelEvent event(point, window.mapToGlobal(point.toPoint()), QPoint{}, QPoint(0, -120),
+                              Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+            QCoreApplication::sendEvent(&window, &event);
+        };
+        QVERIFY(background);
+        wheel();
+        QTRY_VERIFY(background->property("contentY").toReal() > 0);
+        QTRY_VERIFY(!background->property("moving").toBool());
+        const auto offset = background->property("contentY").toReal();
+        auto *popup = fixture->findChild<QObject *>("focusTestPopup");
+        QVERIFY(popup);
+        QVERIFY(QMetaObject::invokeMethod(popup, "open"));
+        QTRY_VERIFY(popup->property("activeFocus").toBool());
+        QVERIFY(popup->property("modal").toBool());
+        wheel();
+        QTest::qWait(100);
+        QCOMPARE(background->property("contentY").toReal(), offset);
+        for (const char key : QByteArray("inside"))
+            QTest::keyClick(&window, key);
+        auto *input = findItem(window.contentItem(), "popupInput");
+        QVERIFY(input);
+        QCOMPARE(input->property("text").toString(), QString("inside"));
+        auto *behind = fixture->findChild<QObject *>("backgroundInput");
+        QVERIFY(behind);
+        QVERIFY(behind->property("text").toString().isEmpty());
+        QTest::keyClick(&window, Qt::Key_Escape);
+        QTRY_VERIFY(!popup->property("visible").toBool());
+    }
+    void disabledButtonsKeepIdleColorsUnderPointer() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(400, 150);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/components/ActionButton.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        for (const auto &mode : QStringList{"primary", "selected", "subtle", "accented"}) {
+            std::unique_ptr<QQuickItem> button(
+                qobject_cast<QQuickItem *>(component.createWithInitialProperties(
+                    {{"text", "Installed"}, {"enabled", false}, {mode, true}})));
+            QVERIFY(button);
+            button->setParentItem(window.contentItem());
+            button->setWidth(140);
+            button->setHeight(40);
+            QTest::mouseMove(&window, QPoint(300, 100));
+            QTest::qWait(120);
+            auto *background = button->property("background").value<QQuickItem *>();
+            QVERIFY(background);
+            const auto color = background->property("color");
+            const auto foreground = button->property("foreground");
+            QTest::mouseMove(&window, QPoint(40, 20));
+            QTest::qWait(120);
+            QCOMPARE(background->property("color"), color);
+            QCOMPARE(button->property("foreground"), foreground);
+            QVERIFY(!button->property("interactiveHover").toBool());
+            button->setEnabled(true);
+            QTest::mouseMove(&window, QPoint(300, 100));
+            QTest::mouseMove(&window, QPoint(40, 20));
+            QTRY_VERIFY(button->property("interactiveHover").toBool());
+            button->setEnabled(false);
+            QTest::qWait(120);
+            QCOMPARE(background->property("color"), color);
+            QCOMPARE(button->property("foreground"), foreground);
+        }
+    }
+    void releaseFilterFormatsAndEmitsSelectedChannels() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(600, 400);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/components/ChoiceFilter.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> filter(qobject_cast<QQuickItem *>(
+            component.createWithInitialProperties({{"label", "Channel"},
+                                                   {"choices", QStringList{"release", "beta", "alpha"}},
+                                                   {"values", QStringList{"release"}}})));
+        QVERIFY2(filter, qPrintable(component.errorString()));
+        filter->setParentItem(window.contentItem());
+        QCOMPARE(filter->property("text").toString(), QString("Channel: Release"));
+        QSignalSpy selection(filter.get(), SIGNAL(selectionRequested(QVariant)));
+        QVERIFY(selection.isValid());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          QPoint(filter->width() / 2, filter->height() / 2));
+        QTRY_VERIFY(findItem(window.contentItem(), "releaseFilterOption-beta"));
+        auto *beta = findItem(window.contentItem(), "releaseFilterOption-beta");
+        QCOMPARE(beta->property("text").toString(), QString("Beta"));
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          beta->mapToScene(QPointF(beta->width() / 2, beta->height() / 2)).toPoint());
+        QTRY_COMPARE(selection.count(), 1);
+        const auto selected = selection.first().first().value<QJSValue>().toVariant().toStringList();
+        QCOMPARE(selected, (QStringList{"release", "beta"}));
     }
     void compactCardsKeepEqualArtworkInsetsAndFilteredOrderedBadges() {
         QQmlEngine engine;
@@ -126,6 +255,15 @@ class ContentInteractionTests : public QObject {
         QVERIFY(more);
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
                           more->mapToScene(QPointF(more->width() / 2, more->height() / 2)).toPoint());
+        auto *popup = more->property("popup").value<QObject *>();
+        QVERIFY(popup);
+        QTRY_VERIFY(popup->property("opened").toBool());
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          more->mapToScene(QPointF(more->width() / 2, more->height() / 2)).toPoint());
+        QTRY_VERIFY(!popup->property("visible").toBool());
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          more->mapToScene(QPointF(more->width() / 2, more->height() / 2)).toPoint());
+        QTRY_VERIFY(popup->property("opened").toBool());
         QTRY_VERIFY(findItem(window.contentItem(), "browseHideContent"));
         auto *hide = findItem(window.contentItem(), "browseHideContent");
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
@@ -229,6 +367,10 @@ class ContentInteractionTests : public QObject {
         QSignalSpy showcase(panel, SIGNAL(showcaseRequested(QString)));
         auto *row = findItem(window.contentItem(), "contentRow");
         QVERIFY(row);
+        QVERIFY(row->property("radius").toReal() > 0);
+        auto *table = findItem(window.contentItem(), "contentTable");
+        QVERIFY(table);
+        QCOMPARE(QQmlProperty(table, "border.width").read().toInt(), 0);
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
                           row->mapToScene(QPointF(150, 24)).toPoint());
         QTRY_COMPARE(showcase.count(), 1);
@@ -245,6 +387,15 @@ class ContentInteractionTests : public QObject {
         QTRY_VERIFY(more->mapToScene(QPointF(more->width(), 0)).x() <= window.width());
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
                           more->mapToScene(QPointF(more->width() / 2, more->height() / 2)).toPoint());
+        auto *popup = more->property("popup").value<QObject *>();
+        QVERIFY(popup);
+        QTRY_VERIFY(popup->property("opened").toBool());
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          more->mapToScene(QPointF(more->width() / 2, more->height() / 2)).toPoint());
+        QTRY_VERIFY(!popup->property("visible").toBool());
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          more->mapToScene(QPointF(more->width() / 2, more->height() / 2)).toPoint());
+        QTRY_VERIFY(popup->property("opened").toBool());
         QTRY_VERIFY(findItem(window.contentItem(), "copyContentLink"));
         auto *copy = findItem(window.contentItem(), "copyContentLink");
         QTRY_VERIFY(copy->mapToScene(QPointF(copy->width(), 0)).x() <= window.width());

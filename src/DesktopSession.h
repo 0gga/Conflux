@@ -10,6 +10,7 @@
 #include "features/preferences/BrowsePreferences.h"
 #include "features/preferences/WarningPreferences.h"
 #include "features/showcase/ProjectShowcase.h"
+#include "features/showcase/ReleaseFilters.h"
 #include "features/workspace/PackFileBrowser.h"
 #include "features/workspace/PackLogViewer.h"
 #include "features/workspace/PackWorkspace.h"
@@ -32,6 +33,7 @@ class DesktopSession final : public QObject {
     Q_PROPERTY(studio::ConfigLibrary *configs READ configs CONSTANT)
     Q_PROPERTY(studio::WorldLaunch *launch READ launch CONSTANT)
     Q_PROPERTY(studio::ProjectShowcase *showcase READ showcase CONSTANT)
+    Q_PROPERTY(studio::ReleaseFilters *releaseFilters READ releaseFilters CONSTANT)
     Q_PROPERTY(studio::ContentActions *content READ content CONSTANT)
     Q_PROPERTY(studio::BrowseInstalls *browse READ browse CONSTANT)
     Q_PROPERTY(studio::BrowseCatalogue *catalogue READ catalogue CONSTANT)
@@ -67,6 +69,9 @@ class DesktopSession final : public QObject {
     }
     ProjectShowcase *showcase() {
         return &m_showcase;
+    }
+    ReleaseFilters *releaseFilters() {
+        return &m_releaseFilters;
     }
     ContentActions *content() {
         return &m_content;
@@ -108,6 +113,7 @@ class DesktopSession final : public QObject {
     ConfigLibrary m_configs;
     WorldLaunch m_launch;
     ProjectShowcase m_showcase;
+    ReleaseFilters m_releaseFilters;
     ContentActions m_content;
     BrowseInstalls m_browse;
     BrowsePreferences m_browsePreferences;

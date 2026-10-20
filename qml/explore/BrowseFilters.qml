@@ -31,7 +31,6 @@ BoundedScrollView {
             ToggleSwitch { checked: !!root.catalogue.filters.hideInstalled; Accessible.name: "Hide installed content"; onToggled: root.catalogue.configure({hideInstalled:checked}) }
         }
         ActionButton { Layout.fillWidth: true; text: root.catalogue.filters.hidden ? "Showing hidden content" : "Show hidden content"; iconName: "hide"; selected: !!root.catalogue.filters.hidden; subtle: true; compact: true; onClicked: root.catalogue.configure({hidden:!root.catalogue.filters.hidden}) }
-        Text { visible: root.connectorAvailable; Layout.fillWidth: true; text: "Connector detected"; color: Theme.colors.accent; font.pixelSize: 11 }
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.border }
         Text { text: "Game versions"; color: Theme.colors.text; font.pixelSize: 14; font.weight: Font.DemiBold }
         Item {
@@ -41,7 +40,6 @@ BoundedScrollView {
                 Repeater { model: root.catalogue.filters.versions || []; delegate: ActionButton { required property string modelData; text: modelData; compact: true; pill: true; selected: true; enabled: !root.hasInstance || !!root.catalogue.filters.unlocked; hint: "Remove version"; onClicked: root.toggle("versions",modelData) } }
             }
         }
-        Text { visible: root.hasInstance && !root.catalogue.filters.unlocked; Layout.fillWidth: true; text: "Game version follows this instance. Unlock to browse other versions; the instance stays unchanged. Loader filters are always editable."; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap }
         ActionButton { visible: root.hasInstance; text: root.catalogue.filters.unlocked ? "Use instance version" : "Unlock game version"; iconName: "lock"; compact: true; onClicked: root.catalogue.configure({unlocked:!root.catalogue.filters.unlocked}) }
         SearchField { id: versionsSearch; visible: !root.hasInstance || !!root.catalogue.filters.unlocked; Layout.fillWidth: true; placeholderText: "Find versions..."; leadingIcon: "search" }
         Rectangle {
@@ -78,10 +76,8 @@ BoundedScrollView {
                 BrandBadge { brand: parent.modelData }
             }
         }
-        Text { text: "Versions match any selection; loaders match any selection. The two groups combine."; Layout.fillWidth: true; color: Theme.colors.muted; font.pixelSize: 10; wrapMode: Text.WordWrap }
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.border }
         Text { text: "Tags"; color: Theme.colors.text; font.pixelSize: 14; font.weight: Font.DemiBold }
-        Text { Layout.fillWidth: true; text: "Tags use each platform's categories."; color: Theme.colors.muted; font.pixelSize: 10; wrapMode: Text.WordWrap }
         SearchField { id: tagSearch; Layout.fillWidth: true; placeholderText: "Find tags..."; leadingIcon: "search" }
         Repeater {
             model: (root.catalogue.options.tags || []).concat(root.catalogue.options.curseforgeTags || []).filter(function(tag) { return (root.catalogue.filters.source === "merged" || tag.provider === root.catalogue.filters.source) && (tag.type===root.catalogue.filters.type || (root.catalogue.filters.type==="datapack" && tag.type==="mod")) && tag.title.indexOf(tagSearch.text.toLowerCase())!==-1 })

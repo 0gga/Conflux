@@ -414,6 +414,11 @@ void CatalogueClient::loadProject(const Project &project, const QString &game, c
                         r.published = row.value(cf ? "fileDate" : "date_published").toString();
                         r.gameVersions = strings(row.value(cf ? "gameVersions" : "game_versions").toArray());
                         if (cf) {
+                            const auto channel = row.value("releaseType").toInt();
+                            r.channel = channel == 1   ? "release"
+                                        : channel == 2 ? "beta"
+                                        : channel == 3 ? "alpha"
+                                                       : "unknown";
                             // CF gameVersions contains loader labels too; retain only Minecraft version
                             // strings.
                             QStringList games;

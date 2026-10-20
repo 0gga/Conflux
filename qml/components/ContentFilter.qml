@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Conflux.Style
-Popup {
+FocusPopup {
     id: root
     required property var controller
     property string category: ""

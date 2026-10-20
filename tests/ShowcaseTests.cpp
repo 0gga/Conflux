@@ -1,5 +1,6 @@
 #include "features/showcase/DescriptionRenderer.h"
 #include "features/showcase/ProjectShowcase.h"
+#include "features/showcase/ReleaseFilters.h"
 #include "platform/InstalledModIdentity.h"
 #include "platform/WorldLaunchAdapters.h"
 #include <QCryptographicHash>
@@ -21,10 +22,13 @@ class ShowcaseFixture final : public IProjectShowcaseSource {
   public:
     QList<ResolveCallback> pending;
     DetailCallback detail;
+    QString requestedGame, requestedLoader;
     void resolve(const InstalledModIdentity &, ResolveCallback callback) override {
         pending << std::move(callback);
     }
-    void load(const Project &, const QString &, const QString &, DetailCallback callback) override {
+    void load(const Project &, const QString &game, const QString &loader, DetailCallback callback) override {
+        requestedGame = game;
+        requestedLoader = loader;
         detail = std::move(callback);
     }
     void setCurseforgeKey(const QByteArray &) override {}
@@ -50,6 +54,68 @@ class ShowcaseTests : public QObject {
         QCOMPARE(file.write(data), data.size());
     }
   private slots:
+    void modShowcasesLoadAllCompatibilityOptions() {
+        auto source = std::make_shared<ShowcaseFixture>();
+        ProjectShowcase showcase(source, std::make_shared<IdentityFixture>());
+        showcase.openProject({{"minecraft", "1.21.1"}, {"loader", "neoforge"}},
+                             {{"provider", "modrinth"}, {"id", "project"}, {"type", "mod"}});
+        QCOMPARE(source->pending.size(), 1);
+        Project project;
+        project.id = "project";
+        project.provider = "modrinth";
+        project.type = "mod";
+        source->pending.first()(project, {});
+        QVERIFY(source->detail);
+        QVERIFY(source->requestedGame.isEmpty());
+        QVERIFY(source->requestedLoader.isEmpty());
+    }
+    void releaseFiltersKeepVariantsAndCombineOrSelections() {
+        auto release = [](QString id, QString channel, QString game, QString loader, QString provider) {
+            return QVariantMap{{"id", id},
+                               {"channel", channel},
+                               {"gameVersions", QStringList{game}},
+                               {"loaders", QStringList{loader}},
+                               {"provider", provider},
+                               {"sha1", id + "-hash"}};
+        };
+        const auto a = release("a", "release", "1.21.1", "neoforge", "modrinth");
+        const auto b = release("b", "beta", "1.21.1", "fabric", "curseforge");
+        const auto c = release("c", "alpha", "1.20.1", "forge", "modrinth");
+        const QVariantList groups{QVariantMap{{"label", "1.0"}, {"variants", QVariantList{a, b}}},
+                                  QVariantMap{{"label", "0.9"}, {"variants", QVariantList{c}}}};
+        ReleaseFilters filters;
+        filters.setContext("pack/project", groups, {"1.21.1"}, {"neoforge"});
+        QCOMPARE(filters.rows().size(), 1);
+        QCOMPARE(filters.rows().first().toMap().value("variants").toList(), QVariantList{a});
+        QCOMPARE(filters.options().value("versions").toStringList(), (QStringList{"1.21.1", "1.20.1"}));
+        filters.configure({{"versions", QStringList{"1.21.1", "1.20.1"}},
+                           {"loaders", QStringList{"fabric", "forge"}},
+                           {"channels", QStringList{"beta", "alpha"}}});
+        QCOMPARE(filters.rows().size(), 2);
+        QCOMPARE(filters.rows().first().toMap().value("variants").toList(), QVariantList{b});
+        filters.configure({{"source", "modrinth"}});
+        QCOMPARE(filters.rows().size(), 1);
+        QCOMPARE(filters.rows().first().toMap().value("variants").toList(), QVariantList{c});
+        filters.clear();
+        QCOMPARE(filters.rows(), groups);
+        filters.configure({{"channels", QStringList{"release", "invalid"}}, {"source", "curseforge"}});
+        QVERIFY(filters.rows().isEmpty());
+        QCOMPARE(filters.filters().value("channels").toStringList(), QStringList{"release"});
+    }
+    void releaseFilterDefaultsSeedOnceAndResetForNewContext() {
+        ReleaseFilters filters;
+        filters.setContext("pending", {}, {}, {});
+        filters.setContext("pending", {}, {"1.21.1"}, {"fabric"});
+        QCOMPARE(filters.filters().value("versions").toStringList(), QStringList{"1.21.1"});
+        filters.configure({{"versions", QStringList{"1.20.1"}}});
+        filters.setContext("pending", {QVariantMap{{"label", "refresh"}}}, {"1.21.1"}, {"fabric"});
+        QCOMPARE(filters.filters().value("versions").toStringList(), QStringList{"1.20.1"});
+        filters.clear();
+        filters.setContext("pending", {}, {"1.21.1"}, {"fabric"});
+        QVERIFY(filters.filters().value("versions").toStringList().isEmpty());
+        filters.setContext("next", {}, {"1.20.1"}, {"forge"});
+        QCOMPARE(filters.filters().value("loaders").toStringList(), QStringList{"forge"});
+    }
     void mixedHtmlImageBannersDoNotEraseMarkdownText() {
         const auto html = renderDescription(
             "![Header](https://example.invalid/banner.png)\n\n<p align=\"center\"><a "

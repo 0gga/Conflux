@@ -12,13 +12,9 @@ Item {
     required property var showcase
     required property var contentController
     property string tab: "description"
-    property string versionSource: "all"
+    required property var releaseFilters
     signal tabRequested(string key)
-    readonly property var versions: showcase.versions.map(function(group) {
-        return {label:group.label, variants:group.variants.filter(function(release) {
-            return root.versionSource === "all" || (release.sources || [release.provider]).indexOf(root.versionSource) !== -1
-        })}
-    }).filter(function(group) { return group.variants.length > 0 })
+    readonly property var versions: releaseFilters.rows
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 28; spacing: 18
         RowLayout {
@@ -34,8 +30,6 @@ Item {
             ActionButton { text: "View project page"; subtle: true; visible: !!root.showcase.project.url; onClicked: root.app.openWeb(root.showcase.project.url) }
         }
         SectionTabs { entries: [{key:"description",label:"Description",icon:"info"},{key:"gallery",label:"Gallery",icon:"image"},{key:"versions",label:"Versions",icon:"versions"}]; current: root.tab; onSelected: function(key) { root.tabRequested(key) } }
-        Text { Layout.fillWidth: true; text: root.browse.ready ? "For " + root.browse.pack.name : "Choose an instance in Explore content to install."; color: Theme.colors.muted; font.pixelSize: 12; textFormat: Text.PlainText }
-        Text { Layout.fillWidth: true; visible: root.showcase.project.type === "datapack"; text: "Data Packs are managed per instance. ZIP variants require a global data-pack loader in Minecraft."; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap }
         Text { Layout.fillWidth: true; visible: root.showcase.notice.length > 0; text: root.showcase.notice; color: Theme.colors.warning; font.pixelSize: 12; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
         Text { Layout.fillWidth: true; visible: root.browse.notice.length > 0; text: root.browse.notice; color: Theme.colors.warning; font.pixelSize: 12; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
         Text { Layout.fillWidth: true; visible: root.contentController.notice.length > 0; text: root.contentController.notice; color: Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
@@ -67,11 +61,15 @@ Item {
             }
             ColumnLayout {
                 spacing: 14
-                RowLayout {
-                    Layout.fillWidth: true
-                    Text { Layout.fillWidth: true; text: root.versions.length + " versions · matching this pack's Minecraft version and loader"; color: Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.WordWrap }
-                    SelectBox { model: ["All sources", "Modrinth", "CurseForge"]; onActivated: root.versionSource = ["all","modrinth","curseforge"][currentIndex] }
+                Flow {
+                    Layout.fillWidth: true; spacing: 6
+                    ChoiceFilter { objectName: "versionChannelFilter"; label: "Channel"; choices: root.releaseFilters.options.channels || []; values: root.releaseFilters.filters.channels; onSelectionRequested: function(selection) { root.releaseFilters.configure({channels:selection}) } }
+                    ChoiceFilter { label: "Game version"; choices: root.releaseFilters.options.versions || []; values: root.releaseFilters.filters.versions; onSelectionRequested: function(selection) { root.releaseFilters.configure({versions:selection}) } }
+                    ChoiceFilter { visible: root.showcase.project.type === "mod"; label: "Loader"; loaderNames: true; choices: root.releaseFilters.options.loaders || []; values: root.releaseFilters.filters.loaders; onSelectionRequested: function(selection) { root.releaseFilters.configure({loaders:selection}) } }
+                    SelectBox { implicitHeight: 36; model: ["All sources", "Modrinth", "CurseForge"]; currentIndex: ["all","modrinth","curseforge"].indexOf(root.releaseFilters.filters.source); onActivated: root.releaseFilters.configure({source:["all","modrinth","curseforge"][currentIndex]}) }
+                    ActionButton { text: "Clear"; subtle: true; compact: true; onClicked: root.releaseFilters.clear() }
                 }
+                Text { visible: !root.showcase.busy && root.versions.length === 0; text: "No matching versions"; color: Theme.colors.muted; font.pixelSize: 13 }
                 ListView { boundsBehavior: Flickable.StopAtBounds;
                     id: versionList; Layout.fillWidth: true; Layout.fillHeight: true; spacing: 10; clip: true; model: root.versions; ScrollBar.vertical: ScrollBar {}
                     delegate: Rectangle {
@@ -86,12 +84,12 @@ Item {
                             ColumnLayout {
                                 Layout.fillWidth: true; spacing: 8
                                 Text { Layout.fillWidth: true; text: version.modelData.label; color: Theme.colors.text; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
-                                CompatibilityBadges { minecraft: root.browse.ready ? (root.browse.pack.minecraft || "") : ((version.release.gameVersions || [])[0] || ""); loader: (version.release.loaders || []).indexOf(root.browse.pack.loader) !== -1 ? root.browse.pack.loader : ((version.release.loaders || []).filter(function(loader) { return loader !== "minecraft" && loader !== "datapack" })[0] || "") }
-                                Text { Layout.fillWidth: true; text: version.release.published ? "Published " + version.release.published : ""; color: Theme.colors.muted; font.pixelSize: 11; elide: Text.ElideRight }
+                                CompatibilityBadges { minecraft: (version.release.gameVersions || []).filter(function(value) { return root.releaseFilters.filters.versions.indexOf(value)!==-1 })[0] || (version.release.gameVersions || [])[0] || ""; loader: (version.release.loaders || []).filter(function(value) { return root.releaseFilters.filters.loaders.indexOf(value)!==-1 })[0] || (version.release.loaders || []).filter(function(value) { return value !== "minecraft" && value !== "datapack" })[0] || "" }
+                                Text { Layout.fillWidth: true; text: (version.release.channel || "release").charAt(0).toUpperCase() + (version.release.channel || "release").slice(1) + (version.release.published ? " · " + version.release.published : ""); color: Theme.colors.muted; font.pixelSize: 11; elide: Text.ElideRight }
                                 SelectBox { visible: version.modelData.variants.length > 1; Layout.fillWidth: true; model: version.modelData.variants.map(function(row) { return (row.provider === "modrinth" ? "Modrinth" : "CurseForge") + " · " + row.filename }); onActivated: version.variantIndex = currentIndex }
                             }
                             SourceBadge { source: version.release.provider || "modrinth"; iconOnly: true }
-                            Text { visible: version.groupInstalled; text: "Installed"; color: Theme.colors.accent; font.pixelSize: 12 }
+                            Text { visible: version.groupInstalled && !version.installed; text: "Installed"; color: Theme.colors.accent; font.pixelSize: 12 }
                             ActionButton { text: version.installed ? "Installed" : "Install version"; iconName: version.installed ? "check" : "plus"; primary: !version.installed; visible: version.release.provider === "modrinth"; enabled: root.browse.ready && !root.browse.busy && !root.app.repositoryBusy && !version.installed; onClicked: root.browse.installVersion(version.release,root.showcase.project) }
                             ActionButton { text: "View release"; onClicked: root.app.openWeb(version.release.pageUrl) }
                         }

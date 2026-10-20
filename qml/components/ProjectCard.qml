@@ -110,14 +110,15 @@ Rectangle {
         }
         Text { Layout.alignment: Qt.AlignRight; text: root.project.updated ? "Updated " + root.project.updated.slice(0,10) : ""; color: Theme.colors.muted; font.pixelSize: 10 * root.contentScale }
     }
-    ActionButton {
+    PopupButton {
+        popup: menu
         id: more; objectName: "browseMoreButton"
         anchors.right: parent.right; anchors.rightMargin: root.inset; anchors.top: parent.top; anchors.topMargin: root.inset
         width: 28 * root.contentScale; implicitWidth: width; implicitHeight: 32 * root.contentScale
-        iconName: "more"; compact: true; subtle: true; hint: "Content actions"; onClicked: menu.open()
+        iconName: "more"; compact: true; subtle: true; hint: "Content actions"
     }
-    Popup {
-        id: menu; parent: more; x: more.width-width; y: more.height+4; width: 185; padding: 6
+    FocusPopup {
+        id: menu; objectName: "browseContentMenu"; parent: more; x: more.width-width; y: more.height+4; width: 185; padding: 6
         background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: 12 }
         contentItem: ColumnLayout {
             spacing: 3

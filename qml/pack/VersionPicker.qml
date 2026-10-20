@@ -4,7 +4,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Conflux.Style
 import "../components"
-Dialog {
+FocusDialog {
     id: root
     required property var controller
     property string minecraft: ""
@@ -16,7 +16,6 @@ Dialog {
     header: Text { text: "Switch version · " + (root.controller.versionTarget.title || "Mod"); color: Theme.colors.text; font.pixelSize: 21; font.weight: Font.DemiBold; padding: 24; bottomPadding: 8; elide: Text.ElideRight }
     ColumnLayout {
         width: parent.width; height: parent.height; spacing: 14
-        Text { Layout.fillWidth: true; text: "Compatible versions for this pack. Required dependencies are resolved before installing."; color: Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.WordWrap }
         Text { visible: root.controller.versionError.length > 0; Layout.fillWidth: true; text: root.controller.versionError; color: Theme.colors.warning; font.pixelSize: 12; wrapMode: Text.WordWrap }
         BusyIndicator { visible: root.controller.versionsBusy; running: visible; Layout.alignment: Qt.AlignHCenter }
         ListView { boundsBehavior: Flickable.StopAtBounds;

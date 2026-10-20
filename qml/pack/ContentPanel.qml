@@ -52,7 +52,7 @@ Item {
             ActionButton { visible: root.controller.busy; enabled: root.controller.cancellable; text: "Cancel"; compact: true; subtle: true; onClicked: root.controller.cancel() }
         }
         Rectangle {
-            Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.fillHeight: true; color: Theme.colors.panel; radius: 16; border.color: Theme.colors.border; clip: true
+            Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.fillHeight: true; color: Theme.colors.panel; radius: 16; border.width: 0; clip: true; objectName: "contentTable"
             ColumnLayout {
                 anchors.fill: parent; spacing: 0
                 Rectangle {
@@ -74,7 +74,7 @@ Item {
                             id: entry; objectName: "contentRow"
                             required property var modelData
                             readonly property bool selected: root.controller.selected.indexOf(modelData.relativePath) !== -1
-                            width: list.width; height: 82
+                            width: list.width; height: 82; radius: 10
                             color: selected ? Theme.colors.input : hover.hovered ? Theme.colors.card : "transparent"
                             HoverHandler { id: hover }
                             MouseArea { anchors.fill: parent; enabled: entry.modelData.category === "mods"; cursorShape: Qt.PointingHandCursor; onClicked: root.showcaseRequested(entry.modelData.relativePath) }
@@ -103,11 +103,11 @@ Item {
                                     ActionButton { Layout.preferredWidth: 34; iconName: entry.modelData.updateAvailable ? "download" : "switch"; accented: !!entry.modelData.updateAvailable; subtle: true; compact: true; hint: entry.modelData.frozen ? "Version frozen" : entry.modelData.updateAvailable ? "Update to " + entry.modelData.updateRelease.version : "Switch version"; enabled: !root.controller.busy && !entry.modelData.frozen && !!entry.modelData.projectId; onClicked: { if(entry.modelData.updateAvailable) root.controller.update(entry.modelData.relativePath); else { root.controller.openVersions(entry.modelData.relativePath); versions.open() } } }
                                     ToggleSwitch { objectName: "contentToggle"; Layout.preferredWidth: 48; checked: !!entry.modelData.enabled; enabled: !root.controller.busy && !!entry.modelData.sha1 && !entry.modelData.directory; Accessible.name: "Enable " + entry.modelData.title; onToggled: { root.controller.setEnabled(entry.modelData.relativePath,checked); checked = Qt.binding(function() { return !!entry.modelData.enabled }) } }
                                     ActionButton { Layout.preferredWidth: 34; iconName: "trash"; hint: "Remove content"; subtle: true; compact: true; enabled: !root.controller.busy && !!entry.modelData.sha1; onClicked: { removeDialog.path = entry.modelData.relativePath; removeDialog.modTitle = entry.modelData.title; removeDialog.open() } }
-                                ActionButton { id: moreButton; objectName: "contentMore"; Layout.preferredWidth: 34; iconName: "more"; hint: "More actions"; subtle: true; compact: true; onClicked: { const point = moreButton.mapToItem(root,moreButton.width,moreButton.height); rowMenu.x = Math.max(0,Math.min(point.x-rowMenu.width,root.width-rowMenu.width)); rowMenu.y = Math.max(0,Math.min(point.y+4,root.height-rowMenu.height)); rowMenu.open() } }
+                                PopupButton { popup: rowMenu; id: moreButton; objectName: "contentMore"; Layout.preferredWidth: 34; iconName: "more"; hint: "More actions"; subtle: true; compact: true }
                                 }
                             }
-                            Popup {
-                                id: rowMenu; objectName: "contentMenu"; parent: root; width: 210; padding: 6
+                            FocusPopup {
+                                id: rowMenu; objectName: "contentMenu"; parent: moreButton; x: moreButton.width-width; y: moreButton.height+4; margins: 8; width: 210; padding: 6
                                 background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: 13 }
                                 contentItem: ColumnLayout {
                                     spacing: 2
@@ -128,7 +128,7 @@ Item {
     ContentFilter { id: filters; objectName: "contentFilter"; controller: root.controller }
     VersionPicker { id: versions; objectName: "versionPicker"; controller: root.controller; minecraft: root.minecraft; preferredLoader: root.loader }
     FileDialog { id: upload; title: "Add content to this pack"; fileMode: FileDialog.OpenFiles; nameFilters: ["Mods (*.jar)","Resource packs (*.zip)","Shader packs (*.zip)"]; onAccepted: root.controller.importFiles(selectedFiles,["mods","resourcepacks","shaderpacks"][selectedNameFilter.index]) }
-    Dialog {
+    FocusDialog {
         id: removeDialog; property string path: ""; property string modTitle: ""
         anchors.centerIn: parent; modal: true; width: 460; padding: 24
         background: Rectangle { radius: 18; color: Theme.colors.card; border.color: Theme.colors.border }

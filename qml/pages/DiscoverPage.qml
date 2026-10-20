@@ -51,9 +51,9 @@ Item {
                     onTextEdited: debounce.restart(); onAccepted: { debounce.stop();root.catalogue.configure({query:text}) }
                 }
                 PaginationBar { Layout.fillWidth: true; catalogue: root.catalogue; contextBusy: root.browse.busy }
+                ActiveBrowseFilters { Layout.fillWidth: true; catalogue: root.catalogue; instanceLocked: root.browse.ready && !root.catalogue.filters.unlocked }
                 Text { Layout.fillWidth: true; visible: root.catalogue.notice.length>0; text: root.catalogue.notice; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
                 Text { Layout.fillWidth: true; visible: root.browse.notice.length>0; text: root.browse.notice; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
-                Text { Layout.fillWidth: true; visible: root.contentType==="datapack"; text: "Data Packs are managed per instance. ZIP packs need a global data-pack loader in Minecraft; compatible mod versions use the mod installer."; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap }
                 RowLayout {
                     visible: root.content.notice.length>0; Layout.fillWidth: true
                     Text { Layout.fillWidth: true; text: root.content.notice; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap; maximumLineCount: 3; elide: Text.ElideRight; textFormat: Text.PlainText }

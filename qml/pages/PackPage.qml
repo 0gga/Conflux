@@ -41,7 +41,7 @@ Item {
             }
             ActionButton { text: "Play"; iconName: "play"; primary: true; enabled: root.session.launch.packAvailable && !root.app.repositoryBusy; hint: root.session.launch.packAvailable ? "Launch in Modrinth App" : "This pack has no supported launcher handoff yet"; onClicked: root.session.launch.playPack() }
             ActionButton { iconName: "settings"; hint: "Open modpack configs"; subtle: true; onClicked: root.sectionRequested("configs") }
-            ActionButton { id: packMenuButton; iconName: "more"; hint: "Modpack actions"; subtle: true; onClicked: packMenu.open() }
+            PopupButton { popup: packMenu; id: packMenuButton; iconName: "more"; hint: "Modpack actions"; subtle: true }
         }
         SectionTabs {
             entries: [{key:"content",label:"Content",icon:"content"},{key:"configs",label:"Configs",icon:"config"},{key:"files",label:"Files",icon:"folder"},{key:"logs",label:"Logs",icon:"logs"},{key:"worlds",label:"Worlds",icon:"world"}]
@@ -59,8 +59,8 @@ Item {
             sourceComponent: root.section === "configs" ? (root.route.configPath ? editorView : configView) : root.section === "files" ? fileView : root.section === "logs" ? logView : root.section === "worlds" ? worldView : contentView
         }
         RowLayout {
-            Layout.fillWidth: true
-            Text { Layout.fillWidth: true; text: root.section === "content" ? root.workspace.coverage : root.section === "configs" ? "Config changes are explicit, backed up, and checked against external changes." : "Files, logs and worlds are inspected without modification."; color: Theme.colors.muted; font.pixelSize: 10; wrapMode: Text.WordWrap }
+            visible: root.section !== "content"; Layout.fillWidth: true
+            Item { Layout.fillWidth: true }
             ActionButton { visible: root.section !== "content"; iconName: "refresh"; hint: "Rescan pack content"; subtle: true; enabled: !root.workspace.busy && !root.session.editor.dirty; onClicked: root.workspace.refresh() }
         }
     }
@@ -70,7 +70,7 @@ Item {
     Component { id: fileView; FilePanel { browser: root.session.files; onDirectoryRequested: function(path) { root.app.openFolder(root.workspace.pack.path + "/" + path) } onFolderRequested: function(path) { root.folderRequested(path) } onShowFilesRequested: function(path) { root.app.openContentFolder(path) } } }
     Component { id: logView; LogPanel { logs: root.session.logs; onSelected: function(path) { root.logRequested(path) } } }
     Component { id: worldView; WorldPanel { worlds: root.session.worlds; launch: root.session.launch; busy: root.app.repositoryBusy; onOpenRequested: function(path) { root.app.openFolder(root.workspace.pack.path + "/" + path) } } }
-    Popup {
+    FocusPopup {
         id: packMenu; parent: packMenuButton; x: packMenuButton.width-width; y: packMenuButton.height+6; width: 220; padding: 6
         background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: 14 }
         contentItem: ColumnLayout {
@@ -79,7 +79,7 @@ Item {
             ActionButton { Layout.fillWidth: true; text: "Refresh content"; iconName: "refresh"; subtle: true; alignLeft: true; enabled: !root.session.content.busy; onClicked: { root.workspace.refresh(); root.session.content.refresh(); packMenu.close() } }
         }
     }
-    Popup {
+    FocusPopup {
         id: warningsPopup; objectName: "packWarnings"; parent: root; width: Math.min(620,root.width-56); padding: 0
         x: Math.max(28,Math.min(warningButton.mapToItem(root,0,0).x,root.width-width-28))
         onAboutToShow: { y = warningButton.mapToItem(root,0,warningButton.height).y+8 }

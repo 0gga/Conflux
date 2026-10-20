@@ -84,3 +84,8 @@ The source statements and reference images distinguish these requirements from i
 - Order badges Platform, selected Loaders, Version, then Tags; exclude loader badges that are not selected by an active loader filter.
 - Add configurable overall UI size, independent content and filter sizing, and a live Appearance preview. Keep size and spacing controls grouped.
 - Allow creating custom themes and editing every semantic UI color in Appearance. Candy red #FF005E is the default launcher accent.
+
+- Version showcases expose multi-select Release/Beta/Alpha channels, game versions and loaders, with Clear and source selection. Default to instance compatibility while allowing wider browsing; installs still validate the actual instance.
+- Three-dot action buttons toggle their open menu closed on a second click. Discovery shows active filter chips, locking only instance-controlled selections. Keep routine explanatory paragraphs out of content views; retain meaningful errors and warnings.
+
+- Popups take focus and block background interaction, including conflict-warning popups. Instance content tables have no outer outline; row hover stays rounded. Unavailable actions, including Installed, have no hover response.

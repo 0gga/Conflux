@@ -75,3 +75,5 @@ These are ideas, not delivered features or additional owner requirements.
 - Delivered refinement: compact Explore header, aligned instance/filter widths, source selector beside pagination, editable loaders, persistent per-instance/content-type version/loader choices and retained per-type page/scroll state.
 
 - Delivered appearance editor: candy-red default accent, grouped editing/saving of all fourteen JSON palette roles, persistent overall/content/filter sizes and layout spacing, and a pinned live preview using the real card/filter components. Compact cards have equal artwork insets, filtered/ordered badges and right-side menus. Future appearance additions: named layout presets and import/export of layout preferences alongside a theme.
+
+- Delivered refinement: channel/game-version/loader release filters and Clear, discovery active-filter chips with instance version locks, second-click menu dismissal, and removal of routine coverage/compatibility prose. Follow-up: a virtualized multi-column release table with real per-release provider download statistics when represented by the provider model.

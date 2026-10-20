@@ -83,8 +83,9 @@ void ProjectShowcase::resolve(const InstalledModIdentity &identity, const QVaria
         self->m_project = presentation.toVariant();
         emit self->changed();
         self->m_source->load(
-            presentation, pack.value("minecraft").toString(),
-            pack.value("catalogueLoader", pack.value("loader")).toString(),
+            presentation, presentation.type == "mod" ? QString{} : pack.value("minecraft").toString(),
+            presentation.type == "mod" ? QString{}
+                                       : pack.value("catalogueLoader", pack.value("loader")).toString(),
             [guard, generation, project = presentation](ProjectDetail detail) {
                 if (!guard || guard->m_generation != generation)
                     return;

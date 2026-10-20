@@ -3,6 +3,7 @@
 #include "features/content/ContentActions.h"
 #include "features/preferences/ContentPreferences.h"
 #include "platform/ConfigOwnershipStore.h"
+#include "theme/Appearance.h"
 #include <QBuffer>
 #include <QImage>
 #include <QQmlComponent>
@@ -16,6 +17,7 @@
 Q_IMPORT_QML_PLUGIN(Conflux_StylePlugin)
 class ContentInteractionTests : public QObject {
     Q_OBJECT
+    QTemporaryDir styleStorage;
     static QQuickItem *findItem(QQuickItem *root, const QString &name) {
         if (root->objectName() == name && root->isVisible())
             return root;
@@ -27,6 +29,63 @@ class ContentInteractionTests : public QObject {
   private slots:
     void initTestCase() {
         QQuickStyle::setStyle("Basic");
+        qputenv("CONFLUX_STYLE_SETTINGS_DIR", styleStorage.path().toUtf8());
+    }
+    void compactCardsKeepEqualArtworkInsetsAndFilteredOrderedBadges() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(900, 200);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/components/ProjectCard.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> card(qobject_cast<QQuickItem *>(component.createWithInitialProperties(
+            {{"project", QVariantMap{{"title", "Example"},
+                                     {"author", "Author"},
+                                     {"summary", "Description"},
+                                     {"provider", "modrinth"},
+                                     {"sources", QStringList{"modrinth"}},
+                                     {"loaders", QStringList{"neoforge", "fabric", "quilt"}},
+                                     {"environment", "client"},
+                                     {"categories", QStringList{"optimization"}}}},
+             {"minecraft", "1.21.1"},
+             {"selectedLoaders", QStringList{"neoforge"}},
+             {"installState", QVariantMap{{"canInstall", true}, {"label", "Install"}}}})));
+        QVERIFY2(card, qPrintable(component.errorString()));
+        card->setParentItem(window.contentItem());
+        card->setWidth(900);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *appearance =
+            engine.singletonInstance<studio::Appearance *>(qmlTypeId("Conflux.Style", 1, 0, "Appearance"));
+        QVERIFY(appearance);
+        for (const int scale : {100, 125, 75}) {
+            QVERIFY(appearance->setValue("contentScale", scale));
+            QCoreApplication::processEvents();
+            auto *art = card->findChild<QQuickItem *>("browseArtwork");
+            QVERIFY(art);
+            QCOMPARE(art->x(), art->y());
+            QVERIFY(qAbs(card->height() - art->height() - 2 * art->x()) < 0.1);
+            auto *loader = findItem(card.get(), "browseLoaderBadge");
+            QVERIFY(loader);
+            int loaderCount = 0;
+            for (auto *item : loader->parentItem()->childItems())
+                loaderCount += item->objectName() == "browseLoaderBadge";
+            QCOMPARE(loaderCount, 1);
+            QCOMPARE(loader->property("brand").toString(), QString("neoforge"));
+            auto *platform = findItem(card.get(), "browsePlatformBadge");
+            auto *version = findItem(card.get(), "browseVersionBadge");
+            auto *tag = findItem(card.get(), "browseCategoryBadge");
+            QVERIFY(platform && version && tag);
+            QVERIFY(platform->x() < loader->x());
+            QVERIFY(loader->x() < version->x());
+            QVERIFY(version->x() < tag->x());
+            auto *badges = card->findChild<QQuickItem *>("browseBadges");
+            QCOMPARE(badges->y() + badges->height(), art->y() + art->height());
+            auto *menu = card->findChild<QQuickItem *>("browseMoreButton");
+            QVERIFY(qAbs(card->width() - menu->x() - menu->width() - art->x()) < 0.1);
+        }
+        appearance->reset();
+        QVERIFY(card->height() < 130);
     }
     void browseCardInstallClickDoesNotOpenTheProject() {
         QQmlEngine engine;
@@ -183,10 +242,12 @@ class ContentInteractionTests : public QObject {
         QCOMPARE(showcase.count(), 1);
         auto *more = findItem(window.contentItem(), "contentMore");
         QVERIFY(more);
+        QTRY_VERIFY(more->mapToScene(QPointF(more->width(), 0)).x() <= window.width());
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
                           more->mapToScene(QPointF(more->width() / 2, more->height() / 2)).toPoint());
         QTRY_VERIFY(findItem(window.contentItem(), "copyContentLink"));
         auto *copy = findItem(window.contentItem(), "copyContentLink");
+        QTRY_VERIFY(copy->mapToScene(QPointF(copy->width(), 0)).x() <= window.width());
         QSignalSpy copied(&model, &ContentActions::copyRequested);
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
                           copy->mapToScene(QPointF(copy->width() / 2, copy->height() / 2)).toPoint());

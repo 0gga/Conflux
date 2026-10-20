@@ -9,14 +9,21 @@ BoundedScrollView {
     required property var catalogue
     property bool hasInstance: false
     property bool connectorAvailable: false
+    readonly property real filterScale: Appearance.values.filterScale / 100
     function toggle(key,value) {
         let values=(catalogue.filters[key] || []).slice()
         const index=values.indexOf(value)
         if(index===-1)values.push(value);else values.splice(index,1)
         let change={};change[key]=values;catalogue.configure(change)
     }
+    Item {
+        width: root.availableWidth
+        implicitHeight: filterBody.implicitHeight * root.filterScale
     ColumnLayout {
-        width: root.availableWidth; spacing: 18
+        id: filterBody
+        width: parent.width / root.filterScale
+        scale: root.filterScale; transformOrigin: Item.TopLeft
+        spacing: Appearance.values.filterSpacing
         Text { text: "Filters"; color: Theme.colors.text; font.pixelSize: 18; font.weight: Font.DemiBold }
         RowLayout {
             Layout.fillWidth: true
@@ -40,7 +47,7 @@ BoundedScrollView {
         Rectangle {
             visible: !root.hasInstance || !!root.catalogue.filters.unlocked
             Layout.fillWidth: true
-            implicitHeight: Math.min(240, versionsList.contentHeight + 12)
+            implicitHeight: Math.min(Appearance.values.versionListHeight, versionsList.contentHeight + 12)
             radius: 10; color: Theme.colors.input
             ListView {
                 id: versionsList; objectName: "browseVersionList"
@@ -86,5 +93,6 @@ BoundedScrollView {
             }
         }
         ActionButton { text: "Clear tags"; compact: true; subtle: true; visible: (root.catalogue.filters.tags || []).length>0; onClicked: root.catalogue.configure({tags:[]}) }
+    }
     }
 }

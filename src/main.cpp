@@ -35,6 +35,8 @@ int main(int argc, char *argv[]) {
     studio::DesktopSmokeTest verification(application.arguments());
     if (verification.enabled() && verification.storagePath().isEmpty())
         return 2;
+    if (verification.enabled())
+        qputenv("CONFLUX_STYLE_SETTINGS_DIR", (verification.storagePath() + "/appearance").toUtf8());
     studio::ApplicationController controller(
         nullptr, verification.enabled() ? verification.storagePath() + "/packs" : QString{});
     studio::DesktopSession session(

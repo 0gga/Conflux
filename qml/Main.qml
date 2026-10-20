@@ -23,8 +23,10 @@ ApplicationWindow {
         const instance = app.libraryPacks.find(function(pack) { return pack.path === path })
         return instance ? instance.title : session.browse.pack.path === path ? (session.browse.pack.name || "selected instance") : "selected instance"
     }
+    readonly property real interfaceScale: Appearance.values.uiScale / 100
+    readonly property bool compactNavigation: width / interfaceScale < 1000
     readonly property string pageTitle: page === "discover"
-        ? (session.navigation.route.packPath ? 'Exploring content for "' + browseInstanceName + '"' : "Explore content")
+        ? (session.navigation.route.packPath ? browseInstanceName + ' - Exploring Content' : "Explore content")
         : page === "showcase" ? (session.showcase.project.title || "Mod showcase")
         : page === "workspace" ? (app.activePack.name || "Modpack") : page === "settings" ? "Settings" : "Library"
     function syncRoutePack() {
@@ -76,14 +78,19 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+K"; onActivated: { if (window.navigate("discover")) discovery.focusSearch() } }
     Shortcut { sequence: "Ctrl+N"; enabled: !window.session.editor.dirty && !window.session.editor.busy; onActivated: newPack.open() }
 
+    Overlay.overlay.transform: Scale { xScale: window.interfaceScale; yScale: window.interfaceScale }
+    Item {
+        id: interfaceViewport
+        width: window.width / window.interfaceScale; height: window.height / window.interfaceScale
+        scale: window.interfaceScale; transformOrigin: Item.TopLeft
     RowLayout {
         anchors.fill: parent
         spacing: 0
         Rectangle {
-            Layout.preferredWidth: 216; Layout.fillHeight: true
+            Layout.preferredWidth: window.compactNavigation ? 72 : 216; Layout.fillHeight: true
             color: Theme.colors.panel
             ColumnLayout {
-                anchors.fill: parent; anchors.margins: 16; spacing: 6
+                anchors.fill: parent; anchors.margins: window.compactNavigation ? 8 : 16; spacing: 6
                 RowLayout {
                     Layout.leftMargin: 8; Layout.topMargin: 12; Layout.bottomMargin: 34; spacing: 12
                     Item {
@@ -91,24 +98,24 @@ ApplicationWindow {
                         Rectangle { anchors.centerIn: parent; width: 23; height: 29; radius: 14; color: "transparent"; border.width: 3; border.color: Theme.colors.accent; rotation: -32 }
                         Rectangle { x: 20; y: 5; width: 9; height: 9; radius: 5; color: Theme.colors.panel; border.color: Theme.colors.accent; border.width: 2 }
                     }
-                    Text { text: "conflux"; font.pixelSize: 25; font.weight: Font.DemiBold; color: Theme.colors.text; font.letterSpacing: -0.8 }
+                    Text { visible: !window.compactNavigation; text: "conflux"; font.pixelSize: 25; font.weight: Font.DemiBold; color: Theme.colors.text; font.letterSpacing: -0.8 }
                 }
-                Text { text: "WORKSPACE"; color: Theme.colors.muted; font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 1.8; Layout.leftMargin: 12; Layout.bottomMargin: 10 }
+                Text { visible: !window.compactNavigation; text: "WORKSPACE"; color: Theme.colors.muted; font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 1.8; Layout.leftMargin: 12; Layout.bottomMargin: 10 }
                 Repeater {
                     model: [{key:"library", label:"Library", icon:"library"}, {key:"discover", label:"Explore content", icon:"compass"}, {key:"workspace", label:"Modpack", icon:"content"}]
                     delegate: NavigationButton {
                         required property var modelData
                         Layout.fillWidth: true
-                        text: modelData.label; iconName: modelData.icon
+                        text: window.compactNavigation ? "" : modelData.label; hint: modelData.label; iconName: modelData.icon
                         selected: window.page === modelData.key || (window.page === "showcase" && modelData.key === (window.session.navigation.route.modPath ? "workspace" : "discover"))
                         onClicked: window.navigate(modelData.key)
                     }
                 }
-                NavigationButton { Layout.fillWidth: true; text: "New modpack"; iconName: "plus"; enabled: !window.session.editor.dirty && !window.session.editor.busy; onClicked: newPack.open() }
+                NavigationButton { Layout.fillWidth: true; text: window.compactNavigation ? "" : "New modpack"; hint: "New modpack"; iconName: "plus"; enabled: !window.session.editor.dirty && !window.session.editor.busy; onClicked: newPack.open() }
                 Item { Layout.fillHeight: true }
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.border; Layout.bottomMargin: 8 }
-                NavigationButton { Layout.fillWidth: true; text: "Settings"; iconName: "settings"; selected: window.page === "settings"; onClicked: window.navigate("settings") }
-                Text { Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 8; text: "Your mods. Connected."; color: Theme.colors.muted; font.pixelSize: 10 }
+                NavigationButton { Layout.fillWidth: true; text: window.compactNavigation ? "" : "Settings"; hint: "Settings"; iconName: "settings"; selected: window.page === "settings"; onClicked: window.navigate("settings") }
+                Text { visible: !window.compactNavigation; Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 8; text: "Your mods. Connected."; color: Theme.colors.muted; font.pixelSize: 10 }
             }
         }
         Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.colors.border }
@@ -133,7 +140,7 @@ ApplicationWindow {
                     SelectBox {
                         objectName: "browseInstanceSelector"
                         visible: window.page === "discover"
-                        Layout.preferredWidth: 232
+                        Layout.preferredWidth: Appearance.filterWidthFor(interfaceViewport.width - (window.compactNavigation ? 72 : 216) - 1 - 56)
                         model: ["Browse without an instance"].concat(discovery.instances.map(function(pack) { return pack.title + " - " + Branding.label(pack.provider) }))
                         currentIndex: discovery.instances.findIndex(function(pack) { return pack.path === discovery.targetPath })+1
                         onActivated: discovery.instanceRequested(currentIndex > 0 ? discovery.instances[currentIndex-1].path : "")
@@ -207,5 +214,6 @@ ApplicationWindow {
             }
         }
         onOpened: packName.forceActiveFocus()
+    }
     }
 }

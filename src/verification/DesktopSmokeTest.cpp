@@ -1,12 +1,15 @@
 #include "DesktopSmokeTest.h"
 #include "ApplicationController.h"
 #include "DesktopSession.h"
+#include "theme/Appearance.h"
+#include "theme/Theme.h"
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QGuiApplication>
 #include <QMouseEvent>
 #include <QProcess>
+#include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QTimer>
@@ -730,7 +733,7 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     qAbs(selector->width() - filters->width()) > 1 ||
                     qAbs(selector->mapToScene(QPointF{}).x() - filters->mapToScene(QPointF{}).x()) > 1 ||
                     !versions->isVisible() || versions->property("count").toInt() < 20 ||
-                    !title->property("text").toString().startsWith("Exploring content for ")) {
+                    !title->property("text").toString().endsWith(" - Exploring Content")) {
                     fail("Explore top-bar alignment or unlocked scrollable version list failed");
                     return;
                 }
@@ -759,11 +762,108 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     fail("Rounded tooltip render failed");
                     return;
                 }
+                window->findChild<QObject *>("navigationBackButton")
+                    ->findChild<QObject *>("roundedToolTip")
+                    ->setProperty("visible", false);
+                session.navigation()->go({{"page", "settings"}, {"settingsTab", "appearance"}});
+                break;
+            case 47: {
+                if (!capture("appearance-default-preview")) {
+                    fail("Appearance preview render failed");
+                    return;
+                }
+                auto *engine = qmlEngine(window);
+                auto *appearance =
+                    engine->singletonInstance<Appearance *>(qmlTypeId("Conflux.Style", 1, 0, "Appearance"));
+                auto *theme = engine->singletonInstance<Theme *>(qmlTypeId("Conflux.Style", 1, 0, "Theme"));
+                if (!appearance || !theme ||
+                    !findVisualItem(window->contentItem(), "appearanceLivePreview")) {
+                    fail("Appearance editor/preview missing");
+                    return;
+                }
+                appearance->setValue("uiScale", 110);
+                appearance->setValue("contentScale", 110);
+                appearance->setValue("filterScale", 115);
+                appearance->setValue("filterWidth", 256);
+                appearance->setValue("artworkSize", 96);
+                appearance->setValue("cardPadding", 8);
+                theme->setColor("input", "#22252B");
+                break;
+            }
+            case 48:
+                if (!capture("appearance-custom-preview")) {
+                    fail("Custom appearance render failed");
+                    return;
+                }
+                session.navigation()->go({{"page", "discover"}, {"packPath", state->managedPath}});
+                session.catalogue()->configure({{"unlocked", false}});
+                break;
+            case 49: {
+                if (session.catalogue()->busy())
+                    return;
+                if (!capture("appearance-scaled-content")) {
+                    fail("Scaled content render failed");
+                    return;
+                }
+                auto *more = findVisualItem(window->contentItem(), "browseMoreButton");
+                if (!more || !QMetaObject::invokeMethod(more, "clicked")) {
+                    fail("Scaled card menu missing");
+                    return;
+                }
+                break;
+            }
+            case 50: {
+                if (!capture("appearance-scaled-menu")) {
+                    fail("Scaled menu render failed");
+                    return;
+                }
+                auto *engine = qmlEngine(window);
+                engine->singletonInstance<Appearance *>(qmlTypeId("Conflux.Style", 1, 0, "Appearance"))
+                    ->reset();
+                engine->singletonInstance<Theme *>(qmlTypeId("Conflux.Style", 1, 0, "Theme"))
+                    ->discardChanges();
+                session.navigation()->go({{"page", "settings"}, {"settingsTab", "appearance"}});
+                break;
+            }
+            case 51:
+                if (!capture("appearance-restored")) {
+                    fail("Restored appearance render failed");
+                    return;
+                }
+                if (auto *controls = findVisualItem(window->contentItem(), "appearanceControls")) {
+                    auto *viewport = controls->property("viewport").value<QQuickItem *>();
+                    auto *heading = findVisualItem(window->contentItem(), "themeColorsHeading");
+                    if (!viewport || !heading) {
+                        fail("Theme editor controls missing");
+                        return;
+                    }
+                    viewport->setProperty("contentY", viewport->property("contentY").toReal() +
+                                                          heading->mapToItem(viewport, QPointF{}).y());
+                }
+                break;
+            case 52: {
+                if (!capture("appearance-theme-editor")) {
+                    fail("Theme editor render failed");
+                    return;
+                }
+                auto *controls = findVisualItem(window->contentItem(), "appearanceControls");
+                auto *viewport = controls->property("viewport").value<QQuickItem *>();
+                viewport->setProperty(
+                    "contentY", qMax(0.0, viewport->property("contentHeight").toReal() - viewport->height()));
+                break;
+            }
+            case 53:
+                if (!capture("appearance-theme-status-colors")) {
+                    fail("Theme status colors render failed");
+                    return;
+                }
                 if (smokeRuntimeError) {
                     fail("QML runtime warning in Explore content");
                     return;
                 }
-                qInfo("PASS: compact contextual top bar, scrollable versions and rounded tooltips; provider "
+                qInfo("PASS: candy-red theme, live appearance preview, independent UI/content/filter sizing, "
+                      "compact cards and scaled menus; compact contextual top bar, scrollable versions and "
+                      "rounded tooltips; provider "
                       "pagination and page/scroll restoration, right filters, stop-at-bounds "
                       "scrolling; instance-scoped browse installs, exact installed-version badges, verified "
                       "live "

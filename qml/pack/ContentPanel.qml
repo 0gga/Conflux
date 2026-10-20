@@ -23,10 +23,10 @@ Item {
             ActionButton { text: "Upload files"; iconName: "folder"; enabled: !root.controller.busy; onClicked: upload.open() }
             ActionButton { text: "Browse content"; iconName: "compass"; primary: true; onClicked: root.browseRequested() }
         }
-        RowLayout {
+        Flow {
             id: filterBar
-            Layout.fillWidth: true; spacing: 6
-            SelectBox { Layout.preferredWidth: 145; implicitHeight: 36; model: ["Name (A–Z)","Name (Z–A)","Author (A–Z)","File name","Updates first"]; currentIndex: Math.max(0,["name-asc","name-desc","author","filename","updates"].indexOf(root.controller.sort)); onActivated: root.controller.sort = ["name-asc","name-desc","author","filename","updates"][currentIndex] }
+            Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.preferredWidth: root.width; spacing: 6
+            SelectBox { width: 145; implicitHeight: 36; model: ["Name (A–Z)","Name (Z–A)","Author (A–Z)","File name","Updates first"]; currentIndex: Math.max(0,["name-asc","name-desc","author","filename","updates"].indexOf(root.controller.sort)); onActivated: root.controller.sort = ["name-asc","name-desc","author","filename","updates"][currentIndex] }
             Rectangle { implicitWidth: 1; implicitHeight: 22; color: Theme.colors.border; Layout.leftMargin: 3; Layout.rightMargin: 3 }
             Repeater {
                 model: [{key:"all",label:"All"},{key:"mods",label:"Mods"},{key:"resourcepacks",label:"Resource Packs"},{key:"shaderpacks",label:"Shaders"}]
@@ -35,7 +35,6 @@ Item {
             ActionButton { id: filterButton; text: "Filter"; iconName: "plus"; compact: true; onClicked: { const point = mapToItem(root,0,height); filters.x = Math.min(point.x,root.width-filters.width); filters.y = point.y+6; filters.open() } }
             ActionButton { text: root.controller.filters.hidden ? "Hidden content" : "Hidden"; iconName: "hide"; compact: true; subtle: true; selected: !!root.controller.filters.hidden; onClicked: root.controller.setFilter("hidden",!root.controller.filters.hidden) }
             ActionButton { text: "Clear"; compact: true; subtle: true; visible: !!root.controller.filters.author || !!root.controller.filters.environment || !!root.controller.filters.state || root.controller.filters.updates || root.controller.filters.openSource || root.controller.filters.external; onClicked: root.controller.clearFilters() }
-            Item { Layout.fillWidth: true }
             ActionButton { iconName: "download"; text: "Update all"; compact: true; subtle: true; accented: true; enabled: root.controller.updateCount > 0 && !root.controller.busy; hint: root.controller.updateCount + " compatible updates · frozen versions are skipped"; onClicked: root.controller.updateAll() }
             ActionButton { iconName: "refresh"; text: "Refresh"; compact: true; subtle: true; enabled: !root.controller.busy; onClicked: root.controller.refresh() }
         }
@@ -53,7 +52,7 @@ Item {
             ActionButton { visible: root.controller.busy; enabled: root.controller.cancellable; text: "Cancel"; compact: true; subtle: true; onClicked: root.controller.cancel() }
         }
         Rectangle {
-            Layout.fillWidth: true; Layout.fillHeight: true; color: Theme.colors.panel; radius: 16; border.color: Theme.colors.border; clip: true
+            Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.fillHeight: true; color: Theme.colors.panel; radius: 16; border.color: Theme.colors.border; clip: true
             ColumnLayout {
                 anchors.fill: parent; spacing: 0
                 Rectangle {
@@ -61,11 +60,10 @@ Item {
                     Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 24; color: Theme.colors.card }
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 16; spacing: 12
-                        Item { Layout.preferredWidth: 34 }
                         SelectionBox { checked: root.rows.length > 0 && root.visibleSelected === root.rows.length; partial: root.visibleSelected > 0 && root.visibleSelected < root.rows.length; Accessible.name: "Select visible content"; onClicked: root.controller.selectVisible(root.visibleSelected !== root.rows.length) }
                         Text { Layout.fillWidth: true; text: "Project"; color: Theme.colors.muted; font.pixelSize: 12; font.weight: Font.DemiBold }
                         Text { Layout.preferredWidth: Math.max(150,root.width*0.29); text: "Version"; color: Theme.colors.muted; font.pixelSize: 12; font.weight: Font.DemiBold }
-                        Text { Layout.preferredWidth: 140; text: "Actions"; horizontalAlignment: Text.AlignRight; color: Theme.colors.muted; font.pixelSize: 12; font.weight: Font.DemiBold }
+                        Text { Layout.preferredWidth: 180; text: "Actions"; horizontalAlignment: Text.AlignRight; color: Theme.colors.muted; font.pixelSize: 12; font.weight: Font.DemiBold }
                     }
                 }
                 Item {
@@ -83,7 +81,6 @@ Item {
                             Rectangle { anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right; height: 1; color: Theme.colors.border; opacity: 0.6 }
                             RowLayout {
                                 anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 16; spacing: 12
-                                ActionButton { id: moreButton; objectName: "contentMore"; Layout.preferredWidth: 34; iconName: "more"; hint: "More actions"; subtle: true; compact: true; onClicked: { const point = moreButton.mapToItem(root,moreButton.width,moreButton.height); rowMenu.x = Math.max(0,Math.min(point.x-rowMenu.width,root.width-rowMenu.width)); rowMenu.y = Math.max(0,Math.min(point.y+4,root.height-rowMenu.height)); rowMenu.open() } }
                                 SelectionBox { objectName: "contentSelection"; checked: entry.selected; Accessible.name: "Select " + entry.modelData.title; onToggled: root.controller.select(entry.modelData.relativePath,checked) }
                                 ContentIcon { size: 44; source: entry.modelData.icon || ""; kind: entry.modelData.category === "mods" ? "mod" : entry.modelData.category === "shaderpacks" ? "shader" : "resource" }
                                 ColumnLayout {
@@ -101,11 +98,12 @@ Item {
                                     Text { Layout.fillWidth: true; text: entry.modelData.fileName; color: Theme.colors.muted; font.pixelSize: 11; elide: Text.ElideRight; textFormat: Text.PlainText }
                                 }
                                 RowLayout {
-                                    Layout.preferredWidth: 140; spacing: 1
+                                    Layout.preferredWidth: 180; spacing: 1
                                     Icon { name: "lock"; size: 16; opacity: entry.modelData.frozen ? 1 : 0; color: Theme.colors.muted }
                                     ActionButton { Layout.preferredWidth: 34; iconName: entry.modelData.updateAvailable ? "download" : "switch"; accented: !!entry.modelData.updateAvailable; subtle: true; compact: true; hint: entry.modelData.frozen ? "Version frozen" : entry.modelData.updateAvailable ? "Update to " + entry.modelData.updateRelease.version : "Switch version"; enabled: !root.controller.busy && !entry.modelData.frozen && !!entry.modelData.projectId; onClicked: { if(entry.modelData.updateAvailable) root.controller.update(entry.modelData.relativePath); else { root.controller.openVersions(entry.modelData.relativePath); versions.open() } } }
                                     ToggleSwitch { objectName: "contentToggle"; Layout.preferredWidth: 48; checked: !!entry.modelData.enabled; enabled: !root.controller.busy && !!entry.modelData.sha1 && !entry.modelData.directory; Accessible.name: "Enable " + entry.modelData.title; onToggled: { root.controller.setEnabled(entry.modelData.relativePath,checked); checked = Qt.binding(function() { return !!entry.modelData.enabled }) } }
                                     ActionButton { Layout.preferredWidth: 34; iconName: "trash"; hint: "Remove content"; subtle: true; compact: true; enabled: !root.controller.busy && !!entry.modelData.sha1; onClicked: { removeDialog.path = entry.modelData.relativePath; removeDialog.modTitle = entry.modelData.title; removeDialog.open() } }
+                                ActionButton { id: moreButton; objectName: "contentMore"; Layout.preferredWidth: 34; iconName: "more"; hint: "More actions"; subtle: true; compact: true; onClicked: { const point = moreButton.mapToItem(root,moreButton.width,moreButton.height); rowMenu.x = Math.max(0,Math.min(point.x-rowMenu.width,root.width-rowMenu.width)); rowMenu.y = Math.max(0,Math.min(point.y+4,root.height-rowMenu.height)); rowMenu.open() } }
                                 }
                             }
                             Popup {

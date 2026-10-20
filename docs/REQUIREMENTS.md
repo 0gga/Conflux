@@ -57,7 +57,7 @@ API limitations and release/project equivalence are implementation constraints, 
 
 - Manage Data Packs per instance, with no per-world browse target.
 - Add pagination, selectable entries per page and sorting by relevance, downloads, followers, publication date and update date. Restore the page and scroll position after viewing content.
-- Place hide/restore actions in three-dot menus at the far left of content entries.
+- Place hide/restore actions in content-entry three-dot menus. The later appearance request moves these menus to the far right.
 - Show project tags and provide tag, game-version and loader filters on the right. Versions and loaders each accept multiple alternatives using OR.
 - Allow unlocking the instance-derived browse filters to change selected versions/loaders.
 - Detect installed Connector and optionally browse primary-loader plus Fabric content; expose the preference in Settings.
@@ -76,3 +76,11 @@ The source statements and reference images distinguish these requirements from i
 
 - Follow-up: move Explore title/context to the top bar as Exploring content for "instance name", remove the duplicate page heading/subtitle and top-right Explore/New modpack actions, and keep instance selection aligned over the filters.
 - When versions are unlocked, show a bounded scrollable multi-select list of all API-provided versions instead of a dropdown. Tooltips share rounded, theme-aware presentation.
+
+## Owner configurable appearance and compact cards
+
+- Format the contextual title as ModpackName - Exploring Content, without literal quotation marks.
+- Move content menus to the far right, keep artwork equally inset on all sides, reduce default card height/padding and align the badge row with the artwork bottom.
+- Order badges Platform, selected Loaders, Version, then Tags; exclude loader badges that are not selected by an active loader filter.
+- Add configurable overall UI size, independent content and filter sizing, and a live Appearance preview. Keep size and spacing controls grouped.
+- Allow creating custom themes and editing every semantic UI color in Appearance. Candy red #FF005E is the default launcher accent.

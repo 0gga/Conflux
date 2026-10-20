@@ -6,6 +6,6 @@
     "input": "#171a1e", "hover": "#21252b", "selection": "#2b3139", "border": "#272c33"
   },
   "text": { "text": "#eceef2", "muted": "#9ba3af" },
-  "actions": { "accent": "#94e2bc", "accentText": "#092218" },
+  "actions": { "accent": "#FF005E", "accentText": "#FFFFFF" },
   "status": { "warning": "#e6be7a", "warningSurface": "#221c12", "danger": "#f297a0" }
 }

@@ -62,7 +62,7 @@ Item {
                 Item {
                     Layout.fillWidth: true; Layout.fillHeight: true
                     ListView {
-                        id: results; objectName: "browseResults"; anchors.fill: parent; clip: true; spacing: 12
+                        id: results; objectName: "browseResults"; anchors.fill: parent; clip: true; spacing: Appearance.values.cardGap
                         boundsBehavior: Flickable.StopAtBounds; model: root.catalogue.projects
                         onContentYChanged: if(moving && root.visible)root.catalogue.scrollPosition=Math.max(0,contentY)
                         onMovementEnded: root.catalogue.scrollPosition=Math.max(0,contentY)
@@ -72,6 +72,7 @@ Item {
                             width: results.width; project: modelData
                             minecraft: (root.catalogue.filters.versions || [])[0] || ""
                             preferredLoader: root.browse.pack.loader || ""
+                            selectedLoaders: root.catalogue.filters.loaders || []
                             hiddenMode: !!root.catalogue.filters.hidden
                             installState: { const ready=root.browse.ready; const busy=root.browse.busy; const state=root.browse.state(modelData); state.canInstall = state.canInstall && !root.app.repositoryBusy; return state }
                             onOpened: { root.catalogue.scrollPosition=results.contentY;root.showcaseRequested(modelData) }
@@ -85,7 +86,7 @@ Item {
             }
             Rectangle {
                 objectName: "browseFilterPanel"
-                Layout.preferredWidth: 232; Layout.fillHeight: true; radius: 16; color: Theme.colors.panel; border.color: Theme.colors.border
+                Layout.preferredWidth: Appearance.filterWidthFor(root.width - 56); Layout.fillHeight: true; radius: 16; color: Theme.colors.panel; border.color: Theme.colors.border
                 BrowseFilters { anchors.fill: parent; anchors.margins: 14; catalogue: root.catalogue; hasInstance: root.browse.ready; connectorAvailable: root.browse.connectorAvailable }
             }
         }

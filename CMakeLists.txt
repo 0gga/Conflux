@@ -7,6 +7,8 @@ qt_standard_project_setup(REQUIRES 6.8)
 qt_add_qml_module(conflux_style STATIC URI Conflux.Style VERSION 1.0
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Conflux/Style
     SOURCES src/theme/Theme.h src/theme/Theme.cpp src/theme/Branding.h src/theme/Branding.cpp
+    src/theme/ThemePalette.h src/theme/ThemePalette.cpp src/theme/ThemeStore.h src/theme/ThemeStore.cpp
+    src/theme/Appearance.h src/theme/Appearance.cpp src/theme/AppearanceStore.h src/theme/AppearanceStore.cpp
     RESOURCES themes/dark-grey.json themes/oled.json themes/brands.json)
 target_link_libraries(conflux_style PRIVATE Qt6::Gui)
 target_include_directories(conflux_style PUBLIC src/theme PRIVATE src)
@@ -93,6 +95,7 @@ qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     qml/pack/VersionPicker.qml
     qml/settings/BrowseSettings.qml
     qml/explore/BrowseFilters.qml qml/explore/PaginationBar.qml
+    qml/settings/AppearancePreview.qml qml/settings/AppearanceMetric.qml qml/settings/ThemeColorGroup.qml
     qml/settings/AppearanceSettings.qml
     qml/settings/ConnectionSettings.qml
     qml/settings/WarningSettings.qml
@@ -116,6 +119,9 @@ target_link_libraries(modpack-studio PRIVATE pack_foundation conflux_desktop con
 set_target_properties(modpack-studio PROPERTIES WIN32_EXECUTABLE TRUE MACOSX_BUNDLE TRUE)
 include(CTest)
 if(BUILD_TESTING)
+    qt_add_executable(appearance-tests tests/AppearanceTests.cpp)
+    target_link_libraries(appearance-tests PRIVATE conflux_style conflux_styleplugin Qt6::Test)
+    add_test(NAME appearance COMMAND appearance-tests)
     qt_add_executable(foundation-tests tests/FoundationTests.cpp)
     target_link_libraries(foundation-tests PRIVATE pack_foundation Qt6::Test)
     add_test(NAME foundation COMMAND foundation-tests)

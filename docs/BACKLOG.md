@@ -73,3 +73,5 @@ These are ideas, not delivered features or additional owner requirements.
 - Delivered browsing: page-size/sort controls, cached page/scroll restoration, right multi-value compatibility/tag filters, persistent hide/restore menus, instance-scoped Data Packs and the Connector search preference. Precise merged totals/direct page jumps, automatic global ZIP loader provisioning and cross-type ZIP dependency graphs remain follow-up work.
 
 - Delivered refinement: compact Explore header, aligned instance/filter widths, source selector beside pagination, editable loaders, persistent per-instance/content-type version/loader choices and retained per-type page/scroll state.
+
+- Delivered appearance editor: candy-red default accent, grouped editing/saving of all fourteen JSON palette roles, persistent overall/content/filter sizes and layout spacing, and a pinned live preview using the real card/filter components. Compact cards have equal artwork insets, filtered/ordered badges and right-side menus. Future appearance additions: named layout presets and import/export of layout preferences alongside a theme.

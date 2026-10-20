@@ -1,0 +1,82 @@
+#include "Appearance.h"
+#include "Theme.h"
+#include <QDir>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QTemporaryDir>
+#include <QtQml/qqmlextensionplugin.h>
+#include <QtTest>
+#include <limits>
+Q_IMPORT_QML_PLUGIN(Conflux_StylePlugin)
+using namespace studio;
+class AppearanceTests final : public QObject {
+    Q_OBJECT
+  private slots:
+    void customColorsRoundTripWithoutChangingPresets() {
+        QTemporaryDir dir;
+        Theme theme(nullptr, dir.path());
+        QCOMPARE(theme.colors().value("accent").toString(), QString("#FF005E"));
+        QFile preset(theme.folder() + "/oled.json");
+        QVERIFY(preset.open(QIODevice::ReadOnly));
+        const auto before = preset.readAll();
+        preset.close();
+        QVERIFY(theme.setColor("accent", "#123456"));
+        QVERIFY(theme.setColor("background", "#010203"));
+        QVERIFY(theme.edited());
+        const auto good = theme.colors();
+        QVERIFY(!theme.setColor("unknown-role", "#000000"));
+        QVERIFY(!theme.setColor("input", "invalid"));
+        QCOMPARE(theme.colors(), good);
+        QVERIFY(theme.saveCustom("My ../ custom theme"));
+        QVERIFY(!theme.edited());
+        QVERIFY(theme.file().startsWith("custom-"));
+        QCOMPARE(QFileInfo(theme.file()).fileName(), theme.file());
+        Theme reopened(nullptr, dir.path());
+        QCOMPARE(reopened.colors(), good);
+        QCOMPARE(reopened.name(), QString("My ../ custom theme"));
+        QVERIFY(reopened.setColor("accent", "#FF005E"));
+        reopened.discardChanges();
+        QCOMPARE(reopened.colors(), good);
+        QVERIFY(!reopened.saveCustom(""));
+        QCOMPARE(reopened.colors(), good);
+        QVERIFY(preset.open(QIODevice::ReadOnly));
+        QCOMPARE(preset.readAll(), before);
+        QVERIFY(!QFile::exists(dir.path() + "/custom theme.json"));
+    }
+    void paletteCodecRequiresEveryRoleAndRoundTripsAlpha() {
+        QTemporaryDir dir;
+        Theme theme(nullptr, dir.path());
+        ThemePalette palette{"Example", theme.colors()};
+        palette.colors["input"] = "#CC123456";
+        auto decoded = ThemePalette::decode(palette.encode());
+        QVERIFY(decoded);
+        QCOMPARE(decoded->colors.size(), 14);
+        QCOMPARE(decoded->colors.value("input").toString(), QString("#CC123456"));
+        auto object = QJsonDocument::fromJson(palette.encode()).object();
+        object.remove("status");
+        QVERIFY(!ThemePalette::decode(QJsonDocument(object).toJson()));
+    }
+    void layoutPreferencesPersistAndRejectUnsafeSizes() {
+        QTemporaryDir dir;
+        Appearance layout(nullptr, dir.path());
+        QCOMPARE(layout.values().value("artworkSize").toInt(), 88);
+        QVERIFY(layout.setValue("uiScale", 125));
+        QVERIFY(layout.setValue("contentScale", 120));
+        QVERIFY(layout.setValue("filterScale", 85));
+        QVERIFY(layout.setValue("filterWidth", 280));
+        const auto good = layout.values();
+        QVERIFY(!layout.setValue("uiScale", 10));
+        QVERIFY(!layout.setValue("unknown", 100));
+        QVERIFY(!layout.setValue("filterScale", std::numeric_limits<double>::infinity()));
+        QCOMPARE(layout.values(), good);
+        Appearance restored(nullptr, dir.path());
+        QCOMPARE(restored.values(), good);
+        QVERIFY(restored.filterWidthFor(500) <= 200);
+        restored.reset();
+        QCOMPARE(restored.values().value("uiScale").toInt(), 100);
+        QCOMPARE(restored.values().value("filterScale").toInt(), 100);
+    }
+};
+QTEST_GUILESS_MAIN(AppearanceTests)
+#include "AppearanceTests.moc"

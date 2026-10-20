@@ -29,14 +29,18 @@ Item {
                 }
                 Item { Layout.fillHeight: true }
             }
-            BoundedScrollView {
-                id: scroll; Layout.minimumWidth: 0; Layout.fillWidth: true; Layout.fillHeight: true; clip: true
-                ColumnLayout {
-                    width: scroll.availableWidth; spacing: 16
-                    AppearanceSettings { visible: root.tab === "appearance"; Layout.fillWidth: true }
-                    BrowseSettings { visible: root.tab === "browse"; Layout.fillWidth: true; preferences: root.browsePreferences }
-                    WarningSettings { visible: root.tab === "warnings"; Layout.fillWidth: true; preferences: root.warnings }
-                    ConnectionSettings { visible: root.tab === "connections"; Layout.fillWidth: true; app: root.app }
+            StackLayout {
+                Layout.minimumWidth: 0; Layout.fillWidth: true; Layout.fillHeight: true
+                currentIndex: root.tab === "appearance" ? 0 : 1
+                AppearanceSettings { Layout.fillWidth: true; Layout.fillHeight: true }
+                BoundedScrollView {
+                    id: scroll; clip: true
+                    ColumnLayout {
+                        width: scroll.availableWidth; spacing: 16
+                        BrowseSettings { visible: root.tab === "browse"; Layout.fillWidth: true; preferences: root.browsePreferences }
+                        WarningSettings { visible: root.tab === "warnings"; Layout.fillWidth: true; preferences: root.warnings }
+                        ConnectionSettings { visible: root.tab === "connections"; Layout.fillWidth: true; app: root.app }
+                    }
                 }
             }
         }

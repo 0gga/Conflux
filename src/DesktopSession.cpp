@@ -1,6 +1,7 @@
 #include "DesktopSession.h"
 #include "features/preferences/ContentPreferences.h"
 #include "platform/CatalogueShowcaseSource.h"
+#include "platform/ConfigOwnershipStore.h"
 #include "platform/InstalledModIdentity.h"
 #include "platform/WorldLaunchAdapters.h"
 #include "services/ContentCatalogue.h"
@@ -16,6 +17,7 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
       m_workspace(defaultPackInspector(), this), m_browser(m_fileStore, this), m_logs(m_fileStore, this),
       m_worlds(m_fileStore, this),
       m_editor(std::make_shared<ConfigRepository>(m_fileStore, m_fileStore, defaultConfigCodecs()), this),
+      m_configs(std::make_shared<SettingsConfigOwnershipStore>(settingsFile), this),
       m_launch({std::make_shared<ModrinthWorldLaunchAdapter>()}, std::make_shared<DesktopLaunchUrlOpener>(),
                m_fileStore, this),
       m_showcase(std::make_shared<CatalogueShowcaseSource>(),
@@ -25,13 +27,14 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
       m_changes(this) {
     m_navigation.setLeaveGuard([this] { return !m_editor.dirty(); });
     connect(&m_navigation, &NavigationHistory::changed, this, &DesktopSession::activateRoute);
-    connect(&m_workspace, &PackWorkspace::changed, this, &DesktopSession::activateRoute);
     connect(&m_logs, &PackLogViewer::changed, this, &DesktopSession::activateRoute);
     connect(&m_workspace, &PackWorkspace::changed, this, [this] {
         if (!m_workspace.busy()) {
+            m_configs.setContext(m_workspace.pack(), m_workspace.files());
             m_content.setContext(m_workspace.pack(), m_workspace.files());
             m_changes.rebuild();
         }
+        activateRoute();
     });
     connect(m_contentInstaller.get(), &ContentInstaller::progress, &m_content, &ContentActions::setProgress);
     connect(&m_content, &ContentActions::contentChanged, this, [this] { m_workspace.refresh(); });
@@ -104,12 +107,7 @@ void DesktopSession::activateRoute() {
     if (section != "configs" || route.value("configPath").toString().isEmpty() || m_workspace.busy())
         return;
     const auto path = route.value("configPath").toString();
-    QVariantMap row;
-    for (const auto &file : m_workspace.files())
-        if (file.toMap().value("relativePath") == path) {
-            row = file.toMap();
-            break;
-        }
+    const auto row = m_configs.file(path);
     m_editor.open({pack.value("path").toString(), path, row.value("relatedModId").toString(),
                    row.value("relatedModTitle").toString(), row.value("icon").toString(),
                    row.value("association").toString()});

@@ -31,3 +31,12 @@ API limitations and release/project equivalence are implementation constraints, 
 - Rows include selection, update/switch version, enable/disable, remove, and a menu with Show file, Copy link and Freeze version.
 - Choose an appropriate automatic/manual refresh combination. The implementation uses debounced local filesystem events plus explicit provider Refresh.
 - These requested content actions authorize explicit file changes; discovery and launcher metadata, worlds and logs stay read-only. Runtime and API availability remain explicit implementation constraints.
+
+## Owner description, navigation, config and artwork correction
+
+- Render readable native descriptions despite provider HTML/font/palette styling.
+- Mouse Back/Forward traverses pages, not tab changes.
+- Duplicate-ID warnings must identify the conflicting files; dependencies must not be mistaken for owning mod IDs.
+- Investigate Catalogue/Configured and expose usable launcher-side visual config controls instead of a raw file editor.
+- Replace the UI icons with a simple, prominent and consistent set.
+- Content artwork fills its rounded square edge to edge, without a padded background box.

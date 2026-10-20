@@ -1,6 +1,10 @@
 #include "ContentFixtures.h"
+#include "features/config/ConfigLibrary.h"
 #include "features/content/ContentActions.h"
 #include "features/preferences/ContentPreferences.h"
+#include "platform/ConfigOwnershipStore.h"
+#include <QBuffer>
+#include <QImage>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -23,6 +27,63 @@ class ContentInteractionTests : public QObject {
   private slots:
     void initTestCase() {
         QQuickStyle::setStyle("Basic");
+    }
+    void configCardsShowTheActualFilePath() {
+        QTemporaryDir temp;
+        ConfigLibrary model(std::make_shared<SettingsConfigOwnershipStore>(temp.path() + "/owners.ini"));
+        model.setContext({{"path", "pack"}}, {QVariantMap{{"category", "configs"},
+                                                          {"relativePath", "config/example-client.toml"},
+                                                          {"fileName", "example-client.toml"},
+                                                          {"relatedModId", "example"},
+                                                          {"relatedModTitle", "Example"},
+                                                          {"association", "Matched by file name"}}});
+        QQmlEngine engine;
+        QQmlComponent component(
+            &engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/pack/ConfigPanel.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        auto *panel = qobject_cast<QQuickItem *>(
+            component.createWithInitialProperties({{"library", QVariant::fromValue(&model)}}));
+        QVERIFY(panel);
+        QQuickWindow window;
+        window.setWidth(1100);
+        window.setHeight(700);
+        panel->setParent(&window);
+        panel->setParentItem(window.contentItem());
+        panel->setWidth(1100);
+        panel->setHeight(700);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTRY_VERIFY(findItem(window.contentItem(), "configFilePath"));
+        const auto label = findItem(window.contentItem(), "configFilePath")->property("text").toString();
+        QVERIFY(label.startsWith("config/example-client.toml"));
+    }
+    void artworkFillsRoundedFrameWithoutPadding() {
+        QImage image(32, 32, QImage::Format_ARGB32);
+        image.fill(Qt::red);
+        QByteArray data;
+        QBuffer buffer(&data);
+        buffer.open(QIODevice::WriteOnly);
+        image.save(&buffer, "PNG");
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/components/ContentIcon.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        auto *icon = qobject_cast<QQuickItem *>(component.createWithInitialProperties(
+            {{"source", QString::fromLatin1("data:image/png;base64," + data.toBase64())}, {"size", 64}}));
+        QVERIFY(icon);
+        QQuickWindow window;
+        window.setColor(Qt::white);
+        window.setWidth(64);
+        window.setHeight(64);
+        icon->setParent(&window);
+        icon->setParentItem(window.contentItem());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTRY_VERIFY(window.grabWindow().pixelColor(2, 32).red() > 240 &&
+                    window.grabWindow().pixelColor(2, 32).green() < 10);
+        const auto rendered = window.grabWindow();
+        QVERIFY(rendered.pixelColor(32, 32).green() < 10);
+        QVERIFY(rendered.pixelColor(0, 0).green() > 200);
     }
     void rowClickAndActionClicksHaveSeparateBehavior() {
         QTemporaryDir temp;

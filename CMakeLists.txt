@@ -32,7 +32,7 @@ qt_add_library(conflux_content STATIC
     src/features/content/ContentInventory.h src/features/content/ContentInventory.cpp
     src/features/content/ConfigAssociation.h src/features/content/ConfigAssociation.cpp
     src/features/diagnostics/DiagnosticRule.h src/features/diagnostics/DiagnosticRules.cpp)
-target_include_directories(conflux_content PUBLIC src)
+target_include_directories(conflux_content PUBLIC src PRIVATE third_party)
 target_link_libraries(conflux_content PUBLIC pack_storage Qt6::Gui PRIVATE miniz)
 qt_add_library(conflux_config STATIC
     src/features/config/ConfigCodec.h src/features/config/JsonConfigCodec.cpp
@@ -60,6 +60,9 @@ target_sources(conflux_desktop PRIVATE
     src/platform/PackChangeMonitor.h src/platform/PackChangeMonitor.cpp
     src/features/launch/WorldLaunch.h src/features/launch/WorldLaunch.cpp
     src/platform/WorldLaunchAdapters.h src/platform/WorldLaunchAdapters.cpp
+    src/features/showcase/DescriptionRenderer.h src/features/showcase/DescriptionRenderer.cpp
+    src/features/config/ConfigLibrary.h src/features/config/ConfigLibrary.cpp
+    src/platform/ConfigOwnershipStore.h src/platform/ConfigOwnershipStore.cpp
     src/features/showcase/ProjectShowcaseSource.h
     src/features/showcase/ProjectShowcase.h src/features/showcase/ProjectShowcase.cpp
     src/platform/InstalledModIdentity.h src/platform/InstalledModIdentity.cpp

@@ -40,7 +40,8 @@ class WorkspaceTests : public QObject {
     void forgeIdentityIsPreservedWithAuthorMetadata() {
         const auto path = storage.path() + "/forge-authors";
         QDir().mkpath(path + "/mods");
-        const QByteArray metadata = "license=\"MIT\"\n[[mods]]\nmodId=\"example\"\ndisplayName=\"Example "
+        const QByteArray metadata = "license=\"MIT\"\n[[dependencies.example]]\nmodId=\"dependency\"\n[[mods]"
+                                    "]\nmodId=\"example\"\ndisplayName=\"Example "
                                     "Forge mod\"\nversion=\"1.0\"\nauthors=\"Author\"\n";
         mz_zip_archive zip{};
         QVERIFY(mz_zip_writer_init_file(&zip, (path + "/mods/example.jar").toUtf8().constData(), 0));
@@ -68,13 +69,25 @@ class WorkspaceTests : public QObject {
         jar(path + "/mods/one.jar", fabric);
         jar(path + "/mods/duplicate.jar", fabric);
         write(path + "/mods/unreadable.jar", "unrecognized archive");
+        const auto duplicates = PackContent::scan({{"path", path}});
+        bool found = false;
+        for (const auto &value : duplicates.issues) {
+            const auto entry = value.toMap();
+            if (entry.value("category") == "duplicate") {
+                QVERIFY(entry.value("message").toString().contains("mods/one.jar"));
+                QVERIFY(entry.value("message").toString().contains("mods/duplicate.jar"));
+                found = true;
+            }
+        }
+        QVERIFY(found);
+
         write(path + "/config/example.json", "{\"unchanged\":true}");
         write(path + "/config/removedmod.toml", "unchanged=true");
         write(path + "/shaderpacks/shader.zip", "fixture");
         write(path + "/resourcepacks/resource.zip", "fixture");
         const auto result = PackContent::scan({{"path", path}, {"loader", "forge"}});
         QCOMPARE(result.files.size(), 7);
-        QVERIFY(result.diagnostics.join(' ').contains("Duplicate enabled mod ID"));
+        QVERIFY(result.diagnostics.join(' ').contains("Multiple enabled files declare mod ID"));
         QVERIFY(result.diagnostics.join(' ').contains("declares fabric"));
         QVERIFY(result.diagnostics.join(' ').contains("ownership is uncertain"));
         QVERIFY(result.coverage.startsWith("2 / 3"));

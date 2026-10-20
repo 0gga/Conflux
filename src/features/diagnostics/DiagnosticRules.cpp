@@ -9,19 +9,24 @@ static QVariantMap issue(const QString &category, const QString &message, const 
 class DuplicateModRule final : public IDiagnosticRule {
     QVariantList evaluate(const ContentSnapshot &snapshot) const override {
         QVariantList result;
-        QSet<QString> ids;
+        QMap<QString, QStringList> paths;
         for (const auto &item : snapshot.files) {
             const auto row = item.toMap();
             const auto id = row.value("modId").toString();
             if (row.value("category") != "mods" || !row.value("enabled").toBool() || id.isEmpty())
                 continue;
-            if (ids.contains(id))
-                result.append(issue("duplicate",
-                                    "Duplicate enabled mod ID: " + id + ". Check " +
-                                        row.value("fileName").toString() + ".",
-                                    row.value("relativePath").toString()));
-            ids.insert(id);
+            paths[id] << row.value("relativePath").toString();
         }
+        for (auto it = paths.cbegin(); it != paths.cend(); ++it)
+            if (it.value().size() > 1) {
+                auto entry = issue(
+                    "duplicate",
+                    "Multiple enabled files declare mod ID " + it.key() + ":\n" + it.value().join("\n") +
+                        "\nKeep the intended version enabled and disable or remove the other file.",
+                    it.value().first());
+                entry["paths"] = it.value();
+                result << entry;
+            }
         return result;
     }
 };

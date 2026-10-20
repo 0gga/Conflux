@@ -1,3 +1,4 @@
+#include "features/showcase/DescriptionRenderer.h"
 #include "features/showcase/ProjectShowcase.h"
 #include "platform/InstalledModIdentity.h"
 #include "platform/WorldLaunchAdapters.h"
@@ -6,6 +7,7 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QTemporaryDir>
+#include <QTextDocument>
 #include <QUrlQuery>
 #include <QtTest>
 using namespace studio;
@@ -48,6 +50,37 @@ class ShowcaseTests : public QObject {
         QCOMPARE(file.write(data), data.size());
     }
   private slots:
+    void mixedHtmlImageBannersDoNotEraseMarkdownText() {
+        const auto html = renderDescription(
+            "![Header](https://example.invalid/banner.png)\n\n<p align=\"center\"><a "
+            "href=\"https://example.invalid\"><img "
+            "src=\"https://example.invalid/button.png\"></a></p>\n\n<br>![Divider](https://example.invalid/"
+            "divider.png)\n\n**Readable description**\n\n### Features\n- First feature\n- Second "
+            "feature\n\n<table><tr><td>Compatibility</td></tr></table>",
+            true);
+        QVERIFY(html.contains("Readable description"));
+        QVERIFY(html.contains("First feature"));
+        QVERIFY(html.contains("Compatibility"));
+        QVERIFY(!html.contains("<img"));
+        QVERIFY(!html.contains("<table"));
+    }
+    void descriptionsDiscardProviderPaletteAndEmptyLayout() {
+        const auto html = renderDescription(
+            "<div style='color:black;background:white'><h2>Visible heading</h2><p><b>Readable "
+            "body</b></p><table style='color:black'><tr><td>Table value</td></tr></table><p><img "
+            "src='file:///bad.png'></p></div>",
+            false);
+        QVERIFY(html.contains("Readable body"));
+        QVERIFY(html.contains("Table value"));
+        QVERIFY(!html.contains("style="));
+        QVERIFY(!html.contains("<table"));
+        QVERIFY(!html.contains("<img"));
+        QVERIFY(!html.contains("<p></p>"));
+        QTextDocument doc;
+        doc.setHtml(html);
+        QVERIFY(doc.toPlainText().contains("Readable body"));
+    }
+
     void staleLookupCannotReplaceNewProject() {
         auto source = std::make_shared<ShowcaseFixture>();
         ProjectShowcase showcase(source, std::make_shared<IdentityFixture>());

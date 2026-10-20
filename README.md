@@ -20,10 +20,10 @@ ctest --test-dir build --output-on-failure
 
 - OLED Qt Quick interface with a unified Library, Discover, pack content workspace and Settings.
 - Every pack is tagged Conflux, Modrinth or CurseForge. Persistent hiding, a Hidden tab, source/search filters and onboarding only when no visible packs remain.
-- Rounded controls and theme-aware icons, including embedded mod artwork and related-mod config icons.
+- Rounded controls and Lucide UI icons, with edge-to-edge rounded mod artwork and related-mod config images.
 - Click a modpack row to open Content, Configs, Files, Logs and Worlds. Explore mods preserves pack context; the redundant Configure button is removed.
 - Back/forward toolbar, mouse buttons and Alt+Left/Right navigation with unsaved-edit protection.
-- Visual config forms for identified JSON/TOML/properties files with explicit backed-up saves and external-change detection.
+- Editable-first visual JSON/TOML/properties config forms, explicit owner association for unidentified files, backed-up saves and external-change detection.
 - Settings uses a vertical category index for Appearance, Warnings and Connections; warning visibility persists by category.
 - Review banners for identified loader mismatches, duplicate mod IDs, missing managed pins/dependencies and possible orphan config names. Ownership suggestions are uncertain; nothing is deleted.
 - Simple JSON themes with four semantic color groups, validation, reload and theme selection in Settings.
@@ -71,3 +71,5 @@ Discovery, launcher metadata, worlds and logs stay read-only. Explicit Content a
 Archive metadata uses vendored [miniz 3.1.0](https://github.com/richgel999/miniz/tree/174573d60290f447c13a2b1b3405de2b96e27d6c), pinned at commit `174573d60290f447c13a2b1b3405de2b96e27d6c` under its retained MIT license in `third_party/LICENSE.miniz`. `miniz_export.h` is a local static-build export definition. Theme registration uses Qt's [QML module and singleton support](https://doc.qt.io/qt-6/qt-add-qml-module.html).
 
 The visual TOML adapter uses [toml++ v3.4.0](https://github.com/marzer/tomlplusplus/tree/30172438cee64926dc41fdd9c11fb3ba5b2ba9de), pinned at `30172438cee64926dc41fdd9c11fb3ba5b2ba9de`, with the retained MIT license in `third_party/LICENSE.tomlplusplus`. The architecture separates storage ports, content identity/rules, codecs/repository, feature presentation models and QML panels. No feature should add parsing or filesystem writes to a view or composition root.
+
+Lucide icons are pinned at c29c276f16590cf017126671535ad8c792be64d8 under [their retained license](third_party/LICENSE.lucide).

@@ -113,3 +113,17 @@ WorldLaunch receives provider adapters, a URL opener and a read-only pack-file r
 ## Settings and verification additions
 
 SettingsPage uses a fixed-width vertical category index and a separate responsive content pane. Settings and showcase routes participate in the same guarded history. UI pointer dispatch is verified in a test-only executable rather than linking Qt Test into the application. Tests additionally cover stale showcases, exact world-link encoding and path rejection, file backups/conflicts, managed import pins, freeze persistence, selection/filter logic, debounced events and multi-root updates. Packaged verification uses temporary writes and only inspects real launcher installations.
+
+## Description, navigation and config correction
+
+DescriptionRenderer normalizes raw HTML inside Markdown before parsing to avoid a Qt mixed-image/HTML text-loss bug, then parses provider Markdown/HTML and emits a controlled native rich-text subset. It preserves text, headings, emphasis and HTTPS links without serializing provider font colors, frame/table CSS, inline images or empty image-only blocks. This prevents inherited black text and empty web layouts on OLED. The QML theme supplies foreground/link colors.
+
+NavigationHistory replaces the current route for section, folder, log, config or Settings/showcase-tab changes within the same page identity. Page identity includes the pack and, for showcases, the installed file or catalogue project. Back/Forward traverses pages and restores each page's most recent local selection. The same unsaved-config guard applies to replacements.
+
+Forge-family identity uses the existing pinned toml++ parser and reads only the actual mods array declaration, never a dependency's modId. Genuine duplicate issues group all enabled file paths under one ID.
+
+ConfigLibrary owns config availability/presentation and explicit owner associations through IConfigOwnershipStore; SettingsConfigOwnershipStore persists local per-pack/per-file choices. It derives supported extensions from the codec registry. Missing/stale associations cannot enable editing. DesktopSession composes this model and resolves editor targets from it after workspace scans. The view defaults to editable files; Needs review exposes Identify mod and format limitations. Existing codec-backed forms, backup/conflict checks and explicit Save remain authoritative.
+
+Catalogue invokes registered Java IConfigScreenFactory screens; Configured obtains loaded ModConfigSpec values, defaults, validation and restart metadata at runtime. These are not executable from a C++ launcher without a game-side bridge. Conflux supplies offline typed controls from supported file values and explicit TOML metadata, and does not invent missing defaults/enums/runtime constraints. Research: [Catalogue](https://github.com/MrCrayfish/Catalogue/blob/c556f997d5539c77fb3371eeccf755ca8a00f321/neoforge/src/main/java/com/mrcrayfish/catalogue/client/NeoForgeModData.java), [Configured](https://github.com/MrCrayfish/Configured/blob/9f78baf593ca1d90ffec7c2d9d8a4a2d027d15e4/neoforge/src/main/java/com/mrcrayfish/configured/impl/neoforge/NeoForgeConfigProvider.java).
+
+UI glyphs use the Lucide SVG subset pinned at c29c276f16590cf017126671535ad8c792be64d8; third_party/LICENSE.lucide retains its license. Shared ContentIcon crops artwork to fill its rounded clip. Artwork stays separate from UI glyphs.

@@ -12,8 +12,23 @@ bool NavigationHistory::request(const QVariantMap &target, int historyIndex) {
         emit blocked();
         return false;
     }
+    const auto samePage = [&] {
+        const auto current = route();
+        if (current.value("page") != target.value("page"))
+            return false;
+        const auto page = target.value("page").toString();
+        if (QStringList{"workspace", "discover", "showcase"}.contains(page) &&
+            current.value("packPath").toString() != target.value("packPath").toString())
+            return false;
+        if (target.value("page") == "showcase")
+            return current.value("modPath") == target.value("modPath") &&
+                   current.value("project") == target.value("project");
+        return true;
+    };
     if (historyIndex >= 0)
         m_index = historyIndex;
+    else if (samePage())
+        m_routes[m_index] = target;
     else {
         while (m_routes.size() > m_index + 1)
             m_routes.removeLast();

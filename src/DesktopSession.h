@@ -1,5 +1,6 @@
 #pragma once
 #include "features/config/ConfigEditor.h"
+#include "features/config/ConfigLibrary.h"
 #include "features/content/ContentActions.h"
 #include "features/launch/WorldLaunch.h"
 #include "features/navigation/NavigationHistory.h"
@@ -25,6 +26,7 @@ class DesktopSession final : public QObject {
     Q_PROPERTY(studio::PackLogViewer *logs READ logs CONSTANT)
     Q_PROPERTY(studio::PackWorldList *worlds READ worlds CONSTANT)
     Q_PROPERTY(studio::ConfigEditor *editor READ editor CONSTANT)
+    Q_PROPERTY(studio::ConfigLibrary *configs READ configs CONSTANT)
     Q_PROPERTY(studio::WorldLaunch *launch READ launch CONSTANT)
     Q_PROPERTY(studio::ProjectShowcase *showcase READ showcase CONSTANT)
     Q_PROPERTY(studio::ContentActions *content READ content CONSTANT)
@@ -50,6 +52,9 @@ class DesktopSession final : public QObject {
     }
     ConfigEditor *editor() {
         return &m_editor;
+    }
+    ConfigLibrary *configs() {
+        return &m_configs;
     }
     WorldLaunch *launch() {
         return &m_launch;
@@ -81,6 +86,7 @@ class DesktopSession final : public QObject {
     PackLogViewer m_logs;
     PackWorldList m_worlds;
     ConfigEditor m_editor;
+    ConfigLibrary m_configs;
     WorldLaunch m_launch;
     ProjectShowcase m_showcase;
     ContentActions m_content;

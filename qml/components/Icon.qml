@@ -11,6 +11,6 @@ Item {
         anchors.fill: parent; smooth: true
         sourceSize: Qt.size(Math.ceil(width * 2), Math.ceil(height * 2))
         fillMode: Image.PreserveAspectFit
-        source: "data:image/svg+xml;utf8," + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='" + root.color + "' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'><path d='" + (Icons.paths[root.name] || Icons.paths.file) + "'/></svg>")
+        source: "data:image/svg+xml;utf8," + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='" + root.color + "' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>" + (Icons.markup[root.name] || Icons.markup.file) + "</svg>")
     }
 }

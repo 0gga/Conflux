@@ -1,5 +1,6 @@
 #include "ModMetadataReader.h"
 #include "domain/LicensePolicy.h"
+#include "toml.hpp"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -47,16 +48,25 @@ QVariantMap ModMetadataReader::read(const QString &path) const {
     for (const auto &entry : QList<QPair<QByteArray, QString>>{{"META-INF/neoforge.mods.toml", "neoforge"},
                                                                {"META-INF/mods.toml", "forge-family"}}) {
         const auto text = QString::fromUtf8(entries.value(QString::fromUtf8(entry.first)));
-        auto value = [&](const QString &key) {
-            return QRegularExpression("(?m)^\\s*" + key + "\\s*=\\s*[\"']([^\"']+)[\"']")
-                .match(text)
-                .captured(1);
-        };
+        QVariantMap declaration;
+        QString license;
+        try {
+            const auto table = toml::parse(text.toStdString());
+            license = QString::fromStdString(table["license"].value_or(std::string{}));
+            if (const auto *mods = table["mods"].as_array(); mods && !mods->empty()) {
+                if (const auto *mod = mods->get(0)->as_table())
+                    for (const auto *key : {"modId", "displayName", "version", "authors"})
+                        declaration[key] = QString::fromStdString((*mod)[key].value_or(std::string{}));
+            }
+        } catch (const toml::parse_error &) {
+            // Malformed metadata stays unidentified; dependency IDs are never owners.
+        }
+        const auto value = [&](const QString &key) { return declaration.value(key).toString(); };
         if (!value("modId").isEmpty()) {
             if (result.value("author").toString().isEmpty())
                 result["author"] = value("authors");
             if (!result.contains("openSource"))
-                result["openSource"] = isKnownOpenSourceLicense(value("license"));
+                result["openSource"] = isKnownOpenSourceLicense(license);
             loaders << entry.second;
             if (result.value("modId").toString().isEmpty()) {
                 result["modId"] = value("modId");

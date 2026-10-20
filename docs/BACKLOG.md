@@ -21,8 +21,8 @@ Requests are prioritized here; listing an idea does not mean it is implemented. 
 | Priority | Addition | Acceptance criteria |
 | --- | --- | --- |
 | P1 | JSON5, YAML and additional CFG formats | New codec adapters preserve comments/unsupported syntax, validate round trips, and never pass unknown formats through another parser. |
-| P1 | Reviewed ownership mappings | Users can correct/confirm config ownership per pack; ambiguity never silently chooses a mod. Persist explicit identity and provenance. |
-| P1 | Mod-provided config schemas | Optional adapters expose actual ranges, enums, descriptions and restart requirements; no invented constraints. |
+| P2 | Ownership mapping review/reset UI | Local explicit per-file mod associations are implemented. Add a central mapping list and reset action; retain ambiguity and missing-mod checks. |
+| P1 | Mod-provided config schemas and optional game-side bridge | Export actual loaded runtime specs/defaults/enums/validators/restart metadata through a versioned optional game-side contract. Catalogue invokes registered Java screens; a launcher cannot execute them offline. Offline forms must not invent constraints. |
 | P1 | Config changes in Git | Explicitly include reviewed config files in managed commits; preserve secret/unrelated-file staging guards. Current Git save remains for the pack manifest. |
 | P1 | Config change preview and restore | Show a diff before save, list timestamped backups, and restore only after an explicit action with conflict checks. |
 | P1 | GitHub sign-in and sync | OAuth, repository creation, push/pull and conflicts through UI; credentials stay outside repositories. |
@@ -48,3 +48,5 @@ Requests are prioritized here; listing an idea does not mean it is implemented. 
 ## Current editing limits
 
 Ownership is an unambiguous filename/directory match, not a declaration from a mod. Unknown owners and unsupported formats remain inspectable without an Edit action. JSON is reserialized with its values preserved; TOML/properties patch supported values and preserve unrelated text. Complex values remain unchanged and are omitted from forms. No runtime schema, enum or range is inferred for JSON. Logs/worlds/files are inspection tools. Scans do not guarantee runtime compatibility. Backups are local application data and have no automatic retention policy yet.
+
+- Delivered correction: readable descriptions, page-only navigation history, dependency-safe Forge identity and grouped duplicate paths, editable-first config forms with explicit owner association, Lucide glyphs and rounded edge-to-edge artwork.

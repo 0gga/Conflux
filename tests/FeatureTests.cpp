@@ -1,5 +1,7 @@
 #include "DesktopSession.h"
+#include "features/config/ConfigLibrary.h"
 #include "features/content/ConfigAssociation.h"
+#include "platform/ConfigOwnershipStore.h"
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
@@ -37,6 +39,50 @@ class FeatureTests : public QObject {
         history.back();
         history.go({{"page", "settings"}});
         QVERIFY(!history.canForward());
+    }
+    void tabsReplaceCurrentPageWithoutAddingHistory() {
+        NavigationHistory history;
+        history.go({{"page", "workspace"}, {"packPath", "a"}, {"section", "content"}});
+        history.go({{"page", "workspace"}, {"packPath", "a"}, {"section", "configs"}});
+        history.go({{"page", "workspace"}, {"packPath", "a"}, {"section", "worlds"}});
+        history.back();
+        QCOMPARE(history.route().value("page").toString(), QString("library"));
+        history.forward();
+        QCOMPARE(history.route().value("section").toString(), QString("worlds"));
+        history.go({{"page", "showcase"}, {"packPath", "a"}, {"modPath", "mods/a.jar"}});
+        history.go({{"page", "showcase"},
+                    {"packPath", "a"},
+                    {"modPath", "mods/a.jar"},
+                    {"showcaseTab", "versions"}});
+        history.back();
+        QCOMPARE(history.route().value("page").toString(), QString("workspace"));
+        history.go({{"page", "workspace"}, {"packPath", "b"}});
+        history.back();
+        QCOMPARE(history.route().value("packPath").toString(), QString("a"));
+        history.go({{"page", "settings"}, {"packPath", "a"}, {"settingsTab", "appearance"}});
+        history.go({{"page", "settings"}, {"settingsTab", "warnings"}});
+        history.back();
+        QCOMPARE(history.route().value("page").toString(), QString("workspace"));
+    }
+    void explicitConfigOwnerPersistsAndMissingModNeverEnablesEditing() {
+        QTemporaryDir temp;
+        const auto store = std::make_shared<SettingsConfigOwnershipStore>(temp.path() + "/owners.ini");
+        ConfigLibrary configs(store);
+        QVariantList files{QVariantMap{{"category", "mods"}, {"modId", "example"}, {"title", "Example"}},
+                           QVariantMap{{"category", "configs"},
+                                       {"relativePath", "config/odd.json"},
+                                       {"fileName", "odd.json"}}};
+        configs.setContext({{"path", "pack"}}, files);
+        QVERIFY(!configs.file("config/odd.json").value("editable").toBool());
+        QVERIFY(!configs.identify("config/odd.json", "unknown"));
+        QVERIFY(configs.identify("config/odd.json", "example"));
+        QVERIFY(configs.file("config/odd.json").value("editable").toBool());
+        ConfigLibrary reopened(std::make_shared<SettingsConfigOwnershipStore>(temp.path() + "/owners.ini"));
+        reopened.setContext({{"path", "pack"}}, files);
+        QCOMPARE(reopened.file("config/odd.json").value("association").toString(),
+                 QString("Mod selected by you"));
+        reopened.setContext({{"path", "pack"}}, {files.last()});
+        QVERIFY(!reopened.file("config/odd.json").value("editable").toBool());
     }
     void mouseHistoryButtons() {
         NavigationHistory history;

@@ -1,68 +1,10 @@
 #include "ProjectShowcase.h"
-#include <QFont>
+#include "DescriptionRenderer.h"
 #include <QFutureWatcher>
 #include <QPointer>
-#include <QTextBlock>
-#include <QTextCursor>
-#include <QTextDocument>
-#include <QTextFragment>
-#include <QUrl>
 #include <QtConcurrent>
 #include <algorithm>
 namespace studio {
-static QString nativeDescription(const QString &source, bool markdown) {
-    if (source.trimmed().isEmpty())
-        return {};
-    QTextDocument document;
-    QFont font;
-    font.setPixelSize(14);
-    document.setDefaultFont(font);
-    if (markdown)
-        document.setMarkdown(source);
-    else
-        document.setHtml(source);
-    QList<QPair<int, int>> images;
-    for (auto block = document.begin(); block.isValid(); block = block.next())
-        for (auto item = block.begin(); !item.atEnd(); ++item) {
-            const auto fragment = item.fragment();
-            if (fragment.isValid() && fragment.charFormat().isImageFormat())
-                images << qMakePair(fragment.position(), fragment.length());
-        }
-    // Gallery retrieval has its own bounds and identity checks. Description markup
-    // never loads arbitrary inline images or imports the author's light palette.
-    for (auto it = images.crbegin(); it != images.crend(); ++it) {
-        QTextCursor cursor(&document);
-        cursor.setPosition(it->first);
-        cursor.setPosition(it->first + it->second, QTextCursor::KeepAnchor);
-        cursor.removeSelectedText();
-    }
-    struct Format {
-        int position, length;
-        QTextCharFormat value;
-    };
-    QList<Format> formats;
-    for (auto block = document.begin(); block.isValid(); block = block.next())
-        for (auto item = block.begin(); !item.atEnd(); ++item) {
-            const auto fragment = item.fragment();
-            if (!fragment.isValid())
-                continue;
-            auto format = fragment.charFormat();
-            format.clearProperty(QTextFormat::ForegroundBrush);
-            format.clearProperty(QTextFormat::BackgroundBrush);
-            if (format.isAnchor() && QUrl(format.anchorHref()).scheme() != "https") {
-                format.setAnchor(false);
-                format.setAnchorHref({});
-            }
-            formats << Format{fragment.position(), fragment.length(), format};
-        }
-    for (const auto &format : formats) {
-        QTextCursor cursor(&document);
-        cursor.setPosition(format.position);
-        cursor.setPosition(format.position + format.length, QTextCursor::KeepAnchor);
-        cursor.setCharFormat(format.value);
-    }
-    return document.toHtml();
-}
 ProjectShowcase::ProjectShowcase(std::shared_ptr<IProjectShowcaseSource> source,
                                  std::shared_ptr<const IInstalledModIdentity> identity, QObject *parent)
     : QObject(parent), m_source(std::move(source)), m_identity(std::move(identity)) {}
@@ -143,7 +85,7 @@ void ProjectShowcase::resolve(const InstalledModIdentity &identity, const QVaria
                 if (!guard || guard->m_generation != generation)
                     return;
                 auto *self = guard.data();
-                self->m_description = nativeDescription(detail.description, project.provider == "modrinth");
+                self->m_description = renderDescription(detail.description, project.provider == "modrinth");
                 self->m_gallery = detail.images;
                 if (!detail.errors.isEmpty()) {
                     if (!self->m_notice.isEmpty())

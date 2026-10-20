@@ -65,7 +65,7 @@ Item {
         }
     }
     Component { id: contentView; ContentPanel { controller: root.session.content; onBrowseRequested: root.discoverRequested(); onShowcaseRequested: function(path) { root.showcaseRequested(path) } onShowFilesRequested: function(path) { root.app.openContentFolder(path) } } }
-    Component { id: configView; ConfigPanel { files: root.workspace.files; onEditRequested: function(path) { root.configRequested(path) } onShowFilesRequested: function(path) { root.app.openContentFolder(path) } } }
+    Component { id: configView; ConfigPanel { library: root.session.configs; onEditRequested: function(path) { root.configRequested(path) } onShowFilesRequested: function(path) { root.app.openContentFolder(path) } } }
     Component { id: editorView; ConfigEditorPanel { editor: root.session.editor; onCloseRequested: root.sectionRequested("configs") } }
     Component { id: fileView; FilePanel { browser: root.session.files; onDirectoryRequested: function(path) { root.app.openFolder(root.workspace.pack.path + "/" + path) } onFolderRequested: function(path) { root.folderRequested(path) } onShowFilesRequested: function(path) { root.app.openContentFolder(path) } } }
     Component { id: logView; LogPanel { logs: root.session.logs; onSelected: function(path) { root.logRequested(path) } } }

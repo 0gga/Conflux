@@ -57,6 +57,7 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
         int phase = 0;
         QString managedPath;
         QString selectedMod;
+        QString externalPath;
         QElapsedTimer elapsed;
     };
     auto state = std::make_shared<SmokeState>();
@@ -99,13 +100,22 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                 }
                 controller.selectProject(0);
                 session.navigation()->go(
-                    {{"page", "showcase"}, {"packPath", ""}, {"project", controller.projects().first()}});
+                    {{"page", "showcase"},
+                     {"packPath", ""},
+                     {"project", QVariantMap{{"provider", "modrinth"},
+                                             {"id", "zV5r3pPn"},
+                                             {"title", "3D Skin Layers"},
+                                             {"sourceIds", QVariantMap{{"modrinth", "zV5r3pPn"}}}}}});
                 break;
             case 2:
                 if (controller.detailBusy() || session.showcase()->busy())
                     return;
                 if (session.showcase()->project().value("provider") != "modrinth") {
                     fail("Catalogue showcase failed without an active pack");
+                    return;
+                }
+                if (session.showcase()->description().size() < 100) {
+                    fail("Mixed HTML/Markdown 3D Skin Layers description was lost");
                     return;
                 }
                 if (!capture("project")) {
@@ -223,9 +233,15 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     session.navigation()->go(
                         {{"page", "workspace"}, {"packPath", controller.activePack().value("path")}});
                 break;
-            case 10:
+            case 10: {
+                state->externalPath = controller.activePack().value("path").toString();
                 if (session.workspace()->busy() || session.content()->busy())
                     return;
+                int editable = 0;
+                for (const auto &row : session.configs()->files())
+                    if (row.toMap().value("editable").toBool())
+                        ++editable;
+                qInfo() << "Real launcher editable config count:" << editable;
                 if (!capture("launcher-content")) {
                     fail("Launcher content render failed");
                     return;
@@ -235,6 +251,7 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                 window->setWidth(1080);
                 window->setHeight(720);
                 break;
+            }
             case 11:
                 if (auto *popup = window->findChild<QObject *>("packWarnings");
                     popup && popup->property("opened").toBool()) {
@@ -492,6 +509,16 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
             case 28:
                 if (!capture("settings-vertical-narrow")) {
                     fail("Narrow settings render failed");
+                    return;
+                }
+                session.navigation()->go(
+                    {{"page", "workspace"}, {"packPath", state->externalPath}, {"section", "configs"}});
+                break;
+            case 29:
+                if (session.workspace()->busy() || controller.repositoryBusy() || session.content()->busy())
+                    return;
+                if (!capture("launcher-configs")) {
+                    fail("Launcher config availability render failed");
                     return;
                 }
                 if (smokeRuntimeError) {

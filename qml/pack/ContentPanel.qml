@@ -83,16 +83,17 @@ Item {
                 Item {
                     Layout.fillWidth: true; Layout.fillHeight: true
                     ContentListView {
-                        id: list; outsideColor: Theme.colors.panel; cornerRadius: 10; anchors.fill: parent; clip: true; model: root.rows;
+                        id: list; objectName: "instanceContentList"; cornerRadius: 0; anchors.fill: parent; clip: true; model: root.rows;
                         delegate: Rectangle {
                             id: entry; objectName: "contentRow"
                             required property var modelData
+                            required property int index
                             readonly property bool selected: root.controller.selected.indexOf(modelData.relativePath) !== -1
-                            width: list.viewportWidth; height: 82; radius: 10
+                            width: list.viewportWidth; height: 82
                             color: selected ? Theme.colors.input : hover.hovered ? Theme.colors.card : "transparent"
                             HoverHandler { id: hover }
                             MouseArea { anchors.fill: parent; enabled: entry.modelData.category === "mods"; cursorShape: Qt.PointingHandCursor; onClicked: root.showcaseRequested(entry.modelData.relativePath) }
-                            Rectangle { anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right; height: 1; color: Theme.colors.border; opacity: 0.6 }
+                            Rectangle { visible: entry.index < list.count - 1; anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right; height: 1; color: Theme.colors.border; opacity: 0.6 }
                             RowLayout {
                                 anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 16; spacing: 12
                                 SelectionBox { objectName: "contentSelection"; checked: entry.selected; Accessible.name: "Select " + entry.modelData.title; onToggled: root.controller.select(entry.modelData.relativePath,checked) }
@@ -137,6 +138,8 @@ Item {
                     EmptyState { anchors.centerIn: parent; visible: root.rows.length === 0; title: root.controller.busy ? "Reading your content…" : "No matching content"; message: "Try another filter, clear your search, or browse content."; symbol: "content" }
                 }
             }
+            // Contiguous rows fill the table; only its outer frame has rounded corners.
+            ScrollViewportCorners { objectName: "contentTableCorners"; anchors.fill: parent; radius: parent.radius; outsideColor: Theme.colors.background }
         }
     }
     ContentFilter { id: filters; objectName: "contentFilter"; parent: filterButton; y: filterButton.height+6; controller: root.controller }

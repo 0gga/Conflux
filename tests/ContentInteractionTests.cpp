@@ -230,6 +230,137 @@ ContentListView {
         QCOMPARE(screenshot.pixelColor(qRound(card->width()) - 2, 20),
                  card->property("color").value<QColor>());
     }
+    void tableHoverFillsRowsAndClipsOnceAtTheOuterFrame() {
+        QTemporaryDir temp;
+        ContentActions model(std::make_shared<ContentFileFixture>(),
+                             std::make_shared<ContentCatalogueFixture>(),
+                             std::make_shared<ContentInstallerFixture>(),
+                             std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        QVariantList rows;
+        for (int index = 0; index < 20; ++index)
+            rows.append(QVariantMap{{"title", QString("Example %1").arg(index, 2, 10, QChar('0'))},
+                                    {"relativePath", QString("mods/example%1.jar").arg(index)},
+                                    {"fileName", "example.jar"}, {"category", "mods"},
+                                    {"sha1", "hash"}, {"enabled", true}});
+        model.setContext({{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "fabric"}}, rows);
+        QTRY_VERIFY(!model.busy());
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(1124, 524);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/pack/ContentPanel.qml"));
+        std::unique_ptr<QQuickItem> panel(qobject_cast<QQuickItem *>(
+            component.createWithInitialProperties({{"controller", QVariant::fromValue(&model)}})));
+        QVERIFY2(panel, qPrintable(component.errorString()));
+        panel->setParentItem(window.contentItem());
+        panel->setPosition(QPointF(12, 12));
+        panel->setSize(QSizeF(1100, 500));
+        auto *corners = findItem(panel.get(), "contentTableCorners");
+        QVERIFY(corners);
+        const auto outside = corners->property("outsideColor").value<QColor>();
+        window.setColor(outside);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *list = findItem(panel.get(), "instanceContentList");
+        auto *viewport = findItem(panel.get(), "contentListViewport");
+        auto *table = findItem(panel.get(), "contentTable");
+        QVERIFY(list && viewport && table);
+        const auto origin = viewport->mapToScene(QPointF{}).toPoint();
+        const auto bottom = origin.y() + qRound(viewport->height()) - 1;
+        auto *content = viewport->property("contentItem").value<QQuickItem *>();
+        QVERIFY(content);
+        const auto hoveredRow = [&](int y) -> QQuickItem * {
+            const QPoint point(origin.x() + 300, y);
+            QTest::mouseMove(&window, point);
+            QTest::qWait(100);
+            for (auto *row : content->childItems())
+                if (row->objectName() == "contentRow" &&
+                    QRectF(row->mapToScene(QPointF{}), row->size()).contains(point))
+                    return row;
+            return nullptr;
+        };
+        auto *first = hoveredRow(origin.y() + 20);
+        QVERIFY(first);
+        auto rendered = window.grabWindow();
+        const auto hover = first->property("color").value<QColor>();
+        QVERIFY(hover != table->property("color").value<QColor>());
+        for (const auto point : {QPoint(origin.x() + 1, origin.y() + 1),
+                                 QPoint(origin.x() + qRound(viewport->width()) - 2, origin.y() + 1),
+                                 QPoint(origin.x() + 1, origin.y() + 79)})
+            QCOMPARE(rendered.pixelColor(point), hover);
+        // A row clipped at the top stays full-width, without a second rounded mask.
+        list->setProperty("contentY", 39);
+        QVERIFY(hoveredRow(origin.y() + 5));
+        rendered = window.grabWindow();
+        QCOMPARE(rendered.pixelColor(origin.x() + 1, origin.y() + 1), hover);
+        // Hover the partially visible bottom row: flat across the viewport, rounded only at the frame.
+        QVERIFY(hoveredRow(bottom - 8));
+        rendered = window.grabWindow();
+        QCOMPARE(rendered.pixelColor(origin.x() + 25, bottom - 1), hover);
+        QCOMPARE(rendered.pixelColor(origin.x() + qRound(viewport->width()) - 2, bottom - 1), hover);
+        QCOMPARE(rendered.pixelColor(origin.x(), bottom), outside);
+        // At the true end of the list no divider extends across the final rounded edge.
+        list->setProperty("contentY", list->property("contentHeight").toReal() - list->height());
+        auto *last = hoveredRow(bottom - 8);
+        QVERIFY(last);
+        QCOMPARE(last->property("index").toInt(), 19);
+        rendered = window.grabWindow();
+        QCOMPARE(rendered.pixelColor(origin.x() + 30, bottom), hover);
+        QCOMPARE(rendered.pixelColor(origin.x(), bottom), outside);
+    }
+    void cardStatisticsShareCentersAndOneTrailingAlignment() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(1000, 250);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/components/ProjectCard.qml"));
+        std::unique_ptr<QQuickItem> card(qobject_cast<QQuickItem *>(component.createWithInitialProperties(
+            {{"project", QVariantMap{{"title", "Example"}, {"author", "Author"},
+                                     {"summary", "Summary"}, {"updated", "2026-10-15"},
+                                     {"followersRaw", 42000}, {"followers", "42.0K"},
+                                     {"downloadStats", QVariantList{QVariantMap{{"provider", "modrinth"},
+                                                                                {"count", "249.9M"}}}}}},
+             {"installState", QVariantMap{{"installed", true}, {"canInstall", false}, {"label", "Installed"}}}})));
+        QVERIFY2(card, qPrintable(component.errorString()));
+        card->setParentItem(window.contentItem());
+        card->setWidth(950);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *appearance = engine.singletonInstance<studio::Appearance *>(qmlTypeId("Conflux.Style", 1, 0, "Appearance"));
+        QVERIFY(appearance);
+        for (const int scale : {75, 100, 125}) {
+            QVERIFY(appearance->setValue("contentScale", scale));
+            QTest::qWait(100);
+            auto *install = findItem(card.get(), "browseInstallButton");
+            auto *statistics = findItem(card.get(), "browseStatistics");
+            auto *updated = findItem(card.get(), "browseUpdated");
+            auto *more = findItem(card.get(), "browseMoreButton");
+            QVERIFY(install && statistics && updated && more);
+            const auto right = [](QQuickItem *item) { return item->mapToScene(QPointF(item->width(), 0)).x(); };
+            QVERIFY(qAbs(right(install) - right(statistics)) < 1);
+            QVERIFY(qAbs(right(install) - right(updated)) < 1);
+            QVERIFY(right(install) + 4 * scale / 100.0 <= more->mapToScene(QPointF{}).x());
+            QVERIFY(statistics->mapToScene(QPointF{}).y() >= install->mapToScene(QPointF(0, install->height())).y());
+            QVERIFY(updated->mapToScene(QPointF{}).y() >= statistics->mapToScene(QPointF(0, statistics->height())).y());
+            qreal center = -1;
+            int count = 0;
+            for (auto *statistic : statistics->childItems()) {
+                auto *icon = findItem(statistic, "statisticIcon");
+                auto *label = findItem(statistic, "statisticText");
+                if (!icon || !label)
+                    continue;
+                ++count;
+                const auto iconCenter = icon->mapToScene(QPointF(0, icon->height() / 2)).y();
+                const auto labelCenter = label->mapToScene(QPointF(0, label->height() / 2)).y();
+                QVERIFY(qAbs(iconCenter - labelCenter) <= 1);
+                if (center >= 0)
+                    QVERIFY(qAbs(center - iconCenter) <= 1);
+                center = iconCenter;
+            }
+            QCOMPARE(count, 2);
+        }
+        appearance->reset();
+    }
     void focusedPopupBlocksBackgroundScrollAndTyping() {
         QQmlEngine engine;
         QQuickWindow window;
@@ -586,7 +717,7 @@ Item {
         QVERIFY(qAbs(refresh->mapToScene(QPointF(refresh->width(), 0)).x() - panel->width()) < 2);
         auto *row = findItem(window.contentItem(), "contentRow");
         QVERIFY(row);
-        QVERIFY(row->property("radius").toReal() > 0);
+        QCOMPARE(row->property("radius").toReal(), 0.0);
         auto *table = findItem(window.contentItem(), "contentTable");
         QVERIFY(table);
         QCOMPARE(QQmlProperty(table, "border.width").read().toInt(), 0);

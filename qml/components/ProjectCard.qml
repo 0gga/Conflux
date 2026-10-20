@@ -100,24 +100,27 @@ Rectangle {
     }
     ColumnLayout {
         id: actions
-        anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.margins: root.inset
-        width: Math.max(140 * root.contentScale, installButton.implicitWidth + more.width + 6 * root.contentScale)
-        spacing: 3 * root.contentScale
+        objectName: "browseActions"
+        anchors.right: more.left; anchors.rightMargin: 6 * root.contentScale
+        anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.topMargin: root.inset; anchors.bottomMargin: root.inset
+        width: Math.max(140 * root.contentScale, installButton.implicitWidth, statistics.implicitWidth, updated.implicitWidth)
+        spacing: 4 * root.contentScale
         ActionButton {
             id: installButton; objectName: "browseInstallButton"
-            Layout.alignment: Qt.AlignRight; Layout.rightMargin: more.width + 6 * root.contentScale
+            Layout.alignment: Qt.AlignRight
             text: root.installState.label || "Install"; iconName: root.installState.installed ? "check" : "plus"
             accented: true; compact: true; font.pixelSize: 12 * root.contentScale; implicitHeight: 32 * root.contentScale
             enabled: !!root.installState.canInstall; onClicked: root.installRequested()
             opacity: root.installState.installed || enabled ? 1 : 0.7
         }
         Item { Layout.fillHeight: true }
-        Row {
+        RowLayout {
+            id: statistics; objectName: "browseStatistics"
             Layout.alignment: Qt.AlignRight; spacing: 8 * root.contentScale
-            Repeater { model: root.project.downloadStats || []; delegate: BrandBadge { required property var modelData; brand: modelData.provider; text: modelData.count; framed: false; badgeScale: root.contentScale } }
+            Repeater { model: root.project.downloadStats || []; delegate: ContentStatistic { required property var modelData; brand: modelData.provider; text: modelData.count; hint: Branding.label(brand) + " downloads"; statisticScale: root.contentScale } }
             ContentStatistic { visible: (root.project.followersRaw || 0)>0; iconName: "heart"; text: root.project.followers || ""; hint: "Followers"; statisticScale: root.contentScale }
         }
-        ContentStatistic { Layout.alignment: Qt.AlignRight; visible: !!root.project.updated; iconName: "history"; text: root.updatedAge(root.project.updated || ""); hint: root.project.updated || ""; statisticScale: root.contentScale }
+        ContentStatistic { id: updated; objectName: "browseUpdated"; Layout.alignment: Qt.AlignRight; visible: !!root.project.updated; iconName: "history"; text: root.updatedAge(root.project.updated || ""); hint: root.project.updated || ""; statisticScale: root.contentScale }
     }
     PopupButton {
         popup: menu

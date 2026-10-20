@@ -964,11 +964,68 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     fail("Gallery close control missing");
                     return;
                 }
+                session.navigation()->go({{"page", "workspace"}, {"packPath", state->externalPath},
+                                          {"section", "content"}});
+                break;
+            }
+            case 61: {
+                if (session.workspace()->busy() || session.content()->busy())
+                    return;
+                auto *list = findVisualItem(window->contentItem(), "instanceContentList");
+                auto *viewport = findVisualItem(window->contentItem(), "contentListViewport");
+                if (!list || !viewport) {
+                    fail("Instance table viewport missing");
+                    return;
+                }
+                list->setProperty("contentY", 39);
+                const auto point = viewport->mapToScene(QPointF(300, 12));
+                QMouseEvent move(QEvent::MouseMove, point, point, Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(window, &move);
+                break;
+            }
+            case 62: {
+                if (!capture("launcher-content-hover-top")) {
+                    fail("Clipped top row hover render failed");
+                    return;
+                }
+                auto *viewport = findVisualItem(window->contentItem(), "contentListViewport");
+                const auto point = viewport->mapToScene(QPointF(300, viewport->height() - 8));
+                QMouseEvent move(QEvent::MouseMove, point, point, Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(window, &move);
+                break;
+            }
+            case 63: {
+                if (!capture("launcher-content-hover-bottom")) {
+                    fail("Clipped bottom row hover render failed");
+                    return;
+                }
+                auto *list = findVisualItem(window->contentItem(), "instanceContentList");
+                list->setProperty("contentY", list->property("contentHeight").toReal() - list->height());
+                break;
+            }
+            case 64: {
+                if (!capture("launcher-content-hover-end")) {
+                    fail("Final row hover render failed");
+                    return;
+                }
+                session.navigation()->go({{"page", "discover"}, {"packPath", state->externalPath}});
+                session.catalogue()->configure({{"type", "mod"}, {"query", "Sodium"}, {"source", "modrinth"},
+                                                 {"sort", "relevance"}, {"size", 10}});
+                break;
+            }
+            case 65: {
+                if (session.catalogue()->busy())
+                    return;
+                if (session.catalogue()->projects().isEmpty() || !capture("explore-card-statistics")) {
+                    fail("Card statistics render failed");
+                    return;
+                }
                 if (smokeRuntimeError) {
                     fail("QML runtime warning in Explore content");
                     return;
                 }
-                qInfo("PASS: source images/formatted descriptions, enlarged gallery zoom, reserved scroll "
+                qInfo("PASS: contiguous table hover/top/bottom clipping and aligned statistics; "
+                      "source images/formatted descriptions, enlarged gallery zoom, reserved scroll "
                       "gutters, stable hover; channel/game/loader version filters, active discovery chips "
                       "and toggle menus; "
                       "candy-red theme, live appearance preview, independent UI/content/filter sizing, "

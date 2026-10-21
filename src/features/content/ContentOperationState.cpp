@@ -36,7 +36,7 @@ QVariantList reconcileContentRows(const QVariantList &actual, const QVariantList
     const QStringList metadata{"sourceIds",        "external",      "provider",        "projectId",
                                "installedRelease", "updateRelease", "updateAvailable", "projectUrl",
                                "author",           "authorIcon",    "authorIds",       "environment",
-                               "openSource"};
+                               "openSource",       "title",         "version",         "icon"};
     QSet<QString> keys;
     for (const auto &value : actual) {
         auto row = value.toMap();

@@ -20,6 +20,7 @@
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 #include <atomic>
+#include <stdexcept>
 Q_IMPORT_QML_PLUGIN(Conflux_StylePlugin)
 using namespace studio;
 class WorkspaceTests : public QObject {
@@ -40,6 +41,31 @@ class WorkspaceTests : public QObject {
         QVERIFY(mz_zip_writer_end(&zip));
     }
   private slots:
+    void inspectorExceptionsRetainTheLastPublishedFiles() {
+        class Inspector : public studio::IPackContentInspector {
+          public:
+            mutable bool fail = false;
+            studio::PackContentResult inspect(const QVariantMap &) const override {
+                if (fail)
+                    throw std::runtime_error("fixture");
+                studio::PackContentResult result;
+                result.files << QVariantMap{{"relativePath", "mods/stable.jar"}};
+                return result;
+            }
+        };
+        auto inspector = std::make_shared<Inspector>();
+        studio::PackWorkspace workspace(inspector);
+        workspace.setPack({{"path", "fixture"}});
+        QTRY_VERIFY(!workspace.busy());
+        const auto files = workspace.files();
+        QCOMPARE(files.size(), 1);
+        inspector->fail = true;
+        workspace.refresh();
+        QTRY_VERIFY(!workspace.busy());
+        QCOMPARE(workspace.files(), files);
+        QVERIFY(!workspace.issues().isEmpty());
+    }
+
     void backgroundMetadataRefreshDoesNotMakeRepositoryControlsBusy() {
         QTemporaryDir temp;
         ApplicationController app(nullptr, temp.path() + "/packs", temp.path() + "/settings.ini");

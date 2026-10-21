@@ -15,7 +15,7 @@ ColumnLayout {
         model: root.preferences.options
         delegate: Rectangle {
             id: option; required property var modelData
-            Layout.fillWidth: true; implicitHeight: body.implicitHeight + 32; radius: 16; color: Theme.colors.card
+            Layout.fillWidth: true; implicitHeight: body.implicitHeight + 32; radius: ControlStyle.panelRadius; color: Theme.colors.card
             RowLayout { id: body; anchors.fill: parent; anchors.margins: 16; spacing: 16
                 Icon { name: "warning"; color: Theme.colors.warning }
                 ColumnLayout { Layout.fillWidth: true; spacing: 7; Text { text: option.modelData.title; color: Theme.colors.text; font.pixelSize: 14; font.weight: Font.DemiBold } Text { Layout.fillWidth: true; text: option.modelData.description; color: Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.WordWrap } }

@@ -11,7 +11,7 @@ FocusDialog {
     property string preferredLoader: ""
     property int selectedVersion: -1
     width: 650; height: 520; padding: 24; modal: true; anchors.centerIn: parent
-    background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: 18 }
+    background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius }
     onOpened: selectedVersion = -1
     header: Text { text: "Switch version · " + (root.controller.versionTarget.title || "Mod"); color: Theme.colors.text; font.pixelSize: 21; font.weight: Font.DemiBold; padding: 24; bottomPadding: 8; elide: Text.ElideRight }
     ColumnLayout {

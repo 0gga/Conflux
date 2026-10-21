@@ -7,7 +7,7 @@ Rectangle {
     id: root
     required property var field
     objectName: "appearanceField_" + field.key
-    implicitHeight: body.implicitHeight+24; radius: 12; color: Theme.colors.card
+    implicitHeight: body.implicitHeight+24; radius: ControlStyle.panelRadius; color: Theme.colors.card
     RowLayout {
         id: body; anchors.fill: parent; anchors.margins: 12; spacing: 8
         Loader {

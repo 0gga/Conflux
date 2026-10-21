@@ -54,6 +54,69 @@ class ShowcaseTests : public QObject {
         QCOMPARE(file.write(data), data.size());
     }
   private slots:
+
+    void closingDuringDescriptionFormattingDiscardsTheWorkerResult() {
+        auto source = std::make_shared<ShowcaseFixture>();
+        ProjectShowcase showcase(source, std::make_shared<IdentityFixture>());
+        showcase.openProject({}, {{"provider", "modrinth"}, {"id", "project"}});
+        Project project;
+        project.id = "project";
+        project.provider = "modrinth";
+        source->pending.first()(project, {});
+        ProjectDetail detail;
+        detail.description = QString("# Heading\n\nSome content.\n").repeated(500);
+        source->detail(detail);
+        QVERIFY(showcase.busy());
+        showcase.close();
+        QSignalSpy changed(&showcase, &ProjectShowcase::changed);
+        QTest::qWait(150);
+        QVERIFY(showcase.descriptionBlocks().isEmpty());
+        QVERIFY(!showcase.busy());
+        QCOMPARE(changed.count(), 0);
+    }
+    void changelogsLoadOnlyWhenSelectedAndKeepExactSourceIdentity() {
+        auto source = std::make_shared<ShowcaseFixture>();
+        ProjectShowcase showcase(source, std::make_shared<IdentityFixture>());
+        showcase.openProject({}, {{"provider", "modrinth"}, {"id", "project"}, {"type", "mod"}});
+        Project project;
+        project.id = "project";
+        project.provider = "modrinth";
+        source->pending.first()(project, {});
+        Release older;
+        older.provider = "modrinth";
+        older.projectId = "project";
+        older.id = "old";
+        older.version = "1";
+        older.published = "2026-09-01";
+        older.changelog = "# Old version\nFixed the original issue.";
+        Release latest = older;
+        latest.id = "new";
+        latest.version = "2";
+        latest.published = "2026-10-21";
+        latest.changelog = "# Latest version\nNew changes.";
+        ProjectDetail detail;
+        detail.releases = {older, latest};
+        source->detail(detail);
+        QVERIFY(showcase.changelogRelease().isEmpty());
+        QCOMPARE(showcase.changelogVersions().first().toMap().value("id").toString(), QString("new"));
+        showcase.selectChangelog(older.toVariant());
+        QTRY_VERIFY(!showcase.changelogBusy());
+        QCOMPARE(showcase.changelogRelease().value("id").toString(), QString("old"));
+        QVERIFY(!showcase.changelogBlocks().isEmpty());
+        const auto original = showcase.changelogBlocks();
+        showcase.selectChangelog(latest.toVariant());
+        QTRY_VERIFY(!showcase.changelogBusy());
+        QVERIFY(showcase.changelogBlocks() != original);
+        showcase.selectChangelog(older.toVariant());
+        QVERIFY(!showcase.changelogBusy());
+        QCOMPARE(showcase.changelogBlocks(), original);
+        showcase.selectChangelog({{"provider", "curseforge"}, {"id", "old"}});
+        QCOMPARE(showcase.changelogRelease().value("provider").toString(), QString("modrinth"));
+        showcase.close();
+        QVERIFY(showcase.changelogBlocks().isEmpty());
+        QVERIFY(showcase.changelogVersions().isEmpty());
+    }
+
     void installedAssetShowcaseRetainsItsDestinationType() {
         auto source = std::make_shared<ShowcaseFixture>();
         ProjectShowcase showcase(source, std::make_shared<IdentityFixture>());
@@ -257,7 +320,7 @@ class ShowcaseTests : public QObject {
         mr.filename = "fabric.jar";
         detail.releases = {cf, mr};
         source->detail(detail);
-        QVERIFY(!showcase.busy());
+        QTRY_VERIFY(!showcase.busy());
         QCOMPARE(showcase.versions().size(), 1);
         const auto variants = showcase.versions().first().toMap().value("variants").toList();
         QCOMPARE(variants.size(), 2);

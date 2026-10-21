@@ -11,6 +11,7 @@
 #include "features/preferences/WarningPreferences.h"
 #include "features/showcase/ProjectShowcase.h"
 #include "features/showcase/ReleaseFilters.h"
+#include "features/status/RunningInstances.h"
 #include "features/workspace/PackFileBrowser.h"
 #include "features/workspace/PackLogViewer.h"
 #include "features/workspace/PackWorkspace.h"
@@ -23,6 +24,7 @@ namespace studio {
 // warning rules, filesystem policy or view layout.
 class DesktopSession final : public QObject {
     Q_OBJECT
+    Q_PROPERTY(studio::RunningInstances *running READ running CONSTANT)
     Q_PROPERTY(studio::NavigationHistory *navigation READ navigation CONSTANT)
     Q_PROPERTY(studio::WarningPreferences *warnings READ warnings CONSTANT)
     Q_PROPERTY(studio::PackWorkspace *workspace READ workspace CONSTANT)
@@ -40,6 +42,9 @@ class DesktopSession final : public QObject {
     Q_PROPERTY(studio::BrowsePreferences *browsePreferences READ browsePreferences CONSTANT)
   public:
     explicit DesktopSession(QObject *parent = nullptr, QString settingsFile = {}, QString backupRoot = {});
+    RunningInstances *running() {
+        return &m_running;
+    }
     NavigationHistory *navigation() {
         return &m_navigation;
     }
@@ -103,6 +108,7 @@ class DesktopSession final : public QObject {
     std::shared_ptr<ContentLockRegistry> m_contentLocks;
     std::shared_ptr<const NativeContentStore> m_contentFiles;
     std::shared_ptr<ContentInstaller> m_contentInstaller;
+    RunningInstances m_running;
     NavigationHistory m_navigation;
     NavigationInput m_input;
     WarningPreferences m_warnings;

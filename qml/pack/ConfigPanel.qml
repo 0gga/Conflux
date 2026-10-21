@@ -26,7 +26,7 @@ Item {
         SmoothListView { boundsBehavior: Flickable.StopAtBounds;
             id: list; Layout.fillWidth: true; Layout.fillHeight: true; clip: true; model: root.rows; spacing: 8; ScrollBar.vertical: ScrollBar {}
             delegate: Rectangle {
-                id: entry; required property var modelData; width: list.width; height: 88; radius: 14; color: hover.hovered ? Theme.colors.hover : Theme.colors.card
+                id: entry; required property var modelData; width: list.width; height: 88; radius: ControlStyle.panelRadius; color: hover.hovered ? Theme.colors.hover : Theme.colors.card
                 HoverHandler { id: hover }
                 RowLayout {
                     anchors.fill: parent; anchors.margins: 16; spacing: 14
@@ -48,7 +48,7 @@ Item {
         id: identify
         property string path: ""
         modal: true; anchors.centerIn: parent; width: 480; padding: 24
-        background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: 16 }
+        background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius }
         header: Text { text: "Choose the related mod"; padding: 24; color: Theme.colors.text; font.pixelSize: 20 }
         ColumnLayout {
             width: parent.width; spacing: 16

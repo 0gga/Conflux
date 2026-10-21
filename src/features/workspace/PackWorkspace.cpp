@@ -1,6 +1,7 @@
 #include "PackWorkspace.h"
 #include <QFutureWatcher>
 #include <QtConcurrent>
+#include <exception>
 namespace studio {
 PackWorkspace::PackWorkspace(std::shared_ptr<const IPackContentInspector> inspector, QObject *parent)
     : QObject(parent), m_inspector(std::move(inspector)) {}
@@ -50,6 +51,18 @@ void PackWorkspace::startScan() {
     });
     const auto inspector = m_inspector;
     const auto pack = m_pack;
-    watcher->setFuture(QtConcurrent::run([inspector, pack] { return inspector->inspect(pack); }));
+    const auto previous = m_content;
+    watcher->setFuture(QtConcurrent::run([inspector, pack, previous] {
+        try {
+            return inspector->inspect(pack);
+        } catch (...) {
+            auto result = previous;
+            const QString message = "Could not inspect this instance. Refresh to retry.";
+            result.diagnostics << message;
+            result.issues << QVariantMap{
+                {"category", "inventory"}, {"severity", "error"}, {"message", message}};
+            return result;
+        }
+    }));
 }
 } // namespace studio

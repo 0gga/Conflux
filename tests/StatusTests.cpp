@@ -1,0 +1,105 @@
+#include "features/status/OperationHistory.h"
+#include "features/status/RunningInstances.h"
+#include "platform/InstanceProcessSource.h"
+#include <QCoreApplication>
+#include <QDir>
+#include <QElapsedTimer>
+#include <QFile>
+#include <QProcess>
+#include <QSignalSpy>
+#include <QTemporaryDir>
+#include <QtTest>
+using namespace studio;
+class StatusTests : public QObject {
+    Q_OBJECT
+  private slots:
+    void taskFailuresKeepDetailsAndRetryIntentUntilDismissed() {
+        OperationHistory history;
+        QSignalSpy retry(&history, &OperationHistory::retryRequested);
+        history.queued(1, {{"title", "Instance"}, {"path", "instance"}}, "Trident", "Update");
+        QCOMPARE(history.activeCount(), 1);
+        QSignalSpy resets(&history, &QAbstractItemModel::modelReset);
+        QPersistentModelIndex stable(history.index(0));
+        history.start(1);
+        history.progress(1, "Downloading");
+        QCOMPARE(history.entries().first().toMap().value("message").toString(), QString("Downloading"));
+        QVERIFY(stable.isValid());
+        QCOMPARE(resets.count(), 0);
+        history.finish(1, false, "Fixture failure");
+        QCOMPARE(history.activeCount(), 0);
+        QCOMPARE(history.failedCount(), 1);
+        QVERIFY(history.details(1).contains("Fixture failure"));
+        history.retry(1);
+        QCOMPARE(retry.count(), 1);
+        history.dismiss(1);
+        QVERIFY(history.entries().isEmpty());
+    }
+    void runningStatusRefreshesInWorkersAndPreservesLastKnownStateOnErrors() {
+        class Source : public IInstanceProcessSource {
+          public:
+            mutable int calls = 0;
+            RunningInstanceResult scan(const QVariantList &packs) const override {
+                ++calls;
+                if (calls == 1)
+                    return {packs, {}};
+                return {{}, "Status unavailable"};
+            }
+        };
+        auto source = std::make_shared<Source>();
+        RunningInstances running(source);
+        running.setPacks({QVariantMap{{"path", "fixture"}, {"title", "Fixture"}}});
+        QTRY_COMPARE(running.instances().size(), 1);
+        running.refresh();
+        QTRY_VERIFY(!running.error().isEmpty());
+        QCOMPARE(running.instances().size(), 1);
+    }
+    void nativeDetectionMatchesTheActualGameDirectoryAndNeverReturnsArguments() {
+#ifndef Q_OS_WIN
+        QSKIP("Windows process adapter");
+#else
+        QTemporaryDir temp;
+        QDir().mkpath(temp.path() + "/instance with spaces");
+        const auto program = temp.path() + "/java.exe";
+        QVERIFY(QFile::copy(QCoreApplication::applicationFilePath(), program));
+        QProcess process;
+        process.start(program, {"--process-probe", "--gameDir", temp.path() + "/instance with spaces",
+                                "--accessToken", "fixture-not-for-output"});
+        QVERIFY(process.waitForStarted(5000));
+        InstanceProcessSource source;
+        QElapsedTimer first;
+        first.start();
+        const auto result =
+            source.scan({QVariantMap{{"path", temp.path() + "/instance with spaces"}, {"title", "Fixture"}}});
+        const auto firstMs = first.elapsed();
+        QElapsedTimer cached;
+        cached.start();
+        const auto repeated =
+            source.scan({QVariantMap{{"path", temp.path() + "/instance with spaces"}, {"title", "Fixture"}}});
+        qInfo() << "Native status probe ms first/cached:" << firstMs << cached.elapsed();
+        QCOMPARE(repeated.instances, result.instances);
+        const auto expectedPid = process.processId();
+        process.terminate();
+        if (!process.waitForFinished(2000)) {
+            process.kill();
+            process.waitForFinished(1000);
+        }
+        const auto stopped = source.scan({QVariantMap{{"path", temp.path() + "/instance with spaces"}}});
+        QVERIFY(stopped.instances.isEmpty());
+        QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+        QCOMPARE(result.instances.size(), 1);
+        QCOMPARE(result.instances.first().toMap().value("pid").toLongLong(), qint64(expectedPid));
+        QVERIFY(!result.instances.first().toMap().contains("arguments"));
+        QVERIFY(!result.instances.first().toMap().contains("accessToken"));
+#endif
+    }
+};
+int main(int argc, char **argv) {
+    QCoreApplication app(argc, argv);
+    if (app.arguments().contains("--process-probe")) {
+        QTimer::singleShot(15000, &app, &QCoreApplication::quit);
+        return app.exec();
+    }
+    StatusTests test;
+    return QTest::qExec(&test, argc, argv);
+}
+#include "StatusTests.moc"

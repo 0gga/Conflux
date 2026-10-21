@@ -26,6 +26,7 @@ struct Release {
     QString channel = "release";
     QStringList gameVersions, loaders, requiredDependencies;
     QJsonArray dependencyRefs;
+    QString changelog;
     qint64 fileSize = 0;
     QMap<QString, QString> sourceIds;
     QVariantMap toVariant() const;
@@ -40,6 +41,7 @@ struct ContentInstallRequest {
     QString title;
     QJsonObject sourceIds;
     QString contentType = "mod";
+    bool resolveDependencies = true;
 };
 // Only explicit, reviewed provider:id -> shared identity mappings may collapse projects.
 QVector<Project> mergeProjects(const QVector<Project> &projects,

@@ -69,11 +69,13 @@ Item {
                             preferredLoader: root.browse.pack.loader || ""
                             selectedLoaders: root.catalogue.filters.loaders || []
                             hiddenMode: !!root.catalogue.filters.hidden
-                            installState: { const ready=root.browse.ready; const busy=root.browse.busy; const state=root.browse.state(modelData); state.canInstall = state.canInstall && !root.app.navigationBusy; return state }
+                            installState: { const ready=root.browse.ready; const busy=root.browse.busy; const state=root.browse.state(modelData); const revision=root.content.lockRevision; const sourceLock=root.content.sourceLock(modelData); state.locked=!!state.locked || root.content.projectLocked(modelData); state.sourceLocked=!!sourceLock.launcherLocked;state.sourceMissing=!!sourceLock.missing;state.canInstall = state.canInstall && !root.app.navigationBusy && !state.locked; if(state.locked&&!state.installed)state.label="Locked"; return state }
                             onOpened: { root.catalogue.scrollPosition=results.contentY;root.showcaseRequested(modelData,"description") }
                             onVersionsRequested: { root.catalogue.scrollPosition=results.contentY;root.showcaseRequested(modelData,"versions") }
                             onAuthorRequested: function(author) { root.authorRequested(author) }
                             onInstallRequested: root.browse.install(modelData)
+                            onUnlockRequested: root.content.setProjectLocked(modelData,false)
+                            onRestoreLockedRequested: root.content.restoreLocked(modelData)
                             onVisibilityRequested: function(hidden) { root.catalogue.hide(modelData,hidden) }
                             onTagRequested: function(tag) { root.catalogue.configure({tags:[(modelData.provider==="modrinth"?"mr:":"cf:")+tag]}) }
                         }
@@ -93,7 +95,7 @@ Item {
                 }
                 Rectangle {
                     objectName: "browseFilterPanel"
-                    Layout.fillWidth: true; Layout.fillHeight: true; radius: 16; color: Theme.colors.panel; border.color: Theme.colors.border
+                    Layout.fillWidth: true; Layout.fillHeight: true; radius: ControlStyle.panelRadius; color: Theme.colors.panel; border.color: Theme.colors.border
                     BrowseFilters { anchors.fill: parent; anchors.margins: 14; catalogue: root.catalogue; hasInstance: root.browse.ready; connectorAvailable: root.browse.connectorAvailable }
                 }
             }

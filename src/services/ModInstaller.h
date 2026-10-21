@@ -6,6 +6,7 @@
 #include <QNetworkReply>
 #include <QQueue>
 #include <QSaveFile>
+#include <QSet>
 #include <QTemporaryDir>
 #include <functional>
 #include <memory>
@@ -42,6 +43,7 @@ class ModInstaller : public QObject {
     bool m_busy = false, m_applying = false;
     QString m_path, m_game, m_loader;
     QStringList m_allowedLoaders;
+    QSet<QString> m_shallowRoots;
     QJsonObject m_expected;
     QQueue<Task> m_tasks;
     QMap<QString, Release> m_resolved;

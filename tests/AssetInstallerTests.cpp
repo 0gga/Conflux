@@ -146,10 +146,16 @@ class AssetInstallerTests : public QObject {
         });
         QTRY_VERIFY_WITH_TIMEOUT(done, 10000);
         QCOMPARE(result.ok, !failLast);
-        QVERIFY(result.changed);
-        QCOMPARE(read(created.path + "/resourcepacks/resourcepack.zip"), bytes);
-        QCOMPARE(read(created.path + "/datapacks/datapack.zip"), bytes);
-        QCOMPARE(PackRepository::inspect(created.path).manifest.value("assets").toArray().size(), 2);
+        QCOMPARE(result.changed, !failLast);
+        if (failLast) {
+            QVERIFY(!QFileInfo::exists(created.path + "/resourcepacks/resourcepack.zip"));
+            QVERIFY(!QFileInfo::exists(created.path + "/datapacks/datapack.zip"));
+            QCOMPARE(PackRepository::inspect(created.path).manifest.value("assets").toArray().size(), 0);
+        } else {
+            QCOMPARE(read(created.path + "/resourcepacks/resourcepack.zip"), bytes);
+            QCOMPARE(read(created.path + "/datapacks/datapack.zip"), bytes);
+            QCOMPARE(PackRepository::inspect(created.path).manifest.value("assets").toArray().size(), 2);
+        }
     }
     void verifiedZipInstallsWithExactManagedPinsAndGitExclusions() {
         QTemporaryDir temp;

@@ -90,6 +90,8 @@ void ContentOperationExecutor::execute(ContentOperation operation, ContentFileSt
             });
     watcher->setFuture(QtConcurrent::run([files, before, operation, targets] {
         try {
+            if (operation.kind == ContentOperation::Restore)
+                return files->restoreLocked(before.pack, operation.sourceLock);
             if (operation.kind == ContentOperation::Enable)
                 return files->setEnabledBatch(before.pack, targets, operation.enabled);
             if (operation.kind == ContentOperation::Remove)

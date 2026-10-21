@@ -13,7 +13,7 @@ Item {
             required property string modelData
             required property int index
             objectName: "galleryThumbnail"
-            width: gallery.cellWidth-10; height: gallery.cellHeight-10; radius: 14; color: hover.hovered ? Theme.colors.hover : Theme.colors.card
+            width: gallery.cellWidth-10; height: gallery.cellHeight-10; radius: ControlStyle.panelRadius; color: hover.hovered ? Theme.colors.hover : Theme.colors.card
             ContentIcon { anchors.fill: parent; anchors.margins: 6; source: parent.modelData; preserveAspectFit: true; kind: "image"; radius: 10 }
             TapHandler { onTapped: root.imageRequested(parent.index) }
             HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }

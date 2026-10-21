@@ -16,7 +16,7 @@ Rectangle {
     signal exploreRequested()
     signal hideRequested()
     implicitHeight: Appearance.values.libraryRowHeight
-    radius: 16
+    radius: ControlStyle.panelRadius
     color: hover.hovered ? Theme.colors.panel : Theme.colors.card
     border.color: hover.hovered ? Qt.lighter(Theme.colors.border, 1.5) : Theme.colors.border
     Behavior on border.color { ColorAnimation { duration: Appearance.values.reduceMotion ? 0 : 100 } }

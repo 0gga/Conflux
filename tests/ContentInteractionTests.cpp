@@ -3,6 +3,7 @@
 #include "features/content/ContentActions.h"
 #include "features/preferences/BrowsePreferences.h"
 #include "features/preferences/ContentPreferences.h"
+#include "features/status/RunningInstances.h"
 #include "platform/BrowseSettingsStore.h"
 #include "platform/ConfigOwnershipStore.h"
 #include "theme/Appearance.h"
@@ -96,6 +97,164 @@ Item { width:400; height:200
         const auto center = body->mapToItem(navigation, QPointF(body->width() / 2, body->height() / 2));
         QVERIFY(qAbs(center.x() - navigation->width() / 2) <= 0.51);
         QVERIFY(qAbs(center.y() - navigation->height() / 2) <= 0.51);
+    }
+
+    void scrollbarsOnlyAppearWhenNeededWithoutChangingTheGutter() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(420, 240);
+        QQmlComponent component(&engine);
+        component.setData(
+            R"(
+import QtQuick
+import "components"
+ContentListView {width:400;height:200;model:2;delegate:Rectangle {width:ListView.view.width;height:40}}
+)",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/FittingScrollbarFixture.qml"));
+        std::unique_ptr<QQuickItem> list(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY2(list, qPrintable(component.errorString()));
+        list->setParentItem(window.contentItem());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *bar = list->findChild<QQuickItem *>("contentScrollBar");
+        QVERIFY(bar);
+        QTRY_VERIFY(!bar->isVisible());
+        const auto width = list->property("viewportWidth").toReal();
+        list->setProperty("model", 30);
+        QTRY_VERIFY(bar->isVisible());
+        QCOMPARE(list->property("viewportWidth").toReal(), width);
+        list->setProperty("model", 2);
+        QTRY_VERIFY(!bar->isVisible());
+        QCOMPARE(list->property("viewportWidth").toReal(), width);
+    }
+    void constrainedButtonsNoticesAndSingleLineStatisticsStayContained() {
+        QQmlEngine engine;
+        QSignalSpy warnings(&engine, &QQmlEngine::warnings);
+        QQuickWindow window;
+        window.resize(520, 320);
+        window.setColor(QColor("#08090a"));
+        QQmlComponent component(&engine);
+        component.setData(
+            R"(
+import QtQuick
+import "components"
+Item { width:520;height:320
+ ActionButton {objectName:"boundedButton";x:16;y:16;width:130;text:"An exceptionally long action label";iconName:"download"}
+ ActionButton {objectName:"smallClearButton";x:170;y:16;width:24;height:24;iconName:"close"}
+ NotificationBanner {objectName:"boundedNotice";x:16;y:72;width:488;text:"A required release is incompatible with Minecraft 1.21.1 / neoforge. No changes were made. A long message remains contained even when it needs another line."}
+ Item {x:250;y:260;width:28;height:20;RoundedToolTip {objectName:"statisticTip";text:"281 followers";showWhen:true;delay:0}}
+})",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/BoundedControlsFixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> item(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY2(item, qPrintable(component.errorString()));
+        item->setParentItem(window.contentItem());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTest::qWait(80);
+        auto *button = findItem(item.get(), "boundedButton");
+        QVERIFY(button);
+        auto *row = findItem(button, "actionContentRow");
+        QVERIFY(row);
+        QVERIFY(row->width() <= button->width());
+        auto *small = findItem(item.get(), "smallClearButton");
+        QVERIFY(small);
+        auto *smallRow = findItem(small, "actionContentRow");
+        QVERIFY(smallRow);
+        const auto center =
+            smallRow->mapToItem(small, QPointF(smallRow->width() / 2, smallRow->height() / 2));
+        QVERIFY(qAbs(center.x() - small->width() / 2) < 0.1);
+        QVERIFY(!smallRow->parentItem()->clip());
+        auto *notice = findItem(item.get(), "boundedNotice");
+        auto *dismiss = findItem(notice, "dismissNoticeButton");
+        QVERIFY(dismiss);
+        const auto rect = dismiss->mapRectToItem(notice, dismiss->boundingRect());
+        QVERIFY(rect.left() >= 0);
+        QVERIFY(rect.right() <= notice->width());
+        QVERIFY(rect.bottom() <= notice->height());
+        auto *tip = item->findChild<QObject *>("statisticTip");
+        QVERIFY(tip);
+        auto *label = tip->property("contentItem").value<QQuickItem *>();
+        QVERIFY(label);
+        QTRY_COMPARE(label->property("lineCount").toInt(), 1);
+        QVERIFY(window.grabWindow().save(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                         "/../artifacts/polish-controls-narrow.png"));
+        QCOMPARE(warnings.count(), 0);
+    }
+    void operationHudShowsFailuresCopiesDetailsAndRetriesWithoutBlockingThePage() {
+        QTemporaryDir temp;
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        studio::ContentActions content(
+            std::make_shared<ContentFileFixture>(), std::make_shared<ContentCatalogueFixture>(), installer,
+            std::make_shared<studio::SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        const QVariantMap release{{"provider", "modrinth"}, {"projectId", "fixture"},   {"id", "new"},
+                                  {"filename", "new.zip"},  {"sha1", QString(40, 'b')}, {"version", "2"}};
+        const QVariantMap row{{"relativePath", "resourcepacks/old.zip"},
+                              {"title", "Trident"},
+                              {"category", "resourcepacks"},
+                              {"enabled", true},
+                              {"sha1", QString(40, 'a')},
+                              {"sourceIds", QVariantMap{{"modrinth", "fixture"}}},
+                              {"updateAvailable", true},
+                              {"updateRelease", release}};
+        content.setContext({{"path", temp.path()}, {"title", "Create: Takeoff"}}, {row});
+        QTRY_VERIFY(!content.busy());
+        class Source : public studio::IInstanceProcessSource {
+          public:
+            studio::RunningInstanceResult scan(const QVariantList &packs) const override {
+                return {packs, {}};
+            }
+        };
+        studio::RunningInstances running(std::make_shared<Source>());
+        running.setPacks({QVariantMap{{"path", temp.path()}, {"title", "Create: Takeoff"}}});
+        QTRY_COMPARE(running.instances().size(), 1);
+        QQmlEngine engine;
+        QSignalSpy warnings(&engine, &QQmlEngine::warnings);
+        QQuickWindow window;
+        window.resize(1040, 620);
+        window.setColor(QColor("#08090a"));
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/components/OperationHud.qml"));
+        std::unique_ptr<QQuickItem> hud(qobject_cast<QQuickItem *>(component.createWithInitialProperties(
+            {{"content", QVariant::fromValue(&content)}, {"running", QVariant::fromValue(&running)}})));
+        QVERIFY2(hud, qPrintable(component.errorString()));
+        hud->setParentItem(window.contentItem());
+        hud->setPosition({600, 20});
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        content.update("resourcepacks/old.zip");
+        QCOMPARE(content.operations()->activeCount(), 1);
+        installer->completion({false, "Fixture write failed; original content was preserved."});
+        QTRY_VERIFY(!content.busy());
+        auto click = [&](const QString &name) {
+            auto *button = findItem(window.contentItem(), name);
+            QVERIFY(button);
+            QTest::mouseClick(
+                &window, Qt::LeftButton, Qt::NoModifier,
+                button->mapToScene(QPointF(button->width() / 2, button->height() / 2)).toPoint());
+        };
+        click("operationHudButton");
+        QTest::qWait(100);
+        auto *popup = hud->findChild<QObject *>("operationTasksPopup");
+        QVERIFY(popup);
+        QVERIFY(popup->property("activeFocus").toBool());
+        QSignalSpy copied(&content, &studio::ContentActions::copyRequested);
+        click("copyOperationDetails");
+        QCOMPARE(copied.count(), 1);
+        QVERIFY(copied.first().first().toString().contains("Fixture write failed"));
+        QVERIFY(window.grabWindow().save(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                         "/../artifacts/atomic-task-failure.png"));
+        click("retryOperation");
+        QCOMPARE(content.operations()->activeCount(), 1);
+        installer->completion({true, {}});
+        QTRY_VERIFY(!content.busy());
+        QMetaObject::invokeMethod(popup, "close");
+        QTest::qWait(50);
+        click("runningInstancesButton");
+        QTest::qWait(100);
+        QVERIFY(window.grabWindow().save(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                         "/../artifacts/atomic-running-instances.png"));
+        QCOMPARE(warnings.count(), 0);
     }
     void customWindowControlsRespectCloseGuardAndRestoreState() {
         QQmlEngine engine;
@@ -320,11 +479,13 @@ Item { id:root;width:1000;height:700
     property alias gallery:model.gallery
     property alias selection:navigation.tab
     property alias busy:model.busy
+    property alias releaseRows:filters.rows
+    property string selectedVersion:model.changelogRelease.id || ""
     QtObject { id:navigation;property string tab:"gallery" }
-    QtObject { id:model;property var project:({title:"Example",sources:[]});property var gallery:[];property bool busy:false;property string notice:"";property var descriptionBlocks:[];signal changed();onGalleryChanged:changed();onBusyChanged:changed() }
+    QtObject { id:model;property var project:({title:"Example",sources:[]});property var gallery:[];property bool busy:false;property string notice:"";property var descriptionBlocks:[];property var changelogVersions:[];property var changelogBlocks:[];property var changelogRelease:({});property string changelogNotice:"";property bool changelogBusy:false;function selectChangelog(release){changelogRelease=release} signal changed();onGalleryChanged:changed();onBusyChanged:changed() }
     QtObject { id:browser;property bool ready:false;property bool busy:false;property string notice:"";function installed(release,type){return false} }
     QtObject { id:applicationModel;property bool repositoryBusy:false;property bool navigationBusy:false;function openWeb(url){} }
-    QtObject { id:content;property string notice:"" }
+    QtObject { id:content;property string notice:"";property int lockRevision:0;function projectLocked(project){return false} function sourceLock(project){return ({})} }
     QtObject { id:filters;property var rows:[];property var options:({channels:[],versions:[],loaders:[]});property var filters:({channels:[],versions:[],loaders:[],source:"all"}) }
     ShowcasePage { id:page;objectName:"galleryPage";anchors.fill:parent;showcase:model;browse:browser;app:applicationModel;contentController:content;releaseFilters:filters;tab:navigation.tab;onTabRequested:function(key){navigation.tab=key} }
 })",
@@ -342,6 +503,20 @@ Item { id:root;width:1000;height:700
         QVERIFY(!findItem(fixture.get(), "sectionTab_gallery"));
         fixture->setProperty("selection", "versions");
         QTRY_VERIFY(findItem(fixture.get(), "versionChannelFilter"));
+        const QVariantMap release{{"id", "exact-release"},
+                                  {"provider", "modrinth"},
+                                  {"version", "1.2"},
+                                  {"gameVersions", QStringList{"1.21.1"}},
+                                  {"loaders", QStringList{"fabric"}}};
+        fixture->setProperty(
+            "releaseRows", QVariantList{QVariantMap{{"label", "1.2"}, {"variants", QVariantList{release}}}});
+        QTRY_VERIFY(findItem(fixture.get(), "releaseChangelogLink"));
+        auto *link = findItem(fixture.get(), "releaseChangelogLink");
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          link->mapToScene(QPointF(link->width() / 2, link->height() / 2)).toPoint());
+        QTRY_COMPARE(fixture->property("selection").toString(), QString("changelog"));
+        QCOMPARE(fixture->property("selectedVersion").toString(), QString("exact-release"));
+
         QTemporaryDir temp;
         QImage picture(30, 30, QImage::Format_ARGB32);
         picture.fill(Qt::red);
@@ -1156,7 +1331,10 @@ Item {
         QTest::qWait(60);
         QVERIFY(window.grabWindow().save(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
                                          "/../artifacts/version-dropdown.png"));
-        for (const auto character : QByteArray("1.21.32"))
+        search->setProperty("text", "1211");
+        QTRY_COMPARE(options->property("model").toStringList().first(), QString("1.21.1"));
+        search->setProperty("text", "");
+        for (const auto character : QByteArray("12132"))
             QTest::keyClick(&window, static_cast<Qt::Key>(character));
         QTRY_COMPARE(options->property("count").toInt(), 1);
         QVERIFY(findItem(window.contentItem(), "releaseFilterOption-1.21.32"));

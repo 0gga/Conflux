@@ -8,7 +8,7 @@ FocusPopup {
     property string category: ""
     width: 270; padding: 8
     implicitHeight: Math.min(420,body.implicitHeight+16)
-    background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: 14 }
+    background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius }
     onClosed: category = ""
     contentItem: ColumnLayout {
         id: body; spacing: 4

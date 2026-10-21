@@ -14,7 +14,7 @@ Item {
         Text { Layout.fillWidth: true; visible: root.launch.status.length > 0; text: root.launch.status; color: Theme.colors.accent; wrapMode: Text.WordWrap; font.pixelSize: 12 }
         SmoothListView { boundsBehavior: Flickable.StopAtBounds;
             id: list; Layout.fillWidth: true; Layout.fillHeight: true; model: root.worlds.entries; spacing: 10; clip: true; ScrollBar.vertical: ScrollBar {}
-            delegate: Rectangle { id: world; required property var modelData; width: list.width; height: 84; radius: 16; color: Theme.colors.card
+            delegate: Rectangle { id: world; required property var modelData; width: list.width; height: 84; radius: ControlStyle.panelRadius; color: Theme.colors.card
                 RowLayout { anchors.fill: parent; anchors.margins: 16; spacing: 14
                     ContentIcon { source: world.modelData.icon || ""; kind: "world" }
                     ColumnLayout { Layout.fillWidth: true; spacing: 7; Text { Layout.fillWidth: true; text: world.modelData.title; color: Theme.colors.text; font.pixelSize: 14; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText } Text { text: "Folder modified " + world.modelData.modified; color: Theme.colors.muted; font.pixelSize: 11 } }

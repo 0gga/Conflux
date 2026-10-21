@@ -55,11 +55,11 @@ Item {
             }
         }
         Rectangle {
-            Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.fillHeight: true; color: Theme.colors.panel; radius: 16; border.width: 0; clip: true; objectName: "contentTable"
+            Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.fillHeight: true; color: Theme.colors.panel; radius: ControlStyle.panelRadius; border.width: 0; clip: true; objectName: "contentTable"
             ColumnLayout {
                 anchors.fill: parent; spacing: 0
                 Rectangle {
-                    Layout.fillWidth: true; implicitHeight: 48; color: Theme.colors.card; radius: 16
+                    Layout.fillWidth: true; implicitHeight: 48; color: Theme.colors.card; radius: ControlStyle.panelRadius
                     Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 24; color: Theme.colors.card }
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 32; spacing: 12
@@ -112,7 +112,7 @@ Item {
                             }
                             FocusPopup {
                                 id: rowMenu; objectName: "contentMenu"; parent: moreButton; x: moreButton.width-width; y: moreButton.height+4; margins: 8; width: 210; padding: 6
-                                background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: 13 }
+                                background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius }
                                 contentItem: ColumnLayout {
                                     spacing: 2
                                     ActionButton { Layout.fillWidth: true; text: entry.modelData.hidden ? "Restore content" : "Hide content"; iconName: entry.modelData.hidden ? "restore" : "hide"; subtle: true; alignLeft: true; onClicked: { rowMenu.close();root.controller.hide(entry.modelData.relativePath,!entry.modelData.hidden) } }
@@ -143,7 +143,7 @@ Item {
     FocusDialog {
         id: removeDialog; property string path: ""; property string modTitle: ""
         anchors.centerIn: parent; modal: true; width: 460; padding: 24
-        background: Rectangle { radius: 18; color: Theme.colors.card; border.color: Theme.colors.border }
+        background: Rectangle { radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border }
         header: Text { text: "Remove content?"; color: Theme.colors.text; font.pixelSize: 21; padding: 24; bottomPadding: 8 }
         ColumnLayout {
             width: parent.width; spacing: 20

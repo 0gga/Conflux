@@ -31,6 +31,9 @@ CatalogueShowcaseSource::CatalogueShowcaseSource(QObject *parent)
                     callback(detail);
             });
 }
+void CatalogueShowcaseSource::loadChangelog(const Release &release, ChangelogCallback callback) {
+    m_client.loadChangelog(release, std::move(callback));
+}
 void CatalogueShowcaseSource::resolve(const InstalledModIdentity &identity, ResolveCallback callback) {
     const int generation = ++m_generation;
     m_resolves[generation] = [this, callback = std::move(callback)](Project project, QString error) {

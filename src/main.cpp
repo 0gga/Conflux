@@ -10,6 +10,7 @@
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QScreen>
 #include <QtQml/qqmlextensionplugin.h>
 Q_IMPORT_QML_PLUGIN(Conflux_StylePlugin)
 
@@ -54,18 +55,35 @@ int main(int argc, char *argv[]) {
         [&controller, &session] { controller.setContentBusy(session.content()->operationsBusy()); });
     QObject::connect(session.content(), &studio::ContentActions::operationFailed, &controller,
                      &studio::ApplicationController::reportContentError);
-    QObject::connect(session.browse(), &studio::BrowseInstalls::operationFailed, &controller,
-                     &studio::ApplicationController::reportContentError);
+    QObject::connect(session.browse(), &studio::BrowseInstalls::operationFailed, session.content(),
+                     &studio::ContentActions::recordExternalFailure);
     QObject::connect(session.content(), &studio::ContentActions::copyRequested, &application,
                      [](const QString &text) { QGuiApplication::clipboard()->setText(text); });
     QQmlApplicationEngine engine;
-    engine.setInitialProperties(
-        {{"app", QVariant::fromValue(&controller)}, {"session", QVariant::fromValue(&session)}});
+    QVariantMap initial{{"app", QVariant::fromValue(&controller)},
+                        {"session", QVariant::fromValue(&session)}};
+    bool screenSpecified = false;
+    const auto screenIndex = qEnvironmentVariableIntValue("CONFLUX_WINDOW_SCREEN", &screenSpecified);
+    if (!verification.enabled() && screenSpecified && screenIndex >= 0 &&
+        screenIndex < application.screens().size()) {
+        const auto area = application.screens().at(screenIndex)->availableGeometry();
+        initial["x"] = area.x() + 16;
+        initial["y"] = area.y() + 16;
+        initial["width"] = qMin(1360, area.width() - 32);
+        initial["height"] = qMin(900, area.height() - 32);
+        if (qEnvironmentVariableIntValue("CONFLUX_START_MINIMIZED") == 1)
+            initial["visibility"] = QWindow::Minimized;
+    }
+    engine.setInitialProperties(initial);
     engine.load(QUrl("qrc:/qt/qml/ModpackStudio/qml/Main.qml"));
     if (engine.rootObjects().isEmpty())
         return 1;
     studio::WindowFrame frame(*qobject_cast<QWindow *>(engine.rootObjects().first()));
     session.attachWindow(*engine.rootObjects().first());
+    QObject::connect(&controller, &studio::ApplicationController::stateChanged, &session,
+                     [&controller, &session] {
+                         session.running()->setPacks(controller.installations() + controller.packs());
+                     });
     controller.refreshLibrary();
     if (verification.enabled())
         verification.start(application, qobject_cast<QQuickWindow *>(engine.rootObjects().first()),

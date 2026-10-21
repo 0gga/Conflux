@@ -13,6 +13,7 @@ Button {
     property bool pill: false
     property bool accented: false
     property bool focusIndicator: true
+    property real cornerRadius: pill ? height/2 : ControlStyle.controlRadius
     property string iconName: ""
     property string hint: ""
     readonly property bool interactiveHover: enabled && hovered
@@ -30,12 +31,15 @@ Button {
     RoundedToolTip { showWhen: control.tooltipsEnabled && control.interactiveHover && control.hint.length > 0; text: control.hint }
     HoverHandler { enabled: control.enabled; cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor }
     contentItem: Item {
-        implicitWidth: labelRow.implicitWidth; implicitHeight: labelRow.implicitHeight
+        implicitWidth: labelMetrics.advanceWidth+(control.iconName.length ? 17+(control.text.length ? 8 : 0) : 0); implicitHeight: Math.max(17,labelMetrics.height)
+        TextMetrics { id:labelMetrics; text:control.text; font:control.font }
+        clip: control.text.length>0
         Row {
             id: labelRow; objectName: "actionContentRow"
             x: control.alignLeft && control.text.length ? 0 : (parent.width - width) / 2
             anchors.verticalCenter: parent.verticalCenter; anchors.alignWhenCentered: false
             spacing: control.iconName.length && control.text.length ? 8 : 0
+            width: control.text.length ? Math.min(parent.implicitWidth,parent.width) : (control.iconName.length ? 17 : 0)
             Icon {
                 visible: control.iconName.length > 0; anchors.verticalCenter: parent.verticalCenter
                 name: control.iconName; size: 17
@@ -43,19 +47,19 @@ Button {
             }
             Text {
                 visible: control.text.length > 0; text: control.text; font: control.font; color: control.foreground
+                width: Math.max(0,labelRow.width-(control.iconName.length ? 17+labelRow.spacing : 0)); elide: Text.ElideRight
                 anchors.verticalCenter: parent.verticalCenter; textFormat: Text.PlainText
             }
         }
     }
     background: Rectangle {
-        radius: control.pill || !control.text.length ? height/2 : control.compact ? 9 : 11
+        radius: control.cornerRadius
         color: control.primary ? (control.interactiveDown ? Qt.darker(Theme.colors.accent, 1.15) : control.interactiveHover ? Qt.lighter(Theme.colors.accent, 1.07) : Theme.colors.accent)
             : control.interactiveDown ? Qt.darker(Theme.colors.selection, 1.2)
             : control.selected ? (control.interactiveHover ? Qt.lighter(Theme.colors.selection, 1.15) : Theme.colors.selection)
             : control.interactiveHover ? Theme.colors.hover : control.subtle ? "transparent" : Theme.colors.input
         border.width: 1
-        border.color: control.primary ? "transparent" : control.selected ? Qt.lighter(Theme.colors.border, 1.5)
-            : control.subtle ? "transparent" : Theme.colors.border
+        border.color: control.primary ? Qt.lighter(Theme.colors.accent,1.15) : control.selected ? Theme.colors.accent : control.interactiveHover ? Qt.lighter(Theme.colors.border,1.5) : Theme.colors.border
         Behavior on color { ColorAnimation { duration: Appearance.values.reduceMotion ? 0 : 100 } }
         Rectangle {
             anchors.fill: parent; anchors.margins: -3; radius: parent.radius + 3

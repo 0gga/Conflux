@@ -14,7 +14,7 @@ Row {
         visible: root.minecraft.length > 0 || root.showUnknownVersion
         implicitWidth: label.implicitWidth + 16
         implicitHeight: 26
-        radius: 12
+        radius: height/2
         color: Theme.colors.input
         Text {
             id: label

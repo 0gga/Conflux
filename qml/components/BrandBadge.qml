@@ -12,7 +12,7 @@ Rectangle {
     property real badgeScale: 1
     Accessible.name: info.label
     implicitWidth: body.implicitWidth + (framed ? 16 * badgeScale : 0)
-    implicitHeight: 26 * badgeScale; radius: 12 * badgeScale
+    implicitHeight: 26 * badgeScale; radius: height/2
     color: framed ? Theme.colors.input : "transparent"
     Item {
         id: body; anchors.centerIn: parent; anchors.alignWhenCentered: false

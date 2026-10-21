@@ -21,7 +21,7 @@ Item {
             ActionButton { objectName: "toggleAppearancePreview"; text: "Preview"; iconName: "image"; selected: root.previewVisible; compact: true; subtle: true; onClicked: Appearance.setValue("previewVisible",root.previewVisible?0:1) }
             ActionButton { objectName: "resetAppearanceSection"; text: "Reset section"; hint: "Restore this section's defaults"; compact: true; subtle: true; visible: root.section!=="colors"; onClicked: Appearance.resetGroup(root.group) }
         }
-        SectionTabs {
+        SectionTabs { subtabs:true;
             objectName: "appearanceTabs"; Layout.minimumWidth: 0; Layout.maximumWidth: root.width; current: root.section
             entries: [{key:"interface",label:"Interface"},{key:"content",label:"Content"},{key:"filters",label:"Filters"},{key:"colors",label:"Colors"}]
             onSelected: function(key) { root.selectSection(key) }

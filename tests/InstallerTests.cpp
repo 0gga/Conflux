@@ -111,6 +111,81 @@ class InstallerTests : public QObject {
         return done ? result : RepositoryResult{false, "Test timed out"};
     }
   private slots:
+
+    void initialInstallsKeepCachedIncompatibilityGuardsWithoutFetchingUnrelatedGraphs() {
+        for (bool reverse : {false, true}) {
+            FixtureServer server;
+            QTemporaryDir temp;
+            auto pack = PackRepository::create(temp.path(), "Initial guard", "1.21.1", "fabric");
+            QVERIFY(pack.ok);
+            ModInstaller installer(nullptr, server.base());
+            auto installed = modrinthRelease(
+                server.version("existing", "old", "existing bytes",
+                               reverse ? QJsonArray{dep("newroot", "", "incompatible")} : QJsonArray{}));
+            QVERIFY(install(installer, pack.path, installed).ok);
+            server.requests.clear();
+            auto next = modrinthRelease(
+                server.version("newroot", "new", "new bytes",
+                               reverse ? QJsonArray{} : QJsonArray{dep("existing", "", "incompatible")}));
+            const auto result = install(installer, pack.path, next);
+            QVERIFY(!result.ok);
+            QVERIFY(result.error.contains("incompatible"));
+            for (const auto &url : server.requests)
+                QVERIFY(!url.contains("existing"));
+            QCOMPARE(PackRepository::inspect(pack.path).manifest.value("mods").toArray().size(), 1);
+        }
+    }
+    void directUpdateKeepsUnrelatedPinsAndSkipsDependencyRequests() {
+        FixtureServer server;
+        QTemporaryDir temp;
+        const auto pack = PackRepository::create(temp.path(), "Update", "1.21.1", "fabric");
+        QVERIFY(pack.ok);
+        ModInstaller installer(nullptr, server.base());
+        const auto old = modrinthRelease(server.version("root", "old", "old bytes"));
+        QVERIFY(install(installer, pack.path, old).ok);
+        const auto unrelated = modrinthRelease(server.version("other", "other-old", "other bytes"));
+        QVERIFY(install(installer, pack.path, unrelated).ok);
+        server.requests.clear();
+        auto next = modrinthRelease(
+            server.version("root", "new", "new bytes", {dep("missing-library", "incompatible-version")}));
+        next.dependencyRefs.append(dep("other", "", "incompatible"));
+        next.gameVersions = {"1.21", "1.21.1", "1.21.4"};
+        next.loaders = {"fabric", "neoforge"};
+        bool done = false;
+        RepositoryResult result;
+        connect(&installer, &ModInstaller::finished, &installer, [&](RepositoryResult value) {
+            result = value;
+            done = true;
+        });
+        QSignalSpy progress(&installer, &ModInstaller::progress);
+        installer.startBatch(pack.path, {{next, "Root", {{"modrinth", "root"}}, "mod", false}});
+        QTRY_VERIFY_WITH_TIMEOUT(done, 10000);
+        QVERIFY2(result.ok, qPrintable(result.error));
+        QCOMPARE(result.manifest.value("minecraft").toString(), QString("1.21.1"));
+        QCOMPARE(result.manifest.value("loader").toString(), QString("fabric"));
+        QCOMPARE(result.manifest.value("mods").toArray().size(), 2);
+        for (const auto &url : server.requests) {
+            QVERIFY2(!url.contains("version/"), qPrintable(url));
+            QVERIFY(!url.contains("other"));
+            QVERIFY(!url.contains("library"));
+        }
+        for (const auto &row : progress)
+            QVERIFY(!row.first().toString().contains("Resolving"));
+        auto wrong = next;
+        wrong.id = "wrong";
+        wrong.gameVersions = {"1.20.1"};
+        done = false;
+        installer.startBatch(pack.path, {{wrong, "Root", {{"modrinth", "root"}}, "mod", false}});
+        QTRY_VERIFY(done);
+        QVERIFY(!result.ok);
+        wrong.gameVersions = {"1.21.1"};
+        wrong.loaders = {"forge"};
+        done = false;
+        installer.startBatch(pack.path, {{wrong, "Root", {{"modrinth", "root"}}, "mod", false}});
+        QTRY_VERIFY(done);
+        QVERIFY(!result.ok);
+    }
+
     void fabricBridgeAdmissionIsExplicitAndDependencyQueriesKeepBothLoaders() {
         FixtureServer server;
         QTemporaryDir temp;

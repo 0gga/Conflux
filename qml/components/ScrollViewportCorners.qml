@@ -2,7 +2,7 @@ import QtQuick
 import Conflux.Style
 Canvas {
     id: root
-    property real radius: 14
+    property real radius: ControlStyle.panelRadius
     property color outsideColor: Theme.colors.background
     z: 100
     onWidthChanged: requestPaint()

@@ -15,7 +15,7 @@ Item {
     readonly property real viewportWidth: view.width
     readonly property ListView viewport: view
     property real bottomInset: 0
-    property real cornerRadius: 14
+    property real cornerRadius: ControlStyle.panelRadius
     property color outsideColor: Theme.colors.background
     signal movementEnded()
     SmoothListView {

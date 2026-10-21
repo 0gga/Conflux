@@ -100,6 +100,7 @@ Release modrinthRelease(const QJsonObject &row, const QString &fileSha1) {
     r.version = row.value("version_number").toString();
     r.title = row.value("name").toString();
     r.published = row.value("date_published").toString();
+    r.changelog = row.value("changelog").toString();
     for (const auto &value : row.value("game_versions").toArray())
         r.gameVersions << value.toString();
     for (const auto &value : row.value("loaders").toArray())
@@ -189,6 +190,7 @@ Release releaseFromVariant(const QVariantMap &value) {
     r.sha1 = value.value("sha1").toString();
     r.sha512 = value.value("sha512").toString();
     r.published = value.value("published").toString();
+    r.changelog = value.value("changelog").toString();
     r.fileSize = value.value("fileSize").toLongLong();
     r.gameVersions = value.value("gameVersions").toStringList();
     r.loaders = value.value("loaders").toStringList();

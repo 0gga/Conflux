@@ -1189,12 +1189,97 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                 }
                 break;
             case 81: {
+                auto *name = findVisualItem(window->contentItem(), "browseTitle");
+                if (!name || !QMetaObject::invokeMethod(name, "clicked")) {
+                    fail("Changelog project link missing");
+                    return;
+                }
+                break;
+            }
+            case 82: {
+                if (session.showcase()->busy())
+                    return;
+                auto route = session.navigation()->route();
+                route["showcaseTab"] = "versions";
+                session.navigation()->go(route);
+                break;
+            }
+            case 83: {
+                auto *link = findVisualItem(window->contentItem(), "releaseChangelogLink");
+                if (!link || !QMetaObject::invokeMethod(link, "clicked")) {
+                    fail("Version changelog link missing");
+                    return;
+                }
+                break;
+            }
+            case 84: {
+                if (session.showcase()->changelogBusy())
+                    return;
+                if (session.navigation()->route().value("showcaseTab") != "changelog" ||
+                    session.showcase()->changelogRelease().isEmpty() ||
+                    !capture("showcase-version-changelog")) {
+                    fail("Exact version changelog navigation failed");
+                    return;
+                }
+                auto *view = findVisualItem(window->contentItem(), "changelogView");
+                if (!view) {
+                    fail("Changelog view missing");
+                    return;
+                }
+                view->setProperty("mode", "latest");
+                break;
+            }
+            case 85: {
+                if (session.showcase()->changelogBusy())
+                    return;
+                if (!capture("showcase-changelog-latest")) {
+                    fail("Latest changelog render failed");
+                    return;
+                }
+                findVisualItem(window->contentItem(), "changelogView")->setProperty("mode", "all");
+                const auto versions = session.showcase()->changelogVersions();
+                if (versions.size() > 1)
+                    session.showcase()->selectChangelog(versions.at(1).toMap());
+                break;
+            }
+            case 86:
+                if (session.showcase()->changelogBusy())
+                    return;
+                if (!capture("showcase-changelog-all")) {
+                    fail("All versions changelog render failed");
+                    return;
+                }
+                break;
+            case 87:
+                session.navigation()->go({{"page", "discover"}});
+                session.catalogue()->configure({{"query", "Sodum"},
+                                                {"type", "mod"},
+                                                {"source", "modrinth"},
+                                                {"sort", "relevance"},
+                                                {"versions", QStringList{}},
+                                                {"loaders", QStringList{}}});
+                break;
+            case 88: {
+                if (session.catalogue()->busy())
+                    return;
+                bool sodium = false;
+                for (const auto &value : session.catalogue()->projects())
+                    if (value.toMap().value("title").toString() == "Sodium")
+                        sodium = true;
+                if (!sodium || !capture("tolerant-provider-search")) {
+                    fail("Bounded provider typo search failed");
+                    return;
+                }
+                break;
+            }
+            case 89: {
                 if (smokeRuntimeError) {
                     fail("QML runtime warning in Explore content");
                     return;
                 }
                 qInfo().noquote()
-                    << "PASS: authored project retrieval/name links/version tab/history; all-type "
+                    << "PASS: exact-version changelog links, latest/all selection and lazy native rendering; "
+                       "authored project retrieval/name links/version tab/history; all-type "
                        "update/selection UI integration; 83% gallery fit baseline and viewer controls; "
                        "tabbed/searchable settings, "
                        "presentation controls, browse defaults and "

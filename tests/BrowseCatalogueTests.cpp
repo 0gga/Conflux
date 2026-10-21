@@ -1,6 +1,7 @@
 #include "ContentFixtures.h"
 #include "features/content/ContentActions.h"
 #include "features/explore/BrowseCatalogue.h"
+#include "features/explore/TolerantCatalogueSearch.h"
 #include "features/preferences/BrowsePreferences.h"
 #include "features/preferences/ContentPreferences.h"
 #include "platform/BrowseSettingsStore.h"
@@ -74,6 +75,60 @@ class BrowseCatalogueTests final : public QObject {
         return fixture;
     }
   private slots:
+    void typoFallbackIsBoundedKeepsFiltersCachesAndNeverMasksProviderErrors() {
+        auto source = std::make_shared<SearchFixture>();
+        source->delayed = true;
+        TolerantCatalogueSearch search(source);
+        CatalogueQuery query;
+        query.text = "ModXample";
+        query.versions = {"1.21.1"};
+        query.loaders = {"neoforge"};
+        query.tags = {"mr:optimization"};
+        CataloguePage result;
+        bool done = false;
+        search.fetch(query, 0, 20, [&](CataloguePage page) {
+            result = page;
+            done = true;
+        });
+        QCOMPARE(source->calls.size(), 1);
+        source->calls[0].callback({{}, 0, {}});
+        QCOMPARE(source->calls.size(), 2);
+        QCOMPARE(source->calls[1].limit, 100);
+        QCOMPARE(source->calls[1].query.text, QString("mod"));
+        QCOMPARE(source->calls[1].query.versions, query.versions);
+        QCOMPARE(source->calls[1].query.loaders, query.loaders);
+        QCOMPARE(source->calls[1].query.tags, query.tags);
+        auto matching = project(1);
+        matching.title = "ModExample";
+        auto other = project(2);
+        other.title = "Unrelated";
+        source->calls[1].callback({{matching, other}, 10000, {}});
+        QVERIFY(done);
+        QCOMPARE(result.total, 1);
+        QCOMPARE(result.projects.first().id, matching.id);
+        done = false;
+        search.fetch(query, 0, 20, [&](CataloguePage page) {
+            result = page;
+            done = true;
+        });
+        QVERIFY(done);
+        QCOMPARE(source->calls.size(), 2);
+        auto otherAuthor = query;
+        otherAuthor.authorIds = {{"modrinth", "different-author"}};
+        search.fetch(otherAuthor, 0, 20, [](CataloguePage) {});
+        QCOMPARE(source->calls.size(), 3);
+        search.setKey({});
+        done = false;
+        search.fetch(query, 0, 20, [&](CataloguePage page) {
+            result = page;
+            done = true;
+        });
+        source->calls[3].callback({{}, 0, "Provider rate limit"});
+        QVERIFY(done);
+        QCOMPARE(result.error, QString("Provider rate limit"));
+        QCOMPARE(source->calls.size(), 4);
+    }
+
     void directPageEntryUsesNativeOffsetsAndKeepsEarlierPagesReachable() {
         auto api = source(260);
         auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());

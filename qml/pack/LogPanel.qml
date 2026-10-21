@@ -15,7 +15,7 @@ Item {
         }
         Text { Layout.fillWidth: true; text: root.logs.error || (root.logs.selected ? root.logs.selected : "Choose a log to read. Logs are never executed or changed."); color: root.logs.error ? Theme.colors.warning : Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
         Rectangle {
-            Layout.fillWidth: true; Layout.fillHeight: true; radius: 16; color: Theme.colors.panel; clip: true
+            Layout.fillWidth: true; Layout.fillHeight: true; radius: ControlStyle.panelRadius; color: Theme.colors.panel; clip: true
             BoundedScrollView { id: scroll; anchors.fill: parent; anchors.margins: 16; clip: true
                 TextEdit { width: Math.max(scroll.availableWidth, contentWidth); height: contentHeight; text: root.logs.text; font.family: "Consolas"; font.pixelSize: 12; color: Theme.colors.text; selectionColor: Theme.colors.selection; selectedTextColor: Theme.colors.text; textFormat: TextEdit.PlainText; readOnly: true; selectByMouse: true; wrapMode: TextEdit.NoWrap }
             }

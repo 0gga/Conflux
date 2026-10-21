@@ -9,6 +9,7 @@ class CatalogueShowcaseSource final : public QObject, public IProjectShowcaseSou
     explicit CatalogueShowcaseSource(QObject *parent = nullptr);
     void resolve(const InstalledModIdentity &, ResolveCallback) override;
     void load(const Project &, const QString &, const QString &, DetailCallback) override;
+    void loadChangelog(const Release &, ChangelogCallback) override;
     void setCurseforgeKey(const QByteArray &key) override {
         m_client.setCurseforgeKey(key);
     }

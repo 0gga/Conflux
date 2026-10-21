@@ -1,9 +1,14 @@
 #include "PackContent.h"
+#include "platform/ContentAccess.h"
+#include <stdexcept>
 namespace studio {
 PackContentInspector::PackContentInspector(std::shared_ptr<const IContentInventory> inventory,
                                            std::vector<std::unique_ptr<IDiagnosticRule>> rules)
     : m_inventory(std::move(inventory)), m_rules(std::move(rules)) {}
 PackContentResult PackContentInspector::inspect(const QVariantMap &pack) const {
+    ContentAccess access(pack.value("path").toString());
+    if (!access.ok())
+        throw std::runtime_error(access.error().toStdString());
     const auto snapshot = m_inventory->scan(pack);
     PackContentResult result;
     result.files = snapshot.files;

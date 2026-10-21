@@ -1,6 +1,8 @@
 #include "ContentFixtures.h"
+#include "domain/TextSearch.h"
 #include "features/content/ContentActions.h"
 #include "features/preferences/ContentPreferences.h"
+#include "platform/ContentInstaller.h"
 #include "platform/InstalledModIdentity.h"
 #include "platform/NativeContentStore.h"
 #include "platform/PackChangeMonitor.h"
@@ -8,6 +10,7 @@
 #include "services/PackRepository.h"
 #include <QCryptographicHash>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -57,6 +60,63 @@ class ContentActionsTests : public QObject {
                 {"updateRelease", next.toVariant()}};
     }
   private slots:
+
+    void updateDoesNotSwitchLoaderEvenWhenConnectorAllowsFabricInstalls() {
+        QTemporaryDir temp;
+        auto files = std::make_shared<NativeContentStore>(nullptr, temp.path() + "/backups");
+        ContentInstaller installer(files);
+        QVariantMap pack{{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "neoforge"}};
+        QVariantList rows{
+            QVariantMap{{"category", "mods"},
+                        {"sourceIds", QVariantMap{{"modrinth", "root"}}},
+                        {"installedRelease", QVariantMap{{"loaders", QStringList{"neoforge"}}}}},
+            QVariantMap{{"enabled", true}, {"connectorBridge", true}}};
+        ContentInstallRequest request;
+        request.release.provider = "modrinth";
+        request.release.projectId = "root";
+        request.release.gameVersions = {"1.21.1"};
+        request.release.loaders = {"fabric"};
+        request.sourceIds = {{"modrinth", "root"}};
+        request.resolveDependencies = false;
+        bool called = false;
+        ContentWriteResult result;
+        installer.install(pack, rows, {request}, [&](ContentWriteResult value) {
+            called = true;
+            result = value;
+        });
+        QVERIFY(called);
+        QVERIFY(!result.ok);
+        QVERIFY(result.error.contains("loader"));
+        request.release.loaders = {"neoforge"};
+        request.release.gameVersions = {"1.20.1"};
+        called = false;
+        installer.install(pack, rows, {request}, [&](ContentWriteResult value) {
+            called = true;
+            result = value;
+        });
+        QVERIFY(called);
+        QVERIFY(!result.ok);
+        QVERIFY(result.error.contains("Minecraft"));
+    }
+    void forgivingSearchIgnoresSeparatorsAndSmallOmissions() {
+        QElapsedTimer benchmark;
+        benchmark.start();
+        TextQuery matcher("ModXample");
+        int matches = 0;
+        for (int i = 0; i < 10000; ++i)
+            if (matcher.matches("ModExample by Author 1.21.1"))
+                ++matches;
+        QCOMPARE(matches, 10000);
+        qInfo() << "Forgiving matcher 10000 rows ms:" << benchmark.elapsed();
+        QVERIFY(textMatches("Minecraft 1.21.1", "1211"));
+        QVERIFY(textMatches("ModExample", "ModXample"));
+        QVERIFY(textMatches("Mod Example", "modexample"));
+        QVERIFY(textMatches("Café library", "cafe"));
+        QVERIFY(!textMatches("Minecraft 1.21.4", "1211"));
+        QVERIFY(!textMatches("Unrelated Project", "ModXample"));
+        QVERIFY(!textMatches("Amazing Other Module Long Example", "modxample"));
+    }
+
     void fileActionsAreOptimisticSerializedAndRollbackOnlyTheFailedIntent() {
         class Files final : public IContentFileStore {
           public:
@@ -125,7 +185,7 @@ class ContentActionsTests : public QObject {
         QCOMPARE(untouched.data(Qt::UserRole + 1).toMap().value("title").toString(), QString("Charlie"));
         QCOMPARE(reset.count(), 0);
     }
-    void rapidOppositeTogglesUseConfirmedPathsAndLocksBlockQueuedChanges() {
+    void overlappingChangesAreRejectedAndUnrelatedContentStillQueues() {
         class Files final : public IContentFileStore {
           public:
             mutable QSemaphore entered, proceed;
@@ -164,17 +224,91 @@ class ContentActionsTests : public QObject {
         content.setEnabled("mods/Alpha.jar", true);
         content.setEnabled("mods/Bravo.jar", false);
         content.setLocked("mods/Bravo.jar", true);
-        QVERIFY(content.rows()[0].toMap().value("enabled").toBool());
+        QVERIFY(!content.rows()[0].toMap().value("enabled").toBool());
         files->proceed.release();
         QTRY_COMPARE(files->entered.available(), 1);
         files->entered.acquire();
-        QCOMPARE(files->paths, QStringList({"mods/Alpha.jar", "mods/Alpha.jar.disabled"}));
+        QCOMPARE(files->paths, QStringList({"mods/Alpha.jar", "mods/Bravo.jar"}));
         files->proceed.release();
         QTRY_VERIFY(!content.busy());
-        QVERIFY(content.rows()[0].toMap().value("enabled").toBool());
-        QVERIFY(content.rows()[1].toMap().value("enabled").toBool());
+        QVERIFY(!content.rows()[0].toMap().value("enabled").toBool());
+        QVERIFY(!content.rows()[1].toMap().value("enabled").toBool());
+        QVERIFY(!content.rows()[1].toMap().value("locked").toBool());
+        QVERIFY(content.operations()->failedCount() >= 2);
+        content.setLocked("mods/Bravo.jar.disabled", true);
         QVERIFY(content.rows()[1].toMap().value("locked").toBool());
         QCOMPARE(files->paths.size(), 2);
+    }
+    void backgroundReadExceptionsKeepRowsAndReportAnError() {
+        class Files : public IContentFileStore {
+          public:
+            mutable bool fail = false;
+            QVariantList snapshot(const QVariantMap &, const QVariantList &rows) const override {
+                if (fail)
+                    throw std::runtime_error("Fixture read failure");
+                return rows;
+            }
+            ContentWriteResult setEnabled(const QVariantMap &, const QVariantMap &, bool) const override {
+                return {};
+            }
+            ContentWriteResult remove(const QVariantMap &, const QVariantList &) const override {
+                return {};
+            }
+            ContentWriteResult importFiles(const QVariantMap &, const QList<QUrl> &,
+                                           const QString &) const override {
+                return {};
+            }
+        };
+        QTemporaryDir temp;
+        auto files = std::make_shared<Files>();
+        ContentActions content(files, std::make_shared<ContentCatalogueFixture>(),
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        content.setContext({{"path", temp.path()}}, {row("Alpha", "Author")});
+        QTRY_VERIFY(!content.busy());
+        const auto before = content.rows();
+        QSignalSpy errors(&content, &ContentActions::operationFailed);
+        files->fail = true;
+        content.refresh(false);
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(content.rows(), before);
+        QCOMPARE(errors.count(), 1);
+        QVERIFY(content.notice().contains("Fixture read failure"));
+        QCOMPARE(content.operations()->failedCount(), 1);
+    }
+    void renamedUpdateStaysOneEntryAndFailedWorkCanBeRetried() {
+        QTemporaryDir temp;
+        auto files = std::make_shared<ContentFileFixture>();
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        ContentActions content(files, std::make_shared<ContentCatalogueFixture>(), installer,
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        auto original = row("Alpha", "Author");
+        auto release = original.value("updateRelease").toMap();
+        release["filename"] = "new-name.jar";
+        release["sha1"] = QString(40, 'b');
+        original["updateRelease"] = release;
+        content.setContext({{"path", temp.path()}}, {original});
+        QTRY_VERIFY(!content.busy());
+        content.update("mods/Alpha.jar");
+        QCOMPARE(content.rows().size(), 1);
+        QCOMPARE(content.rows().first().toMap().value("relativePath").toString(),
+                 QString("mods/new-name.jar"));
+        content.remove("mods/new-name.jar");
+        QCOMPARE(content.rows().size(), 1);
+        installer->completion({false, "Fixture download failed"});
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(content.rows().first().toMap().value("relativePath").toString(), QString("mods/Alpha.jar"));
+        quint64 failed = 0;
+        for (const auto &value : content.operations()->entries())
+            if (value.toMap().value("retryable").toBool())
+                failed = value.toMap().value("id").toULongLong();
+        QVERIFY(failed);
+        QVERIFY(content.operations()->details(failed).contains("Fixture download failed"));
+        content.retryOperation(failed);
+        QVERIFY(content.operationsBusy());
+        installer->completion({true, {}});
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(content.rows().size(), 1);
     }
     void locksPersistAndUpdatesRemainVisibleWithRecentUpdateFiltering() {
         QTemporaryDir temp;

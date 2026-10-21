@@ -8,7 +8,7 @@ ComboBox {
     opacity: enabled ? 1 : 0.38
     HoverHandler { cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor }
     background: Rectangle {
-        radius: 11; color: control.down ? Theme.colors.selection : control.hovered ? Theme.colors.hover : Theme.colors.input
+        radius: ControlStyle.controlRadius; color: control.down ? Theme.colors.selection : (control.enabled && control.hovered) ? Theme.colors.hover : Theme.colors.input
         border.color: control.visualFocus || control.popup.visible ? Theme.colors.accent : Theme.colors.border
     }
     contentItem: Text { text: control.displayText; color: Theme.colors.text; font: control.font; verticalAlignment: Text.AlignVCenter; leftPadding: 14; rightPadding: 36; elide: Text.ElideRight }
@@ -21,7 +21,7 @@ ComboBox {
         onHoveredChanged: if (hovered) menu.pendingIndex=index
         leftPadding: 12; rightPadding: 34
         contentItem: Text { text: option.text; color: Theme.colors.text; font.pixelSize: 13; font.weight: option.index === control.currentIndex ? Font.DemiBold : Font.Normal; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-        background: Rectangle { radius: 8; color: option.highlighted ? Theme.colors.selection : option.index === control.currentIndex ? Theme.colors.input : "transparent" }
+        background: Rectangle { border.color: Theme.colors.border; radius: ControlStyle.controlRadius; color: option.highlighted ? Theme.colors.selection : option.index === control.currentIndex ? Theme.colors.input : "transparent" }
         Icon { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; name: "check"; size: 15; color: Theme.colors.accent; visible: option.index === control.currentIndex }
     }
     popup: FocusPopup {
@@ -29,7 +29,7 @@ ComboBox {
         property int pendingIndex: 0
         onAboutToShow: pendingIndex=Math.max(0,control.currentIndex)
         y: control.height + 6; width: control.width; padding: 6; implicitHeight: Math.min(list.contentHeight + 12, 280)
-        background: Rectangle { radius: 12; color: Theme.colors.card; border.color: Theme.colors.border }
+        background: Rectangle { radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border }
         contentItem: SmoothListView {
             id: list; focus: true; clip: true; boundsBehavior: Flickable.StopAtBounds; implicitHeight: contentHeight; spacing: 2
             model: control.popup.visible ? control.delegateModel : null; currentIndex: menu.pendingIndex
@@ -45,7 +45,7 @@ ComboBox {
                 }
             }
             ScrollBar.vertical: ContentScrollBar {}
-            ScrollViewportCorners { parent: list; anchors.fill: parent; anchors.rightMargin: 16; radius: 8; outsideColor: Theme.colors.card }
+            ScrollViewportCorners { parent: list; anchors.fill: parent; anchors.rightMargin: 16; radius: ControlStyle.controlRadius; outsideColor: Theme.colors.card }
         }
     }
 }

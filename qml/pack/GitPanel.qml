@@ -11,7 +11,7 @@ Rectangle {
     required property bool busy
     property bool expanded: false
     signal saveRequested(string message)
-    implicitHeight: body.implicitHeight + 24; radius: 14; color: Theme.colors.card
+    implicitHeight: body.implicitHeight + 24; radius: ControlStyle.controlRadius; color: Theme.colors.card
     ColumnLayout {
         id: body; anchors.fill: parent; anchors.margins: 12; spacing: 10
         RowLayout {

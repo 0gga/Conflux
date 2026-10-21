@@ -21,9 +21,11 @@ Rectangle {
     signal opened
     signal visibilityRequested(bool hidden)
     signal tagRequested(string tag)
+    signal unlockRequested
+    signal restoreLockedRequested
     signal installRequested
     implicitHeight: Math.max(Appearance.values.artworkSize * contentScale, heading.implicitHeight + 34 * contentScale, actions.implicitHeight) + 2 * inset
-    radius: 14
+    radius: ControlStyle.panelRadius
     color: hover.hovered ? Theme.colors.hover : Theme.colors.card
     border.width: 0
     opacity: installState.installed ? Appearance.values.installedOpacity / 100 : 1
@@ -41,7 +43,7 @@ Rectangle {
     }
     function updatedHint(value) {
         const date = new Date(value)
-        return isNaN(date.getTime()) ? "" : "Updated " + date.toLocaleString(Qt.locale(), Locale.LongFormat)
+        return isNaN(date.getTime()) ? "" : "Updated " + Qt.formatDateTime(date, "d. MMM yyyy - h:mm AP")
     }
     HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }
     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.opened() }
@@ -120,7 +122,7 @@ Rectangle {
             tooltipsEnabled: false
             id: installButton; objectName: "browseInstallButton"
             Layout.alignment: Qt.AlignRight
-            text: root.installState.label || "Install"; iconName: root.installState.installed ? "check" : "plus"
+            text: root.installState.label || "Install"; iconName: root.installState.installed ? "check" : root.installState.locked ? "lock" : "plus"
             accented: true; compact: true; font.pixelSize: 12 * root.contentScale; implicitHeight: 32 * root.contentScale
             enabled: !!root.installState.canInstall; onClicked: root.installRequested()
             opacity: root.installState.installed || enabled ? 1 : 0.7
@@ -144,10 +146,13 @@ Rectangle {
     }
     FocusPopup {
         id: menu; objectName: "browseContentMenu"; parent: more; x: more.width-width; y: more.height+4; width: 185; padding: 6
-        background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: 12 }
+        background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius }
         contentItem: ColumnLayout {
             spacing: 3
             ActionButton { Layout.fillWidth: true; text: "View project"; iconName: "compass"; alignLeft: true; subtle: true; onClicked: { menu.close();root.opened() } }
+            ActionButton { Layout.fillWidth:true;visible:!!root.installState.locked && !root.installState.sourceLocked;text:"Unlock content";iconName:"unlock";subtle:true;alignLeft:true;onClicked:{menu.close();root.unlockRequested()} }
+            ActionButton { Layout.fillWidth:true;visible:!!root.installState.sourceLocked && !!root.installState.sourceMissing;text:"Restore locked version";iconName:"restore";subtle:true;alignLeft:true;onClicked:{menu.close();root.restoreLockedRequested()} }
+            ActionButton { Layout.fillWidth:true;visible:!!root.installState.sourceLocked && !root.installState.sourceMissing;text:"Locked by Modrinth";iconName:"lock";enabled:false;subtle:true;alignLeft:true }
             ActionButton { objectName: "browseHideContent"; Layout.fillWidth: true; text: root.hiddenMode ? "Restore content" : "Hide content"; iconName: root.hiddenMode ? "restore" : "hide"; alignLeft: true; subtle: true; onClicked: { menu.close();root.visibilityRequested(!root.hiddenMode) } }
         }
     }

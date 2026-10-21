@@ -9,7 +9,7 @@ Rectangle {
     property bool expanded: false
     signal settingsRequested()
     visible: issues.length > 0
-    implicitHeight: body.implicitHeight + 28; radius: 14; color: Theme.colors.warningSurface
+    implicitHeight: body.implicitHeight + 28; radius: ControlStyle.controlRadius; color: Theme.colors.warningSurface
     ColumnLayout {
         id: body; anchors.fill: parent; anchors.margins: 14; spacing: 10
         RowLayout {

@@ -21,6 +21,9 @@ class IContentFileStore {
                                     bool inspectInventory = true) const {
         return {pack, inspectInventory ? snapshot(pack, previous) : previous, {}};
     }
+    virtual ContentWriteResult restoreLocked(const QVariantMap &, const QVariantMap &) const {
+        return {false, "No verified backup is available for this locked content."};
+    }
     virtual ContentWriteResult setEnabled(const QVariantMap &, const QVariantMap &, bool) const = 0;
     virtual ContentWriteResult setEnabledBatch(const QVariantMap &pack, const QVariantList &rows,
                                                bool enabled) const {

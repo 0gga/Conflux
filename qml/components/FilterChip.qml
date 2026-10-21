@@ -8,7 +8,7 @@ Rectangle {
     property bool removable: true
     signal removed()
     implicitWidth: label.implicitWidth + (locked || removable ? 39 : 18)
-    implicitHeight: 28; radius: 14; color: Theme.colors.input
+    implicitHeight: 28; radius: height/2; color: Theme.colors.input
     border.width: removeButton.visualFocus ? 1 : 0
     border.color: Theme.colors.accent
     Text { id: label; anchors.verticalCenter: parent.verticalCenter; x: root.locked ? 26 : 9; text: root.text; font.pixelSize: 11; color: Theme.colors.muted; textFormat: Text.PlainText }

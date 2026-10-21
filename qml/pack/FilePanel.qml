@@ -20,7 +20,7 @@ Item {
         SmoothListView { boundsBehavior: Flickable.StopAtBounds;
             id: list; Layout.fillWidth: true; Layout.fillHeight: true; model: root.browser.entries; spacing: 6; clip: true; ScrollBar.vertical: ScrollBar {}
             delegate: Rectangle {
-                id: row; required property var modelData; width: list.width; height: 60; radius: 12; color: hover.hovered ? Theme.colors.hover : Theme.colors.card
+                id: row; required property var modelData; width: list.width; height: 60; radius: ControlStyle.panelRadius; color: hover.hovered ? Theme.colors.hover : Theme.colors.card
                 HoverHandler { id: hover }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { if (row.modelData.directory) root.folderRequested(row.modelData.relativePath); else root.showFilesRequested(row.modelData.relativePath) } }
                 RowLayout { anchors.fill: parent; anchors.margins: 14; spacing: 14

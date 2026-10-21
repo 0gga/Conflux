@@ -10,8 +10,8 @@ TextField {
     placeholderTextColor: Theme.colors.muted
     selectionColor: Theme.colors.selection; selectedTextColor: Theme.colors.text
     background: Rectangle {
-        radius: 11; color: Theme.colors.input
-        border.color: control.activeFocus ? Theme.colors.accent : control.hovered ? Qt.lighter(Theme.colors.border, 1.5) : Theme.colors.border
+        radius: ControlStyle.controlRadius; color: Theme.colors.input
+        border.color: control.activeFocus ? Theme.colors.accent : (control.enabled && control.hovered) ? Qt.lighter(Theme.colors.border, 1.5) : Theme.colors.border
         border.width: 1
         Behavior on border.color { ColorAnimation { duration: Appearance.values.reduceMotion ? 0 : 100 } }
     }

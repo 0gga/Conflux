@@ -16,7 +16,7 @@ GridLayout {
         spacing: 8
         SelectBox {
             Layout.preferredWidth: 190
-            model: ["Sort by: Relevance", "Sort by: Downloads", "Sort by: Followers", "Sort by: Date published", "Sort by: Date updated"]
+            model: ["Relevance", "Downloads", "Followers", "Date published", "Date updated"]
             currentIndex: ["relevance","downloads","follows","newest","updated"].indexOf(root.catalogue.filters.sort)
             onActivated: root.catalogue.configure({sort:["relevance","downloads","follows","newest","updated"][currentIndex]})
         }

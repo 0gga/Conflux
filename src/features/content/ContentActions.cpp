@@ -1,7 +1,9 @@
 #include "ContentActions.h"
 #include "domain/ContentCompatibility.h"
 #include "domain/ContentTypes.h"
+#include "domain/TextSearch.h"
 #include <QDateTime>
+#include <QDir>
 #include <QFileInfo>
 #include <QFutureWatcher>
 #include <QHash>
@@ -9,6 +11,7 @@
 #include <QSet>
 #include <QtConcurrent>
 #include <algorithm>
+#include <exception>
 namespace studio {
 ContentActions::ContentActions(std::shared_ptr<const IContentFileStore> files,
                                std::shared_ptr<IContentCatalogue> catalogue,
@@ -16,6 +19,9 @@ ContentActions::ContentActions(std::shared_ptr<const IContentFileStore> files,
                                std::shared_ptr<IContentPreferences> preferences, QObject *parent)
     : QObject(parent), m_files(std::move(files)), m_catalogue(std::move(catalogue)),
       m_installer(std::move(installer)), m_preferences(std::move(preferences)) {
+    connect(&m_operations, &OperationHistory::retryRequested, this, &ContentActions::retryOperation);
+    connect(&m_operations, &OperationHistory::dismissed, this,
+            [this](quint64 id) { m_failedOperations.remove(id); });
     m_executor = std::make_unique<ContentOperationExecutor>(m_files, m_installer, this);
     connect(this, &ContentActions::changed, this, &ContentActions::syncVisibleRows);
     connect(&m_queue, &ContentOperationQueue::changed, this, [this] {
@@ -95,14 +101,22 @@ void ContentActions::refresh(bool checkUpdates) {
     m_activity = "checking";
     m_activityText = checkUpdates ? "Checking updates" : "Reading changes";
     emit changed();
-    auto *watcher = new QFutureWatcher<QVariantList>(this);
+    auto *watcher = new QFutureWatcher<ContentFileState>(this);
     const QPointer<ContentActions> guard(this);
     connect(watcher, &QFutureWatcher<QVariantList>::finished, this,
             [this, guard, watcher, generation, checkUpdates, previous] {
-                const auto rows = watcher->result();
+                const auto state = watcher->result();
+                const auto rows = state.rows;
                 watcher->deleteLater();
                 if (generation != m_generation)
                     return;
+                if (!state.error.isEmpty()) {
+                    m_busy = false;
+                    reject(state.error, "Reading content");
+                    return;
+                }
+                m_pack = state.pack;
+                ++m_lockRevision;
                 auto result = rows;
                 QVariantList unidentified;
                 const QStringList metadata{
@@ -185,14 +199,22 @@ void ContentActions::refresh(bool checkUpdates) {
                 } else
                     done(result, {});
             });
-    watcher->setFuture(
-        QtConcurrent::run([files, pack, inventory] { return files->snapshot(pack, inventory); }));
+    watcher->setFuture(QtConcurrent::run([files, pack, inventory] {
+        try {
+            return files->reload(pack, inventory, true);
+        } catch (const std::exception &error) {
+            return ContentFileState{
+                pack, {}, QString("Could not read content: ") + QString::fromUtf8(error.what())};
+        } catch (...) {
+            return ContentFileState{pack, {}, "Could not read content."};
+        }
+    }));
 }
 QString ContentActions::preferenceIdentity(const QVariantMap &row) const {
     const auto ids = row.value("sourceIds").toMap();
-    if (ids.contains("modrinth"))
+    if (!ids.value("modrinth").toString().isEmpty())
         return "modrinth:" + ids.value("modrinth").toString();
-    if (ids.contains("curseforge"))
+    if (!ids.value("curseforge").toString().isEmpty())
         return "curseforge:" + ids.value("curseforge").toString();
     return row.value("sha1").toString();
 }
@@ -241,6 +263,7 @@ QVariantList ContentActions::versionGroups() const {
 }
 QVariantList ContentActions::filteredRows() const {
     QVariantList result;
+    const TextQuery search(m_query);
     for (const auto &value : m_rows) {
         auto row = value.toMap();
         row["hidden"] = m_visibility && m_visibility->hidden(row, m_pack.value("path").toString());
@@ -248,9 +271,8 @@ QVariantList ContentActions::filteredRows() const {
             continue;
         if (m_category != "all" && row.value("category") != m_category)
             continue;
-        if (!(row.value("title").toString() + ' ' + row.value("fileName").toString() + ' ' +
-              row.value("author").toString())
-                 .contains(m_query, Qt::CaseInsensitive))
+        if (!search.matches(row.value("title").toString() + ' ' + row.value("fileName").toString() + ' ' +
+                            row.value("author").toString() + ' ' + row.value("version").toString()))
             continue;
         if (!m_filters.value("author").toString().isEmpty() &&
             row.value("author") != m_filters.value("author"))
@@ -385,7 +407,13 @@ QVariantList ContentActions::withPreferences(const QVariantMap &pack, QVariantLi
         auto relative = row.value("relativePath").toString();
         if (relative.endsWith(".disabled"))
             relative.chop(9);
-        row["locked"] = (!identity.isEmpty() && m_preferences->locked(path, identity)) ||
+        row["launcherLocked"] = row.value("launcherLocked").toBool();
+        auto policyProject = row;
+        policyProject["targetPack"] = pack;
+        row["launcherLocked"] = row.value("launcherLocked").toBool() || !sourceLock(policyProject).isEmpty();
+        row["locked"] = row.value("launcherLocked").toBool() ||
+                        ((identity.startsWith("modrinth:") || identity.startsWith("curseforge:")) &&
+                         m_preferences->locked(path, identity)) ||
                         m_preferences->locked(path, "path:" + relative);
         row["updatedAt"] = m_preferences->updatedAt(path, identity);
         row["frozen"] = m_preferences->frozen(path, identity);
@@ -417,8 +445,15 @@ void ContentActions::syncLocks(const QString &path) {
     for (const auto &operation : m_pendingOperations)
         if (operation.packPath == path)
             pending << operation;
-    m_locks->setRows(path,
-                     withPreferences(state.pack, state.rows + projectContentOperations(state.rows, pending)));
+    auto rows = withPreferences(state.pack, state.rows + projectContentOperations(state.rows, pending));
+    for (const auto &value : state.pack.value("sourceContent").toList()) {
+        auto source = value.toMap();
+        if (source.value("launcherLocked").toBool()) {
+            source["locked"] = true;
+            rows << source;
+        }
+    }
+    m_locks->setRows(path, rows);
 }
 void ContentActions::publishProjection() {
     const auto path = m_pack.value("path").toString();
@@ -445,13 +480,25 @@ void ContentActions::setLocked(const QString &path, bool value) {
     const auto row = find(path);
     if (row.isEmpty())
         return;
+    if (row.value("launcherLocked").toBool()) {
+        reject("This lock is managed by Modrinth. Unlock it in Modrinth.", row.value("title").toString());
+        return;
+    }
+    if (hasPending(m_pack.value("path").toString())) {
+        reject("Wait for this instance's content operation before changing locks.",
+               row.value("title").toString());
+        return;
+    }
     const auto pack = m_pack.value("path").toString();
+    ++m_lockRevision;
     auto relative = row.value("relativePath").toString();
     if (relative.endsWith(".disabled"))
         relative.chop(9);
     const auto identity = preferenceIdentity(row);
-    if (!identity.isEmpty())
-        m_preferences->setLocked(pack, identity, value);
+    const auto ids = row.value("sourceIds").toMap();
+    for (auto it = ids.cbegin(); it != ids.cend(); ++it)
+        if (!it.value().toString().isEmpty())
+            m_preferences->setLocked(pack, it.key() + ':' + it.value().toString(), value);
     m_preferences->setLocked(pack, "path:" + relative, value);
     applyPreferences();
     if (m_states.contains(pack))
@@ -459,12 +506,21 @@ void ContentActions::setLocked(const QString &path, bool value) {
     syncLocks(pack);
     emit changed();
 }
-void ContentActions::enqueue(ContentOperation operation) {
+bool ContentActions::enqueue(ContentOperation operation) {
     if (m_pack.isEmpty() && operation.packPath.isEmpty())
-        return;
+        return false;
     operation.id = ++m_operationId;
     if (operation.packPath.isEmpty())
         operation.packPath = m_pack.value("path").toString();
+    operation.reservations = reservations(operation);
+    for (const auto &pending : m_pendingOperations)
+        if (QDir::cleanPath(pending.packPath)
+                .compare(QDir::cleanPath(operation.packPath), Qt::CaseInsensitive) == 0)
+            for (const auto &key : operation.reservations)
+                if (pending.reservations.contains(key)) {
+                    reject("This content already has an active or queued operation. Wait for it to finish.");
+                    return false;
+                }
     if (operation.packPath == m_pack.value("path").toString()) {
         if (!hasPending(operation.packPath))
             m_states[operation.packPath] = {m_pack, reconcileContentRows(m_rows, m_rows), {}};
@@ -472,12 +528,42 @@ void ContentActions::enqueue(ContentOperation operation) {
         m_busy = false;
     }
     m_pendingOperations << operation;
+    const auto state = m_states.value(operation.packPath);
+    QStringList titles;
+    for (const auto &value : resolveContentTargets(state.rows, operation.targets))
+        titles << value.toMap().value("title").toString();
+    if (titles.isEmpty())
+        for (const auto &value : operation.predictions)
+            titles << value.toMap().value("title").toString();
+    if (titles.isEmpty() && !operation.sourceLock.isEmpty())
+        titles << operation.sourceLock.value("relativePath").toString();
+    m_operations.queued(operation.id, state.pack,
+                        titles.size() == 1 ? titles.first()
+                                           : QString::number(qMax(1, titles.size())) + " items",
+                        operation.kind == ContentOperation::Install
+                            ? (operation.targets.isEmpty() ? "Installing" : "Updating")
+                        : operation.kind == ContentOperation::Remove  ? "Remove"
+                        : operation.kind == ContentOperation::Import  ? "Import"
+                        : operation.kind == ContentOperation::Restore ? "Restore locked version"
+                        : operation.enabled                           ? "Enable"
+                                                                      : "Disable");
     publishProjection();
     m_queue.enqueue([this, operation](ContentOperationQueue::Completion done) {
         startOperation(operation, std::move(done));
     });
+    return true;
 }
 void ContentActions::startOperation(ContentOperation operation, ContentOperationQueue::Completion done) {
+    bool accepted = false;
+    for (const auto &pending : m_pendingOperations)
+        if (pending.id == operation.id)
+            accepted = true;
+    if (!accepted) {
+        done();
+        return;
+    }
+    m_activeOperationId = operation.id;
+    m_operations.start(operation.id);
     auto before = m_states.value(operation.packPath);
     before.rows = withPreferences(before.pack, before.rows);
     syncLocks(operation.packPath);
@@ -500,6 +586,8 @@ void ContentActions::completeOperation(ContentOperation operation, ContentWriteR
         if (!result.error.isEmpty())
             result.error += " ";
         result.error += current.error;
+        result.changed = result.changed || result.ok;
+        result.ok = false;
         current.rows = before.rows;
     }
     current.rows =
@@ -533,12 +621,24 @@ void ContentActions::completeOperation(ContentOperation operation, ContentWriteR
         m_notice = result.error;
         emit operationFailed(result.error);
     }
+    if (!result.ok && !cancelled)
+        m_failedOperations[operation.id] = operation;
+    m_operations.finish(operation.id, result.ok || cancelled, cancelled ? QString{} : result.error,
+                        !result.changed);
+    m_activeOperationId = 0;
+    ++m_lockRevision;
     publishProjection();
     done();
 }
 void ContentActions::setEnabled(const QString &path, bool value) {
     const auto row = find(path);
-    if (row.isEmpty() || row.value("locked").toBool() || row.value("enabled").toBool() == value)
+    if (row.isEmpty())
+        return;
+    if (row.value("locked").toBool()) {
+        reject("Unlock this content before changing it.", row.value("title").toString());
+        return;
+    }
+    if (row.value("enabled").toBool() == value)
         return;
     ContentOperation operation;
     operation.kind = ContentOperation::Enable;
@@ -548,8 +648,12 @@ void ContentActions::setEnabled(const QString &path, bool value) {
 }
 void ContentActions::remove(const QString &path) {
     const auto row = find(path);
-    if (row.isEmpty() || row.value("locked").toBool())
+    if (row.isEmpty())
         return;
+    if (row.value("locked").toBool()) {
+        reject("Unlock this content before removing it.", row.value("title").toString());
+        return;
+    }
     ContentOperation operation;
     operation.kind = ContentOperation::Remove;
     operation.targets = {contentRowKey(row)};
@@ -586,6 +690,15 @@ void ContentActions::importFiles(const QList<QUrl> &urls, const QString &categor
 void ContentActions::install(const QVector<ContentInstallRequest> &requests, const QVariantMap &project) {
     if (requests.isEmpty())
         return;
+    for (const auto &request : requests) {
+        auto candidate = request.release.toVariant();
+        candidate["sourceIds"] = request.sourceIds.toVariantMap();
+        candidate["targetPack"] = project.value("targetPack", m_pack);
+        if (projectLocked(candidate)) {
+            reject("This content is locked. Unlock it before installing another version.", request.title);
+            return;
+        }
+    }
     ContentOperation operation;
     operation.kind = ContentOperation::Install;
     operation.requests = requests;
@@ -596,7 +709,7 @@ void ContentActions::install(const QVector<ContentInstallRequest> &requests, con
     const auto candidates = operation.packPath == m_pack.value("path").toString()
                                 ? m_rows
                                 : m_states.value(operation.packPath).rows;
-    for (const auto &request : requests) {
+    for (auto &request : operation.requests) {
         QVariantMap row = project;
         row.remove("targetRows");
         row.remove("targetPack");
@@ -612,6 +725,7 @@ void ContentActions::install(const QVector<ContentInstallRequest> &requests, con
                     ids.value(it.key()).toString() == it.value().toString())
                     match = true;
             if (match) {
+                request.resolveDependencies = false;
                 row = candidate;
                 break;
             }
@@ -625,8 +739,14 @@ void ContentActions::install(const QVector<ContentInstallRequest> &requests, con
         row["sourceIds"] = request.sourceIds.toVariantMap();
         row["provider"] = request.release.provider;
         row["projectId"] = request.release.projectId;
-        if (!row.contains("relativePath"))
-            row["relativePath"] = category + '/' + request.release.filename;
+        const auto stableKey = contentRowKey(row);
+        row["relativePath"] =
+            category + '/' +
+            (category == "mods" && target.value("managed").toBool() ? request.release.sha1 + ".jar"
+                                                                    : request.release.filename) +
+            (row.contains("enabled") && !row.value("enabled").toBool() ? ".disabled" : "");
+        if (!stableKey.isEmpty() && stableKey != ":")
+            row["contentKey"] = stableKey;
         row["fileName"] = request.release.filename;
         row["version"] = request.release.version;
         row["sha1"] = request.release.sha1;
@@ -644,13 +764,16 @@ void ContentActions::install(const QVector<ContentInstallRequest> &requests, con
 ContentInstallRequest ContentActions::updateRequest(const QVariantMap &row) const {
     return {releaseFromVariant(row.value("updateRelease").toMap()), row.value("title").toString(),
             QJsonObject::fromVariantMap(row.value("sourceIds").toMap()),
-            categoryType(row.value("category").toString())};
+            categoryType(row.value("category").toString()), false};
 }
 void ContentActions::update(const QString &path) {
     const auto row = find(path);
     if (!row.value("updateAvailable").toBool() || row.value("frozen").toBool() ||
-        row.value("locked").toBool())
+        row.value("locked").toBool()) {
+        if (row.value("locked").toBool())
+            reject("Unlock this content before updating it.", row.value("title").toString());
         return;
+    }
     install({updateRequest(row)});
 }
 void ContentActions::updateAll() {
@@ -802,5 +925,144 @@ void ContentActions::cancel() {
     m_activity = "cancelled";
     m_activityText.clear();
     emit changed();
+}
+static QVariantMap projectIds(const QVariantMap &project) {
+    auto ids = project.value("sourceIds").toMap();
+    const auto provider = project.value("provider").toString(),
+               id = project.value("projectId", project.value("id")).toString();
+    if (!provider.isEmpty() && !id.isEmpty())
+        ids[provider] = id;
+    return ids;
+}
+QVariantMap ContentActions::sourceLock(const QVariantMap &project) const {
+    const auto target = project.value("targetPack", m_pack).toMap();
+    const auto path = target.value("path").toString();
+    const auto pack = target.contains("sourceContent") ? target
+                      : path == m_pack.value("path").toString()
+                          ? m_pack
+                          : (m_states.contains(path) ? m_states.value(path).pack : target);
+    const auto ids = projectIds(project);
+    for (const auto &value : pack.value("sourceContent").toList()) {
+        const auto lock = value.toMap();
+        if (lock.value("launcherLocked").toBool() && !lock.value("projectId").toString().isEmpty() &&
+            ids.value("modrinth") == lock.value("projectId"))
+            return lock;
+    }
+    return {};
+}
+bool ContentActions::projectLocked(const QVariantMap &project) const {
+    if (!sourceLock(project).isEmpty())
+        return true;
+    const auto target = project.value("targetPack", m_pack).toMap();
+    const auto ids = projectIds(project);
+    for (auto it = ids.cbegin(); it != ids.cend(); ++it)
+        if (!it.value().toString().isEmpty() &&
+            m_preferences->locked(target.value("path").toString(), it.key() + ':' + it.value().toString()))
+            return true;
+    return false;
+}
+void ContentActions::setProjectLocked(const QVariantMap &project, bool locked) {
+    if (!sourceLock(project).isEmpty()) {
+        reject("This lock is managed by Modrinth. Unlock it in Modrinth.");
+        return;
+    }
+    if (hasPending(m_pack.value("path").toString())) {
+        reject("Wait for this instance's content operation before changing locks.");
+        return;
+    }
+    const auto ids = projectIds(project);
+    for (const auto &value : m_rows) {
+        const auto row = value.toMap();
+        const auto installed = row.value("sourceIds").toMap();
+        for (auto it = ids.cbegin(); it != ids.cend(); ++it)
+            if (!it.value().toString().isEmpty() && installed.value(it.key()) == it.value()) {
+                setLocked(row.value("relativePath").toString(), locked);
+                break;
+            }
+    }
+    for (auto it = ids.cbegin(); it != ids.cend(); ++it)
+        if (!it.value().toString().isEmpty())
+            m_preferences->setLocked(m_pack.value("path").toString(), it.key() + ':' + it.value().toString(),
+                                     locked);
+    ++m_lockRevision;
+    applyPreferences();
+    emit changed();
+}
+void ContentActions::restoreLocked(const QVariantMap &project) {
+    const auto lock = sourceLock(project);
+    if (lock.isEmpty() || !lock.value("missing").toBool()) {
+        reject("There is no missing source-locked version to restore.");
+        return;
+    }
+    ContentOperation operation;
+    operation.kind = ContentOperation::Restore;
+    operation.sourceLock = lock;
+    enqueue(operation);
+}
+void ContentActions::reject(const QString &message, const QString &title) {
+    m_notice = message;
+    const auto id = ++m_operationId;
+    m_operations.queued(id, m_pack, title.isEmpty() ? "Content" : title, "Blocked action");
+    m_operations.finish(id, false, message, false);
+    emit operationFailed(message);
+    emit changed();
+}
+QStringList ContentActions::reservations(const ContentOperation &operation) const {
+    QSet<QString> keys;
+    auto add = [&](const QVariantMap &row) {
+        auto path = row.value("relativePath").toString();
+        if (path.endsWith(".disabled"))
+            path.chop(9);
+#ifdef Q_OS_WIN
+        path = path.toCaseFolded();
+#endif
+        if (!path.isEmpty())
+            keys.insert("path:" + path);
+        const auto ids = projectIds(row);
+        for (auto it = ids.cbegin(); it != ids.cend(); ++it)
+            if (!it.value().toString().isEmpty())
+                keys.insert("project:" + row.value("category").toString() + ':' + it.key() + ':' +
+                            it.value().toString());
+    };
+    const auto state = m_states.value(operation.packPath);
+    for (const auto &value : resolveContentTargets(state.rows + m_rows, operation.targets))
+        add(value.toMap());
+    for (const auto &value : operation.predictions)
+        add(value.toMap());
+    for (const auto &request : operation.requests) {
+        auto row = request.release.toVariant();
+        row["sourceIds"] = request.sourceIds.toVariantMap();
+        row["category"] = contentCategory(request.contentType);
+        add(row);
+    }
+    if (!operation.sourceLock.isEmpty()) {
+        auto row = operation.sourceLock;
+        row["category"] = row.value("relativePath").toString().section('/', 0, 0);
+        add(row);
+    }
+    return keys.values();
+}
+void ContentActions::retryOperation(quint64 id) {
+    if (!m_failedOperations.contains(id))
+        return;
+    auto operation = m_failedOperations.value(id);
+    if (enqueue(operation)) {
+        m_failedOperations.remove(id);
+        m_operations.dismiss(id);
+    }
+}
+void ContentActions::cancelOperation(quint64 id) {
+    if (id == m_activeOperationId) {
+        if (cancellable())
+            cancel();
+        return;
+    }
+    for (int i = 0; i < m_pendingOperations.size(); ++i)
+        if (m_pendingOperations[i].id == id) {
+            m_pendingOperations.removeAt(i);
+            m_operations.finish(id, true, {});
+            publishProjection();
+            return;
+        }
 }
 } // namespace studio

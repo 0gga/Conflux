@@ -18,12 +18,25 @@ class WindowFrameTests : public QObject {
 #else
         if (QGuiApplication::platformName() != "windows")
             QSKIP("Requires the native Windows platform");
+        const bool interactive = qEnvironmentVariableIntValue("CONFLUX_INTERACTIVE_FRAME_TEST") == 1;
+        QScreen *testScreen = nullptr;
+        for (auto *screen : QGuiApplication::screens())
+            if (screen != QGuiApplication::primaryScreen()) {
+                testScreen = screen;
+                break;
+            }
+        if (!testScreen)
+            QSKIP("A secondary monitor is required for native desktop validation.");
+        qInfo() << "Native validation screen:" << testScreen->name() << testScreen->availableGeometry();
         QQuickWindow window;
+        window.setScreen(testScreen);
         window.setColor(QColor("#24121b"));
         window.setFlags(Qt::Window | Qt::CustomizeWindowHint | Qt::WindowTitleHint |
-                        Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+                        Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint |
+                        (interactive ? Qt::WindowFlags{} : Qt::WindowDoesNotAcceptFocus));
         window.setMinimumSize({300, 200});
-        window.setGeometry(100, 100, 600, 400);
+        window.setGeometry(
+            QRect(testScreen->availableGeometry().topLeft() + QPoint(40, 40), QSize(600, 400)));
         studio::WindowFrame frame(window);
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
@@ -43,14 +56,29 @@ class WindowFrameTests : public QObject {
                  LRESULT(HTBOTTOMRIGHT));
         const QRect normal = window.geometry();
         auto verifyGeometry = [&] {
-            QTest::qWait(60);
+            // Qt receives the native resize asynchronously; wait for agreement,
+            // rather than sampling one animation frame after a fixed delay.
+            const auto synchronized = [&] {
+                RECT area{};
+                return GetClientRect(handle, &area) &&
+                       qAbs(area.right - qRound(window.width() * window.devicePixelRatio())) <= 1 &&
+                       qAbs(area.bottom - qRound(window.height() * window.devicePixelRatio())) <= 1;
+            };
+            QTRY_VERIFY_WITH_TIMEOUT(synchronized(), 2000);
             RECT outer{}, area{};
             QVERIFY(GetWindowRect(handle, &outer));
             QVERIFY(GetClientRect(handle, &area));
             const qreal dpr = window.devicePixelRatio();
             QVERIFY(qAbs(area.right - qRound(window.width() * dpr)) <= 1);
             QVERIFY(qAbs(area.bottom - qRound(window.height() * dpr)) <= 1);
-            const QImage rendered = window.grabWindow();
+            QImage rendered;
+            const auto renderedSizeMatches = [&] {
+                window.requestUpdate();
+                rendered = window.grabWindow();
+                return !rendered.isNull() && qAbs(rendered.width() - area.right) <= 1 &&
+                       qAbs(rendered.height() - area.bottom) <= 1;
+            };
+            QTRY_VERIFY_WITH_TIMEOUT(renderedSizeMatches(), 2000);
             QVERIFY(!rendered.isNull());
             QVERIFY(qAbs(rendered.width() - area.right) <= 1);
             QVERIFY(qAbs(rendered.height() - area.bottom) <= 1);
@@ -88,35 +116,39 @@ class WindowFrameTests : public QObject {
             QTRY_COMPARE(window.geometry(), normal);
             verifyGeometry();
         }
-        // Exercise a real held-pointer system move from native maximization. The
-        // release timer also prevents a failed restore from trapping the move loop.
-        window.showMaximized();
-        QTRY_COMPARE(window.windowState(), Qt::WindowMaximized);
-        window.requestActivate();
-        QVERIFY(QTest::qWaitForWindowActive(&window));
-        POINT previousCursor{};
-        GetCursorPos(&previousCursor);
-        POINT anchor{qRound(window.width() * window.devicePixelRatio() / 2), 30};
-        ClientToScreen(handle, &anchor);
-        SetCursorPos(anchor.x, anchor.y);
-        INPUT press{};
-        press.type = INPUT_MOUSE;
-        press.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
-        QCOMPARE(SendInput(1, &press, sizeof(INPUT)), UINT(1));
-        QVERIFY(window.startSystemMove());
-        QTimer::singleShot(80, [anchor] { SetCursorPos(anchor.x, anchor.y + 180); });
-        QTimer::singleShot(160, [anchor] { SetCursorPos(anchor.x + 50, anchor.y + 240); });
-        QTimer::singleShot(240, [] {
-            INPUT release{};
-            release.type = INPUT_MOUSE;
-            release.mi.dwFlags = MOUSEEVENTF_LEFTUP;
-            SendInput(1, &release, sizeof(INPUT));
-        });
-        QTest::qWait(400);
-        SetCursorPos(previousCursor.x, previousCursor.y);
-        QTRY_COMPARE(window.windowState(), Qt::WindowNoState);
-        QCOMPARE(window.size(), normal.size());
-        verifyGeometry();
+        // Global input is never captured by ordinary validation. This legacy
+        // integration path is opt-in only when the owner explicitly permits it.
+        if (interactive) {
+            // Exercise a real held-pointer system move from native maximization. The
+            // release timer also prevents a failed restore from trapping the move loop.
+            window.showMaximized();
+            QTRY_COMPARE(window.windowState(), Qt::WindowMaximized);
+            window.requestActivate();
+            QVERIFY(QTest::qWaitForWindowActive(&window));
+            POINT previousCursor{};
+            GetCursorPos(&previousCursor);
+            POINT anchor{qRound(window.width() * window.devicePixelRatio() / 2), 30};
+            ClientToScreen(handle, &anchor);
+            SetCursorPos(anchor.x, anchor.y);
+            INPUT press{};
+            press.type = INPUT_MOUSE;
+            press.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+            QCOMPARE(SendInput(1, &press, sizeof(INPUT)), UINT(1));
+            QVERIFY(window.startSystemMove());
+            QTimer::singleShot(80, [anchor] { SetCursorPos(anchor.x, anchor.y + 180); });
+            QTimer::singleShot(160, [anchor] { SetCursorPos(anchor.x + 50, anchor.y + 240); });
+            QTimer::singleShot(240, [] {
+                INPUT release{};
+                release.type = INPUT_MOUSE;
+                release.mi.dwFlags = MOUSEEVENTF_LEFTUP;
+                SendInput(1, &release, sizeof(INPUT));
+            });
+            QTest::qWait(400);
+            SetCursorPos(previousCursor.x, previousCursor.y);
+            QTRY_COMPARE(window.windowState(), Qt::WindowNoState);
+            QCOMPARE(window.size(), normal.size());
+            verifyGeometry();
+        }
         window.setMinimumHeight(480);
         window.resize(600, 480);
         QTRY_COMPARE(window.height(), 480);

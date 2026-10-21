@@ -11,6 +11,11 @@ class ProjectShowcase final : public QObject {
     Q_PROPERTY(QVariantList descriptionBlocks READ descriptionBlocks NOTIFY changed)
     Q_PROPERTY(QStringList gallery READ gallery NOTIFY changed)
     Q_PROPERTY(QVariantList versions READ versions NOTIFY changed)
+    Q_PROPERTY(QVariantList changelogVersions READ changelogVersions NOTIFY changed)
+    Q_PROPERTY(QVariantList changelogBlocks READ changelogBlocks NOTIFY changed)
+    Q_PROPERTY(QVariantMap changelogRelease READ changelogRelease NOTIFY changed)
+    Q_PROPERTY(QString changelogNotice READ changelogNotice NOTIFY changed)
+    Q_PROPERTY(bool changelogBusy READ changelogBusy NOTIFY changed)
     Q_PROPERTY(QString notice READ notice NOTIFY changed)
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
     Q_PROPERTY(QString filePath READ filePath NOTIFY changed)
@@ -21,6 +26,23 @@ class ProjectShowcase final : public QObject {
     void open(const QVariantMap &pack, const QVariantMap &file);
     void openProject(const QVariantMap &pack, const QVariantMap &project);
     void close();
+    Q_INVOKABLE void selectChangelog(const QVariantMap &release);
+    QVariantList changelogVersions() const {
+        return m_changelogVersions;
+    }
+    QVariantList changelogBlocks() const {
+        return m_changelogBlocks;
+    }
+    QVariantMap changelogRelease() const {
+        return m_changelogRelease;
+    }
+    QString changelogNotice() const {
+        return m_changelogNotice;
+    }
+    bool changelogBusy() const {
+        return m_changelogBusy;
+    }
+
     void setCurseforgeKey(const QByteArray &key) {
         m_source->setCurseforgeKey(key);
     }
@@ -63,6 +85,12 @@ class ProjectShowcase final : public QObject {
     QStringList m_gallery;
     QVariantList m_versions, m_descriptionBlocks;
     bool m_busy = false;
-    int m_generation = 0;
+    int m_generation = 0, m_changelogGeneration = 0;
+    QVariantList m_changelogVersions, m_changelogBlocks;
+    QVariantMap m_changelogRelease;
+    QString m_changelogNotice;
+    bool m_changelogBusy = false;
+    QHash<QString, QVariantList> m_changelogCache;
+    QHash<QString, QString> m_releaseChangelogs;
 };
 } // namespace studio

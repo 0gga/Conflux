@@ -92,6 +92,10 @@ void ModInstaller::startBatch(const QString &path, const QVector<ContentInstallR
     m_path = path;
     m_downloadIndex = 0;
     m_resolved.clear();
+    m_shallowRoots.clear();
+    for (const auto &request : requests)
+        if (!request.resolveDependencies)
+            m_shallowRoots.insert(request.release.projectId);
     m_existing.clear();
     m_disabledReferences.clear();
     m_titles.clear();
@@ -154,11 +158,12 @@ void ModInstaller::startBatch(const QString &path, const QVector<ContentInstallR
             continue;
         }
         m_existing.insert(id, existing);
-        m_tasks.enqueue({id, existing.value("id").toString()});
+        // Unrelated pinned content is retained without fetching or resolving it.
     }
     for (const auto &request : requests)
         m_titles.insert(request.release.projectId, request.title);
-    emit progress("Resolving required dependencies…");
+    emit progress(m_shallowRoots.size() == requests.size() ? "Preparing selected versions…"
+                                                           : "Resolving required dependencies…");
     for (const auto &request : requests)
         if (!addResolved(request.release))
             return;
@@ -191,6 +196,8 @@ bool ModInstaller::addResolved(const Release &release) {
         return true;
     }
     m_resolved.insert(release.projectId, release);
+    if (m_shallowRoots.contains(release.projectId))
+        return true;
     for (const auto &value : release.dependencyRefs) {
         const auto dependency = value.toObject();
         if (dependency.value("dependency_type").toString() != "required")
@@ -211,7 +218,8 @@ void ModInstaller::resolveNext() {
     if (m_tasks.isEmpty()) {
         for (const auto &release : m_resolved)
             for (const auto &value : release.dependencyRefs) {
-                if (m_disabledReferences.contains(release.projectId))
+                if (m_shallowRoots.contains(release.projectId) ||
+                    m_disabledReferences.contains(release.projectId))
                     continue;
                 const auto dependency = value.toObject();
                 if (dependency.value("dependency_type") == "required") {
@@ -238,6 +246,36 @@ void ModInstaller::resolveNext() {
                     return;
                 }
             }
+        // Initial installs retain incompatibility guards from exact cached pins,
+        // without resolving unrelated installed dependency graphs. Explicit updates
+        // intentionally do not reconsider those graphs.
+        const auto excludes = [](const QJsonObject &reference, const Release &candidate) {
+            for (const auto &value : reference.value("dependencyRefs").toArray()) {
+                const auto dependency = value.toObject();
+                if (dependency.value("dependency_type") != "incompatible")
+                    continue;
+                const auto project = dependency.value("project_id").toString(),
+                           version = dependency.value("version_id").toString();
+                if ((!project.isEmpty() || !version.isEmpty()) &&
+                    (project.isEmpty() || project == candidate.projectId) &&
+                    (version.isEmpty() || version == candidate.id))
+                    return true;
+            }
+            return false;
+        };
+        for (const auto &existing : m_existing)
+            for (const auto &release : m_resolved) {
+                if (m_shallowRoots.contains(release.projectId))
+                    continue;
+                if (excludes(existing, release) || excludes(QJsonObject::fromVariantMap(release.toVariant()),
+                                                            releaseFromVariant(existing.toVariantMap()))) {
+                    fail("This new install is incompatible with an installed project. No changes were made.");
+                    return;
+                }
+            }
+        for (auto it = m_existing.cbegin(); it != m_existing.cend(); ++it)
+            if (!m_resolved.contains(it.key()))
+                m_references.append(it.value());
         for (const auto &release : m_resolved) {
             auto reference = QJsonObject::fromVariantMap(release.toVariant());
             reference.insert("projectTitle", m_titles.value(release.projectId, release.projectId));
@@ -351,6 +389,11 @@ void ModInstaller::downloadNext() {
     }
     const auto ref = m_references.at(m_downloadIndex++).toObject();
     if (ref.value("provider").toString() != "modrinth") {
+        downloadNext();
+        return;
+    }
+    if (m_existing.contains(ref.value("projectId").toString()) &&
+        !m_resolved.contains(ref.value("projectId").toString())) {
         downloadNext();
         return;
     }

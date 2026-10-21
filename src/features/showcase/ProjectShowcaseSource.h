@@ -16,6 +16,10 @@ class IProjectShowcaseSource {
   public:
     using ResolveCallback = std::function<void(Project, QString)>;
     using DetailCallback = std::function<void(ProjectDetail)>;
+    using ChangelogCallback = std::function<void(QString, QString)>;
+    virtual void loadChangelog(const Release &release, ChangelogCallback callback) {
+        callback(release.changelog, {});
+    }
     virtual ~IProjectShowcaseSource() = default;
     virtual void resolve(const InstalledModIdentity &, ResolveCallback) = 0;
     virtual void load(const Project &, const QString &game, const QString &loader, DetailCallback) = 0;

@@ -10,7 +10,7 @@ Rectangle {
     readonly property var items: controller.selection || []
     implicitWidth: Math.min(parent ? parent.width-24 : 760, body.implicitWidth+28)
     implicitHeight: body.implicitHeight+20
-    radius: 18; color: Theme.colors.card; border.color: Theme.colors.border
+    radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border
     RowLayout {
         id: body; anchors.fill: parent; anchors.margins: 10; spacing: 6
         ContentIcon { source: root.items.length ? root.items[0].icon || "" : ""; size: 28; visible: root.width > 690 }
@@ -30,7 +30,7 @@ Rectangle {
     }
     FocusPopup {
         id: shareMenu; parent: share; y: -height-6; width: 215; padding: 6
-        background: Rectangle { radius: 14; color: Theme.colors.card; border.color: Theme.colors.border }
+        background: Rectangle { radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border }
         contentItem: ColumnLayout {
             spacing: 2
             Repeater {

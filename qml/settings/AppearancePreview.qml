@@ -7,7 +7,7 @@ Rectangle {
     id: root
     objectName: "appearanceLivePreview"
     property string section: "content"
-    color: Theme.colors.background; border.color: Theme.colors.border; radius: 14
+    color: Theme.colors.background; border.color: Theme.colors.border; radius: ControlStyle.controlRadius
     implicitHeight: 250
     clip: true
     readonly property real previewScale: Math.min(1,(width-24)/1040)
@@ -23,7 +23,7 @@ Rectangle {
         scale: root.previewScale; transformOrigin: Item.TopLeft; spacing: 12
         LibraryRow { objectName: "previewLibraryRow"; width: parent.width; titleText: "Example modpack"; detailText: "128 mods"; minecraft: "1.21.1"; loader: "neoforge"; entireRowInteractive: false }
         Rectangle {
-            width: parent.width; height: Appearance.values.contentRowHeight; radius: 12; color: Theme.colors.card
+            width: parent.width; height: Appearance.values.contentRowHeight; radius: ControlStyle.controlRadius; color: Theme.colors.card
             SelectionBox { x: 14; anchors.verticalCenter: parent.verticalCenter; Accessible.name: "Example row" }
             ContentIcon { x: 54; anchors.verticalCenter: parent.verticalCenter; size: Math.min(44,parent.height-24); kind: "mod" }
             Text { x: 112; anchors.verticalCenter: parent.verticalCenter; text: "Example installed content"; color: Theme.colors.text; font.pixelSize: 13 }
@@ -36,7 +36,7 @@ Rectangle {
         scale: root.previewScale; transformOrigin: Item.TopLeft
         Rectangle {
             id: filterPanel; anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom
-            width: Appearance.filterWidthFor(parent.width); radius: 14; color: Theme.colors.panel; border.color: Theme.colors.border
+            width: Appearance.filterWidthFor(parent.width); radius: ControlStyle.controlRadius; color: Theme.colors.panel; border.color: Theme.colors.border
             BrowseFilters { anchors.fill: parent; anchors.margins: 14; catalogue: example; hasInstance: true; connectorAvailable: true }
         }
         Column {

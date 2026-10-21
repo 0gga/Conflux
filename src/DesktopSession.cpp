@@ -1,10 +1,12 @@
 #include "DesktopSession.h"
 #include "domain/ContentTypes.h"
+#include "features/explore/TolerantCatalogueSearch.h"
 #include "features/preferences/ContentPreferences.h"
 #include "platform/BrowseSettingsStore.h"
 #include "platform/CatalogueShowcaseSource.h"
 #include "platform/ConfigOwnershipStore.h"
 #include "platform/InstalledModIdentity.h"
+#include "platform/InstanceProcessSource.h"
 #include "platform/ReviewedProjectIdentities.h"
 #include "platform/WorldLaunchAdapters.h"
 #include "services/ContentCatalogue.h"
@@ -17,7 +19,8 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
       m_contentFiles(std::make_shared<NativeContentStore>(
           std::make_shared<NativeInstalledModIdentity>(m_fileStore),
           backupRoot.isEmpty() ? QString{} : backupRoot + "/content", m_contentLocks)),
-      m_contentInstaller(std::make_shared<ContentInstaller>(m_contentFiles)), m_navigation(this),
+      m_contentInstaller(std::make_shared<ContentInstaller>(m_contentFiles)),
+      m_running(std::make_shared<InstanceProcessSource>(), this), m_navigation(this),
       m_input(m_navigation, this),
       m_warnings(std::make_shared<SettingsWarningPreferenceStore>(settingsFile), this),
       m_workspace(defaultPackInspector(), this), m_browser(m_fileStore, this), m_logs(m_fileStore, this),
@@ -31,7 +34,8 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
       m_content(m_contentFiles, std::make_shared<ContentCatalogue>(), m_contentInstaller,
                 std::make_shared<SettingsContentPreferences>(settingsFile), this),
       m_browse(std::make_shared<ContentCatalogue>(), this), m_browsePreferences(m_browseStore, this),
-      m_catalogue(std::make_shared<CatalogueClient>(), m_visibility, ReviewedProjectIdentities::load(),
+      m_catalogue(std::make_shared<TolerantCatalogueSearch>(std::make_shared<CatalogueClient>()),
+                  m_visibility, ReviewedProjectIdentities::load(),
                   std::make_shared<BrowseFilterPreferences>(m_browseStore), this),
       m_changes(this) {
     m_content.setVisibility(m_visibility);

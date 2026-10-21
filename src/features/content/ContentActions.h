@@ -6,6 +6,7 @@
 #include "ContentOperationState.h"
 #include "ContentPorts.h"
 #include "features/preferences/ContentVisibility.h"
+#include "features/status/OperationHistory.h"
 #include <QHash>
 #include <QObject>
 #include <memory>
@@ -14,6 +15,8 @@ class ContentActions final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantList rows READ rows NOTIFY rowsChanged)
     Q_PROPERTY(QAbstractItemModel *model READ model CONSTANT)
+    Q_PROPERTY(studio::OperationHistory *operations READ operations CONSTANT)
+    Q_PROPERTY(int lockRevision READ lockRevision NOTIFY changed)
     Q_PROPERTY(bool operationsBusy READ operationsBusy NOTIFY operationsChanged)
     Q_PROPERTY(int actionableUpdateCount READ actionableUpdateCount NOTIFY changed)
     Q_PROPERTY(QStringList authors READ authors NOTIFY changed)
@@ -47,6 +50,12 @@ class ContentActions final : public QObject {
     }
     QAbstractItemModel *model() {
         return &m_model;
+    }
+    OperationHistory *operations() {
+        return &m_operations;
+    }
+    int lockRevision() const {
+        return m_lockRevision;
     }
     bool operationsBusy() const {
         return m_queue.busy();
@@ -127,6 +136,18 @@ class ContentActions final : public QObject {
     Q_INVOKABLE void remove(const QString &);
     Q_INVOKABLE void removeSelected();
     Q_INVOKABLE void freeze(const QString &, bool);
+    Q_INVOKABLE bool projectLocked(const QVariantMap &) const;
+    Q_INVOKABLE QVariantMap sourceLock(const QVariantMap &) const;
+    Q_INVOKABLE void setProjectLocked(const QVariantMap &, bool);
+    Q_INVOKABLE void restoreLocked(const QVariantMap &);
+    Q_INVOKABLE void cancelOperation(quint64);
+    Q_INVOKABLE void recordExternalFailure(const QString &message) {
+        reject(message, "Content lookup");
+    }
+    Q_INVOKABLE void retryOperation(quint64);
+    Q_INVOKABLE void copyOperationDetails(quint64 id) {
+        emit copyRequested(m_operations.details(id));
+    }
     Q_INVOKABLE void setLocked(const QString &, bool);
     Q_INVOKABLE void update(const QString &);
     Q_INVOKABLE void updateAll();
@@ -141,6 +162,8 @@ class ContentActions final : public QObject {
     Q_INVOKABLE void cancel();
     void setProgress(const QString &message) {
         m_activityText = message;
+        if (m_activeOperationId)
+            m_operations.progress(m_activeOperationId, message);
         emit changed();
     }
   signals:
@@ -159,7 +182,9 @@ class ContentActions final : public QObject {
     QVariantList filteredRows() const;
     void syncVisibleRows();
     bool hasPending(const QString &) const;
-    void enqueue(ContentOperation);
+    bool enqueue(ContentOperation);
+    void reject(const QString &, const QString &title = {});
+    QStringList reservations(const ContentOperation &) const;
     void startOperation(ContentOperation, ContentOperationQueue::Completion);
     void completeOperation(ContentOperation, ContentWriteResult, ContentFileState,
                            ContentOperationQueue::Completion);
@@ -174,6 +199,10 @@ class ContentActions final : public QObject {
     std::shared_ptr<IContentPreferences> m_preferences;
     std::unique_ptr<ContentOperationExecutor> m_executor;
     ContentOperationQueue m_queue;
+    OperationHistory m_operations;
+    QHash<quint64, ContentOperation> m_failedOperations;
+    quint64 m_activeOperationId = 0;
+    int m_lockRevision = 0;
     ContentListModel m_model;
     std::shared_ptr<ContentLockRegistry> m_locks;
     QHash<QString, ContentFileState> m_states;

@@ -113,7 +113,7 @@ ApplicationWindow {
                     anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 12
                     Item {
                         implicitWidth: 32; implicitHeight: 36
-                        Rectangle { anchors.centerIn: parent; width: 23; height: 29; radius: 14; color: "transparent"; border.width: 3; border.color: Theme.colors.accent; rotation: -32 }
+                        Rectangle { anchors.centerIn: parent; width: 23; height: 29; radius: ControlStyle.panelRadius; color: "transparent"; border.width: 3; border.color: Theme.colors.accent; rotation: -32 }
                         Rectangle { x: 20; y: 5; width: 9; height: 9; radius: 5; color: Theme.colors.panel; border.color: Theme.colors.accent; border.width: 2 }
                     }
                     Text { visible: !window.compactNavigation; text: "conflux"; font.pixelSize: 25; font.weight: Font.DemiBold; color: Theme.colors.text; font.letterSpacing: -0.8 }
@@ -155,6 +155,7 @@ ApplicationWindow {
                         HoverHandler { id: titleHover }
                         RoundedToolTip { showWhen: titleHover.hovered && titleLabel.truncated; text: window.pageTitle }
                     }
+                    OperationHud { availableWidth: window.width/window.interfaceScale; availableHeight: window.height/window.interfaceScale; content: window.session.content; running: window.session.running; onInstanceRequested: function(path) { window.session.navigation.go({page:"workspace",packPath:path}) } }
                     WindowControls { Layout.alignment: Qt.AlignVCenter; targetWindow: window }
                 }
             }
@@ -179,18 +180,16 @@ ApplicationWindow {
             }
         }
     }
-    Rectangle {
-        visible: window.app.notice.length > 0
-        z: 1000; anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottomMargin: 24; width: Math.min(760, parent.width - 64)
-        height: noticeLabel.implicitHeight + 36; color: Theme.colors.input; border.color: Theme.colors.muted; radius: 10
-        Text { id: noticeLabel; anchors.left: parent.left; anchors.right: dismiss.left; anchors.margins: 18; anchors.verticalCenter: parent.verticalCenter; text: window.app.notice; color: Theme.colors.text; font.pixelSize: 13; wrapMode: Text.WordWrap }
-        ActionButton { id: dismiss; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Dismiss"; subtle: true; onClicked: window.app.clearNotice() }
+    NotificationBanner {
+        objectName:"globalNoticeBanner";visible:window.app.notice.length>0
+        z:1000;anchors.bottom:parent.bottom;anchors.horizontalCenter:parent.horizontalCenter
+        anchors.bottomMargin:24;width:Math.min(760,parent.width-32)
+        text:window.app.notice;onDismissed:window.app.clearNotice()
     }
     FocusDialog {
         id: unsaved; objectName: "unsavedConfigDialog"; modal: true; anchors.centerIn: parent; width: 480; padding: 24; title: "Unsaved config changes"
         closePolicy: Popup.NoAutoClose
-        background: Rectangle { radius: 18; color: Theme.colors.card; border.color: Theme.colors.border }
+        background: Rectangle { radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border }
         header: Text { text: unsaved.title; color: Theme.colors.text; font.pixelSize: 21; font.weight: Font.DemiBold; padding: 24; bottomPadding: 8 }
         ColumnLayout { width: parent.width; spacing: 16
             Text { Layout.fillWidth: true; text: "Save your config edits before leaving, or discard them."; color: Theme.colors.text; font.pixelSize: 14; wrapMode: Text.WordWrap }
@@ -207,7 +206,7 @@ ApplicationWindow {
         modal: true; anchors.centerIn: parent; width: 470; padding: 28
         title: "Create a modpack"
         closePolicy: window.app.repositoryBusy ? Popup.NoAutoClose : Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: 18 }
+        background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius }
         header: Text { text: newPack.title; color: Theme.colors.text; font.pixelSize: 23; font.weight: Font.DemiBold; padding: 28; bottomPadding: 6 }
         ColumnLayout {
             width: parent.width; spacing: 16

@@ -10,7 +10,7 @@ Rectangle {
     signal valueChanged(var value)
     property var items: { try { return JSON.parse(field.value) } catch (error) { return [] } }
     function updateItem(index, value) { items[index] = value; valueChanged(JSON.stringify(items)) }
-    implicitHeight: body.implicitHeight + 32; radius: 14; color: Theme.colors.card; border.color: Theme.colors.border
+    implicitHeight: body.implicitHeight + 32; radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border
     ColumnLayout {
         id: body; anchors.fill: parent; anchors.margins: 16; spacing: 10
         RowLayout {

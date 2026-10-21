@@ -12,6 +12,8 @@ Item {
     required property var app
     required property var showcase
     required property var contentController
+    readonly property bool contentLocked: { const revision=contentController.lockRevision; return contentController.projectLocked(showcase.project) }
+    readonly property var launcherLock: { const revision=contentController.lockRevision; return contentController.sourceLock(showcase.project) }
     property string tab: "description"
     readonly property bool hasGallery: (showcase.gallery || []).length > 0
     readonly property string displayedTab: tab === "gallery" && !hasGallery ? "description" : tab
@@ -38,15 +40,17 @@ Item {
                 Text { visible: !!root.showcase.project.summary; Layout.fillWidth: true; text: root.showcase.project.summary || ""; color: Theme.colors.muted; font.pixelSize: 13; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
             }
             BusyIndicator { visible: root.showcase.busy; running: visible; Layout.preferredWidth: 32; Layout.preferredHeight: 32 }
+            ActionButton { objectName:"restoreSourceLockedContent";text:"Restore locked version";iconName:"restore";visible:!!root.launcherLock.missing;onClicked:root.contentController.restoreLocked(root.showcase.project) }
+            ActionButton { objectName:"unlockMissingContent";text:root.launcherLock.launcherLocked ? "Locked by Modrinth" : "Unlock content";iconName:"lock";visible:root.contentLocked && !root.launcherLock.missing;enabled:!root.launcherLock.launcherLocked;onClicked:root.contentController.setProjectLocked(root.showcase.project,false) }
             ActionButton { text: "View project page"; subtle: true; visible: !!root.showcase.project.url; onClicked: root.app.openWeb(root.showcase.project.url) }
         }
-        SectionTabs { objectName: "showcaseTabs"; entries: [{key:"description",label:"Description",icon:"info"}].concat(root.hasGallery ? [{key:"gallery",label:"Gallery",icon:"image"}] : []).concat([{key:"versions",label:"Versions",icon:"versions"}]); current: root.displayedTab; onSelected: function(key) { root.tabRequested(key) } }
+        SectionTabs { objectName: "showcaseTabs"; entries: [{key:"description",label:"Description",icon:"info"}].concat(root.hasGallery ? [{key:"gallery",label:"Gallery",icon:"image"}] : []).concat([{key:"versions",label:"Versions",icon:"versions"},{key:"changelog",label:"Changelog",icon:"history"}]); current: root.displayedTab; onSelected: function(key) { root.tabRequested(key) } }
         Text { Layout.fillWidth: true; visible: root.showcase.notice.length > 0; text: root.showcase.notice; color: Theme.colors.warning; font.pixelSize: 12; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
         Text { Layout.fillWidth: true; visible: root.browse.notice.length > 0; text: root.browse.notice; color: Theme.colors.warning; font.pixelSize: 12; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
         Text { Layout.fillWidth: true; visible: root.contentController.notice.length > 0; text: root.contentController.notice; color: Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
         StackLayout {
             Layout.fillWidth: true; Layout.fillHeight: true
-            currentIndex: ["description","gallery","versions"].indexOf(root.displayedTab)
+            currentIndex: ["description","gallery","versions","changelog"].indexOf(root.displayedTab)
             BoundedScrollView {
                 id: descriptionScroll; clip: true
                 DescriptionView {
@@ -77,24 +81,25 @@ Item {
                         readonly property var release: modelData.variants[Math.min(variantIndex,modelData.variants.length - 1)] || ({})
                         readonly property bool installed: { const ready=root.browse.ready; const busy=root.browse.busy; return root.browse.installed(release,root.showcase.project.type || "mod") }
                         readonly property bool groupInstalled: { const ready=root.browse.ready; const busy=root.browse.busy; return modelData.variants.some(function(item) { return root.browse.installed(item,root.showcase.project.type || "mod") }) }
-                        width: versionList.viewportWidth; height: version.modelData.variants.length > 1 ? 148 : 112; radius: 14; color: Theme.colors.card; border.color: Theme.colors.border
+                        width: versionList.viewportWidth; height: version.modelData.variants.length > 1 ? 148 : 112; radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border
                         RowLayout {
                             anchors.fill: parent; anchors.margins: 16; spacing: 16
                             ColumnLayout {
                                 Layout.fillWidth: true; spacing: 8
-                                Text { Layout.fillWidth: true; text: version.modelData.label; color: Theme.colors.text; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
+                                ContentLink { objectName:"releaseChangelogLink";onClicked:{root.showcase.selectChangelog(version.release);changelog.mode="all";root.tabRequested("changelog")} Layout.fillWidth: true; text: version.modelData.label; color: Theme.colors.text; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
                                 CompatibilityBadges { minecraft: (version.release.gameVersions || []).filter(function(value) { return root.releaseFilters.filters.versions.indexOf(value)!==-1 })[0] || (version.release.gameVersions || [])[0] || ""; loader: (version.release.loaders || []).filter(function(value) { return root.releaseFilters.filters.loaders.indexOf(value)!==-1 })[0] || (version.release.loaders || []).filter(function(value) { return value !== "minecraft" && value !== "datapack" })[0] || "" }
-                                Text { Layout.fillWidth: true; text: (version.release.channel || "release").charAt(0).toUpperCase() + (version.release.channel || "release").slice(1) + (version.release.published ? " · " + version.release.published : ""); color: Theme.colors.muted; font.pixelSize: 11; elide: Text.ElideRight }
+                                Text { Layout.fillWidth: true; text: (version.release.channel || "release").charAt(0).toUpperCase() + (version.release.channel || "release").slice(1) + (version.release.published ? " · " + Qt.formatDate(new Date(version.release.published),"d. MMM yyyy") : ""); color: Theme.colors.muted; font.pixelSize: 11; elide: Text.ElideRight }
                                 SelectBox { visible: version.modelData.variants.length > 1; Layout.fillWidth: true; model: version.modelData.variants.map(function(row) { return (row.provider === "modrinth" ? "Modrinth" : "CurseForge") + " · " + row.filename }); onActivated: version.variantIndex = currentIndex }
                             }
                             SourceBadge { source: version.release.provider || "modrinth"; iconOnly: true }
                             Text { visible: version.groupInstalled && !version.installed; text: "Installed"; color: Theme.colors.accent; font.pixelSize: 12 }
-                            ActionButton { text: version.installed ? "Installed" : "Install version"; iconName: version.installed ? "check" : "plus"; primary: !version.installed; visible: version.release.provider === "modrinth"; enabled: root.browse.ready && !root.browse.busy && !root.app.navigationBusy && !root.browse.state(root.showcase.project).locked && !version.installed; onClicked: root.browse.installVersion(version.release,root.showcase.project) }
+                            ActionButton { text: version.installed ? "Installed" : "Install version"; iconName: version.installed ? "check" : "plus"; primary: !version.installed; visible: version.release.provider === "modrinth"; enabled: root.browse.ready && !root.browse.busy && !root.app.navigationBusy && !root.browse.state(root.showcase.project).locked && !root.contentLocked && !version.installed; onClicked: root.browse.installVersion(version.release,root.showcase.project) }
                             ActionButton { text: "View release"; onClicked: root.app.openWeb(version.release.pageUrl) }
                         }
                     }
                 }
             }
+            ChangelogView {id:changelog;showcase:root.showcase;onLinkActivated:function(url){root.app.openWeb(url)};onImageRequested:function(url){enlarged.show([url],0)}}
         }
     }
     GalleryViewer { id: enlarged; onExternalRequested: function(url) { root.app.openWeb(url) } }

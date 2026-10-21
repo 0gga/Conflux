@@ -41,7 +41,7 @@ Requests are prioritized here; listing an idea does not mean it is implemented. 
 ## Content follow-ups
 
 - Complete approved CurseForge downloads/updates and live API validation. Current provider-only showcases require an approved key; Modrinth-backed files use Modrinth first.
-- Add safe folder-pack identity/mutations and cross-type required asset dependency planning and cross-batch rollback. Mixed known stable ZIP/mod updates are serialized with partial-completion refresh; individual verified Modrinth ZIP install/version selection is implemented; this does not imply a universal shader-settings adapter.
+- Add safe folder-pack identity/mutations and cross-type required asset dependency planning and crash-durable multi-file recovery. Mixed known stable ZIP/mod commands now stage together and roll back handled commit failures; individual verified Modrinth ZIP install/version selection is implemented; this does not imply a universal shader-settings adapter.
 - Add shared Git freeze-policy files, richer update channels and backup restore/retention UI. Current freeze preferences are local.
 - Add full NBT world names/metadata and game-process observation; handing a URL to a launcher is not proof of a successful game launch.
 
@@ -85,3 +85,7 @@ These are ideas, not delivered features or additional owner requirements.
 
 - Delivered: type-aware stable updates for all four instance content categories, known-update-only Update all/selected, floating selection with local Share/copy and backed-up bulk enable/disable, compact activity/cancel/error details, underline content/version/author links and scoped author discovery.
 - Author identity linking UI: provide reviewed cross-platform author profile association and explicit corrections, with provenance; never infer identity from names. Current author-identities.json exact mappings support merged source queries, while unlinked creators remain separate and CurseForge requires its approved key.
+
+- Persist operation recovery across crashes: journal prepared file/manifest edits and replay or roll back after restart; retain failed-task commands safely without credentials. Acceptance: interruption at every commit boundary recovers one consistent instance before indexing. Current worker/process leases and runtime rollback do not provide power-loss atomicity.
+
+- Delivered: dependency-free selected updates with Minecraft/loader-edition checks, outlined shared control geometry, contained notices/labels, concise statistic tooltips, normalized local search, bounded provider typo fallback, and lazy Latest/All versions changelogs. Full provider-wide typo matching needs a provider-supported fuzzy index or an explicitly maintained bounded local catalogue; current prefix fallback scans at most100 same-filter candidates. Acceptance for expansion: measured query/resource budgets, exact filter/identity preservation and honest totals, without downloading an unbounded catalogue.

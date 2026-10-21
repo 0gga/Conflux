@@ -51,7 +51,7 @@ BoundedScrollView {
                 id: versionsList; outsideColor: Theme.colors.input; cornerRadius: 6; objectName: "browseVersionList"
                 anchors.fill: parent; anchors.margins: 6
                 clip: true; spacing: 3
-                model: (root.catalogue.options.versions || []).filter(function(version) { return version.indexOf(versionsSearch.text)!==-1 })
+                model: TextSearch.filter(root.catalogue.options.versions || [],versionsSearch.text)
 
                 delegate: ActionButton {
                     required property string modelData
@@ -80,7 +80,7 @@ BoundedScrollView {
         Text { text: "Tags"; color: Theme.colors.text; font.pixelSize: 14; font.weight: Font.DemiBold }
         SearchField { id: tagSearch; Layout.fillWidth: true; placeholderText: "Find tags..."; leadingIcon: "search" }
         Repeater {
-            model: (root.catalogue.options.tags || []).concat(root.catalogue.options.curseforgeTags || []).filter(function(tag) { return (root.catalogue.filters.source === "merged" || tag.provider === root.catalogue.filters.source) && (tag.type===root.catalogue.filters.type || (root.catalogue.filters.type==="datapack" && tag.type==="mod")) && tag.title.indexOf(tagSearch.text.toLowerCase())!==-1 })
+            model: (root.catalogue.options.tags || []).concat(root.catalogue.options.curseforgeTags || []).filter(function(tag) { return (root.catalogue.filters.source === "merged" || tag.provider === root.catalogue.filters.source) && (tag.type===root.catalogue.filters.type || (root.catalogue.filters.type==="datapack" && tag.type==="mod")) && TextSearch.matches(tag.title,tagSearch.text) })
             delegate: RowLayout {
                 required property var modelData
                 Layout.fillWidth: true

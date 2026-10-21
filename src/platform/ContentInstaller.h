@@ -24,7 +24,7 @@ class ContentInstaller final : public QObject, public IContentInstaller {
             m_installer.cancel();
     }
     bool cancellable() const override {
-        return m_preparing || m_installer.cancellable() || m_assets.cancellable();
+        return !m_committing && (m_preparing || m_installer.cancellable() || m_assets.cancellable());
     }
   signals:
     void progress(QString message);
@@ -34,13 +34,16 @@ class ContentInstaller final : public QObject, public IContentInstaller {
     AssetInstaller m_assets;
     std::shared_ptr<const NativeContentStore> m_files;
     std::shared_ptr<QTemporaryDir> m_stage;
-    QVariantMap m_pack;
+    QVariantMap m_pack, m_targetPack;
+    QVariantList m_targetRows;
+    QSet<QString> m_shallowProjects;
+    bool m_committing = false;
     QVariantList m_rows;
     Callback m_callback;
     bool m_preparing = false;
     bool m_cancelled = false;
     QList<QVector<ContentInstallRequest>> m_batches;
-    bool m_anyChanged = false;
+
     QStringList m_warnings;
     void startNextBatch();
     void installBatch(const QVector<ContentInstallRequest> &);

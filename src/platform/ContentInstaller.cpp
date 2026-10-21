@@ -1,7 +1,7 @@
 #include "ContentInstaller.h"
+#include "ContentAccess.h"
 #include "domain/ContentCompatibility.h"
 #include "platform/PackFileStore.h"
-#include "services/PackContent.h"
 #include <QDir>
 #include <QFile>
 #include <QFutureWatcher>
@@ -14,134 +14,124 @@ ContentInstaller::ContentInstaller(std::shared_ptr<const NativeContentStore> fil
     : QObject(parent), m_installer(this), m_assets(files, this, local), m_files(std::move(files)) {
     connect(&m_installer, &ModInstaller::progress, this, &ContentInstaller::progress);
     connect(&m_assets, &AssetInstaller::progress, this, &ContentInstaller::progress);
-    connect(&m_installer, &ModInstaller::finished, this, [this](const RepositoryResult &result) {
-        if (!result.ok) {
-            finishBatch({false, result.error});
-            return;
-        }
-        if (!m_stage) {
-            finishBatch({true, result.error});
-            return;
-        }
-        emit progress("Applying the backed-up content transaction…");
-        const auto pack = m_pack;
-        const auto rows = m_rows;
-        const auto stage = m_stage;
-        const auto files = m_files;
-        auto *watcher = new QFutureWatcher<ContentWriteResult>(this);
-        connect(watcher, &QFutureWatcher<ContentWriteResult>::finished, this, [this, watcher] {
-            const auto result = watcher->result();
-            watcher->deleteLater();
-            finishBatch(result);
-        });
-        watcher->setFuture(QtConcurrent::run([pack, rows, stage, files, result] {
-            QSet<QString> disabledProjects, disabledVersions;
-            for (const auto &value : rows) {
-                const auto row = value.toMap();
-                if (row.value("enabled").toBool())
-                    continue;
-                const auto id = row.value("sourceIds").toMap().value("modrinth").toString();
-                if (!id.isEmpty())
-                    disabledProjects.insert(id);
-                const auto version = row.value("installedRelease").toMap().value("id").toString();
-                if (!version.isEmpty())
-                    disabledVersions.insert(version);
-            }
-            for (const auto &value : result.manifest.value("mods").toArray()) {
-                const auto ref = value.toObject();
-                if (disabledProjects.contains(ref.value("projectId").toString()))
-                    continue;
-                for (const auto &dependency : ref.value("dependencyRefs").toArray()) {
-                    const auto dep = dependency.toObject();
-                    if (dep.value("dependency_type") == "required" &&
-                        (disabledProjects.contains(dep.value("project_id").toString()) ||
-                         disabledVersions.contains(dep.value("version_id").toString())))
-                        return ContentWriteResult{false,
-                                                  "A required dependency is disabled. Enable it before "
-                                                  "installing this update. No installed files were changed."};
-                }
-            }
-            // The staging inventory includes unrecognized local files too, so a new
-            // dependency cannot silently introduce a second enabled mod ID.
-            const auto staged = PackContent::scan({{"path", result.path}, {"loader", pack.value("loader")}});
-            QMap<QString, int> before, after;
-            for (const auto &value : rows) {
-                const auto row = value.toMap();
-                if (row.value("enabled").toBool() && !row.value("modId").toString().isEmpty())
-                    ++before[row.value("modId").toString()];
-            }
-            for (const auto &value : staged.files) {
-                const auto row = value.toMap();
-                if (row.value("enabled").toBool() && !row.value("modId").toString().isEmpty())
-                    ++after[row.value("modId").toString()];
-            }
-            for (auto it = after.begin(); it != after.end(); ++it)
-                if (it.value() > qMax(1, before.value(it.key())))
-                    return ContentWriteResult{false, "This install would add a duplicate enabled mod ID: " +
-                                                         it.key() + ". No installed files were changed."};
-            return files->applyStaged(pack, rows, result.path, result.manifest);
-        }));
-    });
+    connect(&m_installer, &ModInstaller::finished, this,
+            [this](const RepositoryResult &result) { finishBatch({result.ok, result.error}); });
 }
 void ContentInstaller::finish(ContentWriteResult result) {
     auto callback = std::move(m_callback);
     m_callback = {};
     m_stage.reset();
     m_rows.clear();
+    m_targetRows.clear();
     m_pack.clear();
+    m_targetPack.clear();
     m_batches.clear();
     m_preparing = false;
-    result.changed = result.changed || m_anyChanged;
-    if (!result.ok && m_anyChanged)
-        result.error = "Earlier updates completed. " + result.error;
+    m_committing = false;
     if (callback)
         callback(std::move(result));
 }
 void ContentInstaller::finishBatch(ContentWriteResult result) {
-    m_stage.reset();
-    m_preparing = false;
-    m_anyChanged = m_anyChanged || result.ok || result.changed;
     if (!result.ok) {
+        result.changed = false;
         finish(std::move(result));
         return;
     }
     if (!result.error.isEmpty())
         m_warnings << result.error;
-    if (m_pack.value("managed").toBool()) {
-        const auto current = PackRepository::inspect(m_pack.value("path").toString());
-        if (!current.ok) {
-            finish({false, current.error});
-            return;
-        }
-        m_pack["assets"] = current.manifest.value("assets").toArray().toVariantList();
+    const auto current = PackRepository::inspect(m_pack.value("path").toString());
+    if (!current.ok) {
+        finish({false, current.error});
+        return;
     }
+    m_pack["mods"] = current.manifest.value("mods").toArray().toVariantList();
+    m_pack["assets"] = current.manifest.value("assets").toArray().toVariantList();
     startNextBatch();
 }
 void ContentInstaller::startNextBatch() {
     if (m_cancelled) {
-        finish({false, "Installation cancelled."});
+        finish({false, "Installation cancelled before changing installed files."});
         return;
     }
-    if (m_batches.isEmpty()) {
-        finish({true, m_warnings.join('\n')});
+    if (!m_batches.isEmpty()) {
+        installBatch(m_batches.takeFirst());
         return;
     }
-    const auto requests = m_batches.takeFirst();
-    installBatch(requests);
+    // Every download and dependency update has succeeded in the isolated workspace.
+    // Only this one commit can touch the destination instance.
+    m_committing = true;
+    emit progress("Applying verified content…");
+    const auto pack = m_targetPack;
+    const auto rows = m_targetRows;
+    const auto stage = m_stage;
+    const auto path = m_pack.value("path").toString();
+    const auto files = m_files;
+    const auto shallow = m_shallowProjects;
+    auto *watcher = new QFutureWatcher<ContentWriteResult>(this);
+    connect(watcher, &QFutureWatcher<ContentWriteResult>::finished, this, [this, watcher] {
+        auto result = watcher->result();
+        watcher->deleteLater();
+        if (result.ok && !m_warnings.isEmpty())
+            result.error = m_warnings.join('\n');
+        finish(std::move(result));
+    });
+    watcher->setFuture(QtConcurrent::run([pack, rows, stage, path, files, shallow] {
+        const auto current = PackRepository::inspect(path);
+        if (!current.ok)
+            return ContentWriteResult{false, current.error};
+        return files->commitStagedContent(pack, rows, path, current.manifest, shallow);
+    }));
 }
 void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows,
                                const QVector<ContentInstallRequest> &requests, Callback callback) {
-    if (m_callback || m_installer.busy() || m_preparing) {
+    if (m_callback) {
         callback({false, "Another content operation is in progress."});
         return;
     }
-    m_pack = pack;
-    m_rows = rows;
+    for (const auto &request : requests)
+        if (!request.resolveDependencies) {
+            if (!request.release.gameVersions.contains(pack.value("minecraft").toString())) {
+                callback({false, "The selected version does not support this instance's Minecraft version."});
+                return;
+            }
+            if (request.contentType != "mod")
+                continue;
+            const auto primary = pack.value("loader").toString();
+            QStringList permitted{primary};
+            for (const auto &value : rows) {
+                const auto row = value.toMap();
+                const auto ids = row.value("sourceIds").toMap();
+                bool same = false;
+                for (auto it = request.sourceIds.begin(); it != request.sourceIds.end(); ++it)
+                    if (!it.value().toString().isEmpty() &&
+                        ids.value(it.key()).toString() == it.value().toString())
+                        same = true;
+                if (!same || row.value("category") != "mods")
+                    continue;
+                const auto installed = row.value("installedRelease").toMap().value("loaders").toStringList();
+                if (!installed.contains(primary)) {
+                    permitted.clear();
+                    for (const auto &loader : compatibleLoaders(primary, rows))
+                        if (installed.contains(loader))
+                            permitted << loader;
+                }
+            }
+            if (!sharesLoader(request.release.loaders, permitted)) {
+                callback({false, "The selected version does not support this content's installed loader."});
+                return;
+            }
+        }
     m_callback = std::move(callback);
+    m_targetPack = pack;
+    m_targetRows = rows;
     m_cancelled = false;
-    m_anyChanged = false;
     m_warnings.clear();
     m_batches.clear();
+    m_shallowProjects.clear();
+    for (const auto &request : requests)
+        if (!request.resolveDependencies)
+            m_shallowProjects.insert(request.release.projectId);
+    m_committing = false;
     QVector<ContentInstallRequest> mods;
     for (const auto &request : requests) {
         if (request.contentType == "mod")
@@ -151,82 +141,60 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
     }
     if (!mods.isEmpty())
         m_batches << mods;
-    startNextBatch();
-}
-void ContentInstaller::installBatch(const QVector<ContentInstallRequest> &requests) {
-    const auto pack = m_pack;
-    const auto rows = m_rows;
-    if (requests.size() == 1 && requests.first().contentType != "mod") {
-        m_assets.install(pack, rows, requests.first(),
-                         [this](ContentWriteResult result) { finishBatch(std::move(result)); });
-        return;
-    }
-    const bool bridge = hasFabricBridge(pack.value("loader").toString(), rows);
-    bool untracked = false;
-    for (const auto &value : rows) {
-        const auto row = value.toMap();
-        if (row.value("category") != "mods")
-            continue;
-        bool tracked = false;
-        for (const auto &pin : pack.value("mods").toList())
-            if (pin.toMap().value("installPath") == row.value("relativePath"))
-                tracked = true;
-        if (!tracked)
-            untracked = true;
-    }
-    if (pack.value("managed").toBool() && !untracked && !bridge) {
-        m_installer.startBatch(pack.value("path").toString(), requests);
-        return;
-    }
     m_stage = std::make_shared<QTemporaryDir>();
     if (!m_stage->isValid()) {
-        finishBatch({false, "Could not create a temporary install workspace."});
+        finish({false, "Could not create the content transaction workspace."});
         return;
     }
     m_preparing = true;
-    emit progress("Preparing an isolated dependency transaction…");
+    emit progress("Preparing content…");
     const auto stage = m_stage;
-    auto *watcher = new QFutureWatcher<RepositoryResult>(this);
-    connect(watcher, &QFutureWatcher<RepositoryResult>::finished, this, [this, watcher, requests, bridge] {
-        const auto result = watcher->result();
+    const auto files = m_files;
+    auto *watcher = new QFutureWatcher<ContentFileState>(this);
+    connect(watcher, &QFutureWatcher<ContentFileState>::finished, this, [this, watcher] {
+        auto result = watcher->result();
         watcher->deleteLater();
         m_preparing = false;
-        if (m_cancelled) {
-            finishBatch({false, "Installation cancelled before changing installed files."});
+        if (!result.error.isEmpty()) {
+            finish({false, result.error});
             return;
         }
-        if (!result.ok) {
-            finishBatch({false, result.error});
-            return;
-        }
-        m_installer.startBatch(result.path, requests, bridge);
+        m_pack = result.pack;
+        m_rows = result.rows;
+        startNextBatch();
     });
-    watcher->setFuture(QtConcurrent::run([pack, rows, stage] {
+    watcher->setFuture(QtConcurrent::run([pack, rows, stage, files] {
+        ContentAccess access(pack.value("path").toString());
+        if (!access.ok())
+            return ContentFileState{pack, {}, access.error()};
         auto result =
-            PackRepository::create(stage->path(), "Content staging", pack.value("minecraft").toString(),
+            PackRepository::create(stage->path(), "Content transaction", pack.value("minecraft").toString(),
                                    pack.value("loader").toString());
         if (!result.ok)
-            return result;
-        QDir().mkpath(result.path + "/mods");
-        QJsonArray pins;
+            return ContentFileState{pack, {}, result.error};
+        const auto actual = files->snapshot(pack, rows);
+        QMap<QString, QString> hashes;
+        for (const auto &value : actual) {
+            const auto row = value.toMap();
+            hashes[row.value("relativePath").toString()] = row.value("sha1").toString();
+        }
+        QJsonArray pins, assets;
         for (const auto &value : rows) {
             const auto row = value.toMap();
-            if (row.value("category") != "mods")
+            if (row.value("directory").toBool())
                 continue;
             const auto relative = row.value("relativePath").toString();
-            const auto source = NativePackFileStore::resolve(pack.value("path").toString(), relative);
-            if (source.isEmpty())
-                return RepositoryResult{false, "An installed file moved while preparing the update."};
-            auto ref = QJsonObject::fromVariantMap(row.value("installedRelease").toMap());
-            QString target = relative;
-            if (!ref.isEmpty() && row.value("enabled").toBool()) {
-                target = "mods/" + row.value("sha1").toString() + ".jar";
-                ref["installPath"] = target;
-                ref["projectTitle"] = row.value("title").toString();
-                ref["projectSourceIds"] = QJsonObject::fromVariantMap(row.value("sourceIds").toMap());
-                pins << ref;
-            }
-            const auto destination = QDir(result.path).filePath(target);
+            if (!QStringList{"mods", "resourcepacks", "shaderpacks", "datapacks"}.contains(
+                    row.value("category").toString()))
+                continue;
+            if (row.value("sha1").toString().isEmpty() ||
+                hashes.value(relative) != row.value("sha1").toString())
+                return ContentFileState{
+                    pack, {}, "Installed content changed before staging. Refresh and retry."};
+            const auto source = NativePackFileStore::resolve(pack.value("path").toString(), relative),
+                       destination = QDir(result.path).filePath(relative);
+            if (source.isEmpty() || !QDir().mkpath(QFileInfo(destination).absolutePath()))
+                return ContentFileState{pack, {}, "Could not prepare content staging."};
             std::error_code error;
 #ifdef Q_OS_WIN
             std::filesystem::create_hard_link(std::filesystem::path(source.toStdWString()),
@@ -236,9 +204,42 @@ void ContentInstaller::installBatch(const QVector<ContentInstallRequest> &reques
                                               std::filesystem::path(destination.toStdString()), error);
 #endif
             if (error && !QFile::copy(source, destination))
-                return RepositoryResult{false, "Could not prepare an isolated copy of " + relative};
+                return ContentFileState{pack, {}, "Could not stage " + relative};
+            auto ref = QJsonObject::fromVariantMap(row.value("installedRelease").toMap());
+            if (!ref.isEmpty()) {
+                ref["installPath"] = relative;
+                ref["projectTitle"] = row.value("title").toString();
+                ref["projectSourceIds"] = QJsonObject::fromVariantMap(row.value("sourceIds").toMap());
+                ref["enabled"] = row.value("enabled").toBool();
+                if (row.value("category") == "mods")
+                    pins << ref;
+                else {
+                    ref["category"] = row.value("category").toString();
+                    assets << ref;
+                }
+            }
         }
-        return PackRepository::updateContentPins(result.path, result.manifest, pins);
+        const auto saved =
+            PackRepository::updateContentReferences(result.path, result.manifest, pins, assets);
+        if (!saved.ok)
+            return ContentFileState{pack, {}, saved.error};
+        auto working = pack;
+        working["path"] = result.path;
+        working["managed"] = true;
+        working["provider"] = "conflux";
+        working["sourceContent"] = QVariantList{};
+        working["mods"] = pins.toVariantList();
+        working["assets"] = assets.toVariantList();
+        return ContentFileState{working, rows, {}};
     }));
+}
+void ContentInstaller::installBatch(const QVector<ContentInstallRequest> &requests) {
+    if (requests.size() == 1 && requests.first().contentType != "mod") {
+        m_assets.install(m_pack, m_rows, requests.first(),
+                         [this](ContentWriteResult result) { finishBatch(std::move(result)); });
+        return;
+    }
+    m_installer.startBatch(m_pack.value("path").toString(), requests,
+                           hasFabricBridge(m_pack.value("loader").toString(), m_rows));
 }
 } // namespace studio

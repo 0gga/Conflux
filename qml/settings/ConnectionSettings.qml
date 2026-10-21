@@ -9,7 +9,7 @@ ColumnLayout {
     required property var app
     spacing: 16
                 Rectangle {
-                    Layout.fillWidth: true; implicitHeight: launcherSettings.implicitHeight + 48; color: Theme.colors.card; border.color: Theme.colors.border; radius: 12
+                    Layout.fillWidth: true; implicitHeight: launcherSettings.implicitHeight + 48; color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius
                     ColumnLayout {
                         id: launcherSettings
                         anchors.fill: parent; anchors.margins: 24; spacing: 12
@@ -23,7 +23,7 @@ ColumnLayout {
                     }
                 }
                 Rectangle {
-                    Layout.fillWidth: true; implicitHeight: providerSettings.implicitHeight + 48; color: Theme.colors.card; border.color: Theme.colors.border; radius: 12
+                    Layout.fillWidth: true; implicitHeight: providerSettings.implicitHeight + 48; color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius
                     ColumnLayout {
                         id: providerSettings
                         anchors.fill: parent; anchors.margins: 24; spacing: 14
@@ -43,7 +43,7 @@ ColumnLayout {
                     }
                 }
                 Rectangle {
-                    Layout.fillWidth: true; implicitHeight: gitSettings.implicitHeight + 48; color: Theme.colors.card; border.color: Theme.colors.border; radius: 12
+                    Layout.fillWidth: true; implicitHeight: gitSettings.implicitHeight + 48; color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius
                     ColumnLayout {
                         id: gitSettings
                         anchors.fill: parent; anchors.margins: 24; spacing: 12

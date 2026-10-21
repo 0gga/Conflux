@@ -35,7 +35,7 @@ Item {
         Rectangle {
             objectName: "libraryOnboarding"
             visible: root.app.visiblePackCount === 0 && !root.app.libraryBusy
-            Layout.fillWidth: true; implicitHeight: 108; color: Theme.colors.card; border.color: Theme.colors.border; radius: 12
+            Layout.fillWidth: true; implicitHeight: 108; color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius
             RowLayout {
                 anchors.fill: parent; anchors.margins: 24; spacing: 24
                 ColumnLayout {

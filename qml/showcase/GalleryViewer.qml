@@ -20,7 +20,7 @@ FocusPopup {
     padding: 0; modal: true; dim: true
     closePolicy: Popup.CloseOnEscape
     Overlay.modal: Rectangle { color: Theme.colors.background; opacity: 0.9 }
-    background: Rectangle { radius: 16; color: "transparent" }
+    background: Rectangle { radius: ControlStyle.panelRadius; color: "transparent" }
     contentItem: FocusScope {
         id: viewerContent
         focus: true
@@ -49,14 +49,14 @@ FocusPopup {
                     width: naturalSize.width>0 ? naturalSize.width*fit*root.zoom : pan.width
                     height: naturalSize.height>0 ? naturalSize.height*fit*root.zoom : pan.height
                     x: Math.max(0,(pan.width-width)/2); y: Math.max(0,(pan.height-height)/2)
-                    source: root.images[root.currentIndex] || ""; intrinsicSize: true; preserveAspectFit: true; radius: 12; kind: "image"
+                    source: root.images[root.currentIndex] || ""; intrinsicSize: true; preserveAspectFit: true; radius: ControlStyle.panelRadius; kind: "image"
                 }
                 WheelHandler { onWheel: function(event) { root.magnify(event.angleDelta.y>0 ? 1.2 : 1/1.2);event.accepted=true } }
             }
             Rectangle {
                 id: toolbar; objectName: "galleryToolbar"
                 Layout.alignment: Qt.AlignHCenter
-                implicitWidth: controls.implicitWidth+16; implicitHeight: controls.implicitHeight+12; radius: 18
+                implicitWidth: controls.implicitWidth+16; implicitHeight: controls.implicitHeight+12; radius: ControlStyle.panelRadius
                 color: Theme.colors.input
                 RowLayout {
                     id: controls; anchors.centerIn: parent; spacing: 4

@@ -73,7 +73,7 @@ Item {
     Component { id: worldView; WorldPanel { worlds: root.session.worlds; launch: root.session.launch; busy: root.app.repositoryBusy; onOpenRequested: function(path) { root.app.openFolder(root.workspace.pack.path + "/" + path) } } }
     FocusPopup {
         id: packMenu; parent: packMenuButton; x: packMenuButton.width-width; y: packMenuButton.height+6; width: 220; padding: 6
-        background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: 14 }
+        background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius }
         contentItem: ColumnLayout {
             spacing: 2
             ActionButton { Layout.fillWidth: true; text: "Open pack folder"; iconName: "folder"; subtle: true; alignLeft: true; onClicked: { root.app.openFolder(root.workspace.pack.path); packMenu.close() } }
@@ -84,7 +84,7 @@ Item {
         id: warningsPopup; objectName: "packWarnings"; parent: root; width: Math.min(620,root.width-56); padding: 0
         x: Math.max(28,Math.min(warningButton.mapToItem(root,0,0).x,root.width-width-28))
         onAboutToShow: { y = warningButton.mapToItem(root,0,warningButton.height).y+8 }
-        background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: 16 }
+        background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius }
         contentItem: DiagnosticsBanner { id: diagnostics; width: warningsPopup.width; issues: root.visibleIssues; expanded: true; onSettingsRequested: { warningsPopup.close(); root.warningSettingsRequested() } }
     }
 }

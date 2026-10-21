@@ -513,6 +513,25 @@ void CatalogueClient::loadProject(const Project &project, const QString &request
             });
     }
 }
+void CatalogueClient::loadChangelog(const Release &release, std::function<void(QString, QString)> callback) {
+    if (release.provider != "curseforge") {
+        callback(release.changelog, {});
+        return;
+    }
+    if (!hasCurseforgeKey()) {
+        callback({}, "CurseForge changelogs need an approved API key.");
+        return;
+    }
+    if (release.projectId.isEmpty() || release.id.isEmpty()) {
+        callback({}, "This version has no source identity.");
+        return;
+    }
+    get(QUrl("https://api.curseforge.com/v1/mods/" + release.projectId + "/files/" + release.id +
+             "/changelog"),
+        true, [callback = std::move(callback)](const QJsonDocument &doc, QString error) {
+            callback(doc.object().value("data").toString(), error);
+        });
+}
 void CatalogueClient::resolveProject(const QString &sha1, QMap<QString, QString> ids, int generation) {
     auto fetch = [this, generation](QMap<QString, QString> sourceIds, QString lookupError) {
         struct Batch {

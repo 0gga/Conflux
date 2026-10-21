@@ -18,6 +18,10 @@ class NativeContentStore final : public IContentFileStore {
     // Used by the external install adapter after verified dependency staging.
     ContentWriteResult applyStaged(const QVariantMap &, const QVariantList &expected, const QString &stage,
                                    const QJsonObject &manifest) const;
+    ContentWriteResult commitStagedContent(const QVariantMap &, const QVariantList &, const QString &,
+                                           const QJsonObject &,
+                                           const QSet<QString> &shallowProjects = {}) const;
+    ContentWriteResult restoreLocked(const QVariantMap &, const QVariantMap &) const override;
     ContentWriteResult installAsset(const QVariantMap &, const QVariantList &, const ContentInstallRequest &,
                                     const QString &verifiedFile) const;
 

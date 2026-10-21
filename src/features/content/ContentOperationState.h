@@ -2,10 +2,11 @@
 #include "ContentPorts.h"
 namespace studio {
 struct ContentOperation {
-    enum Kind { Enable, Remove, Import, Install } kind = Enable;
+    enum Kind { Enable, Remove, Import, Install, Restore } kind = Enable;
     quint64 id = 0;
     QString packPath;
-    QStringList targets;
+    QStringList targets, reservations;
+    QVariantMap sourceLock;
     bool enabled = true;
     QList<QUrl> urls;
     QString category;

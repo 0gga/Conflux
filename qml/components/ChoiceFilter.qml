@@ -39,7 +39,7 @@ PopupButton {
         parent: root; y: root.height+5; width: Math.max(250,Math.min(360,root.width)); padding: 8; margins: 8
         onOpened: if (search.visible) search.forceActiveFocus()
         onClosed: search.text = ""
-        background: Rectangle { radius: 12; color: Theme.colors.card; border.color: Theme.colors.border }
+        background: Rectangle { radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border }
         contentItem: ColumnLayout {
             spacing: 6
             Components.SearchField {
@@ -57,7 +57,7 @@ PopupButton {
                 id: options; objectName: "choiceFilterOptions"
                 outsideColor: Theme.colors.card; cornerRadius: 8
                 Layout.fillWidth: true; implicitHeight: Math.min(280,contentHeight); clip: true
-                model: root.choices.filter(function(value) {return root.formatValue(value).toLowerCase().indexOf(search.text.toLowerCase())!==-1})
+                model: TextSearch.filter(root.choices,search.text)
                 delegate: ActionButton {
                     id: option
                     required property string modelData

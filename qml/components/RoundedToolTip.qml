@@ -8,9 +8,12 @@ ToolTip {
     visible: !!Appearance.values.tooltips && showWhen
     delay: Appearance.values.tooltipDelay
     padding: 10
-    implicitWidth: Math.min(340, metrics.width + leftPadding + rightPadding)
+    implicitWidth: Math.min(root.Overlay.overlay ? root.Overlay.overlay.width-16 : 480, 480, Math.ceil(measure.implicitWidth) + leftPadding + rightPadding + 2)
+    width: implicitWidth
+    implicitHeight: label.implicitHeight + topPadding + bottomPadding
+    Text { id:measure;visible:false;text:root.text;font:label.font;textFormat:Text.PlainText }
     background: Rectangle {
-        radius: 12
+        radius: ControlStyle.controlRadius
         color: Theme.colors.selection
         border.color: Theme.colors.border
     }
@@ -20,7 +23,7 @@ ToolTip {
         color: Theme.colors.text
         font.pixelSize: 13
         textFormat: Text.PlainText
-        wrapMode: Text.WordWrap
-        TextMetrics { id: metrics; text: root.text; font: label.font }
+        wrapMode: Text.Wrap
+
     }
 }

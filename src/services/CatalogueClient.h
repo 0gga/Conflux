@@ -27,6 +27,7 @@ class CatalogueClient : public QObject, public ICatalogueSearch {
     static QUrl searchUrl(const CatalogueQuery &, int offset, int limit, int classId = 6);
     void loadProject(const Project &project, const QString &game, const QString &loader, int generation,
                      bool allVersions = false);
+    void loadChangelog(const Release &, std::function<void(QString, QString)>);
     void resolveProject(const QString &sha1, QMap<QString, QString> sourceIds, int generation);
   signals:
     void searchFinished(int generation, QVector<studio::Project> projects, QStringList errors);

@@ -23,6 +23,8 @@ QVariantList Appearance::controls() const {
     add("contentRowHeight", "Instance content row height", "Interface", 64, 112, 2, 82, " px");
     add("scrollbarWidth", "Scrollbar width", "Interface", 6, 12, 1, 8, " px");
     add("galleryFitPercent", "Gallery image fit", "Interface", 60, 100, 1, 83, "%");
+    add("scrollDistance", "Wheel scroll distance", "Interface", 40, 400, 10, 140, " px");
+    add("scrollDuration", "Scroll smoothing duration", "Interface", 80, 400, 20, 180, " ms");
     add("tooltipDelay", "Tooltip delay", "Interface", 0, 1500, 100, 600, " ms");
     const auto toggle = [&result](QString key, QString label, QString group, int initial) {
         result << QVariantMap{{"key", key}, {"label", label}, {"group", group},    {"kind", "toggle"},
@@ -38,6 +40,7 @@ QVariantList Appearance::controls() const {
                           {"choices", QStringList{"Automatic", "Icons only", "Expanded when space allows"}}};
     toggle("previewVisible", "Show live settings preview", "Interface", 1);
     toggle("tooltips", "Show tooltips", "Interface", 1);
+    toggle("smoothScrolling", "Smooth wheel scrolling", "Interface", 1);
     toggle("reduceMotion", "Reduce interface motion", "Interface", 0);
     toggle("showAuthor", "Show author", "Content cards", 1);
     toggle("showSummary", "Show description summary", "Content cards", 1);

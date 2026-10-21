@@ -90,6 +90,25 @@ class AppearanceTests final : public QObject {
         Appearance finalState(nullptr, dir.path());
         QCOMPARE(finalState.values(), restored.values());
     }
+    void scrollingPreferencesPersistValidateAndReset() {
+        QTemporaryDir dir;
+        Appearance settings(nullptr, dir.path());
+        QCOMPARE(settings.values().value("scrollDistance").toInt(), 140);
+        QCOMPARE(settings.values().value("scrollDuration").toInt(), 180);
+        QCOMPARE(settings.values().value("smoothScrolling").toInt(), 1);
+        QVERIFY(settings.setValue("scrollDistance", 240));
+        QVERIFY(settings.setValue("scrollDuration", 260));
+        QVERIFY(settings.setValue("smoothScrolling", 0));
+        QVERIFY(!settings.setValue("scrollDistance", 0));
+        QVERIFY(!settings.setValue("scrollDuration", 2000));
+        QVERIFY(!settings.setValue("smoothScrolling", 0.5));
+        Appearance reopened(nullptr, dir.path());
+        QCOMPARE(reopened.values(), settings.values());
+        reopened.resetGroup("Interface");
+        QCOMPARE(reopened.values().value("scrollDistance").toInt(), 140);
+        QCOMPARE(reopened.values().value("scrollDuration").toInt(), 180);
+        QCOMPARE(reopened.values().value("smoothScrolling").toInt(), 1);
+    }
     void installedOpacityMigratesOnceAndNewChoiceWins() {
         QTemporaryDir dir;
         auto store = std::make_shared<NativeAppearanceStore>(dir.path());

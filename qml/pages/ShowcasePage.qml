@@ -13,6 +13,15 @@ Item {
     required property var showcase
     required property var contentController
     property string tab: "description"
+    readonly property bool hasGallery: (showcase.gallery || []).length > 0
+    readonly property string displayedTab: tab === "gallery" && !hasGallery ? "description" : tab
+    function restoreAvailableTab() {
+        if (showcase && tab === "gallery" && !hasGallery && !showcase.busy)
+            Qt.callLater(function() { if (root.showcase && root.tab === "gallery" && !root.hasGallery && !root.showcase.busy) root.tabRequested("description") })
+    }
+    onTabChanged: restoreAvailableTab()
+    Component.onCompleted: restoreAvailableTab()
+    Connections { target: root.showcase; function onChanged() { root.restoreAvailableTab() } }
     onVisibleChanged: if (!visible) enlarged.close()
     required property var releaseFilters
     signal tabRequested(string key)
@@ -31,13 +40,13 @@ Item {
             BusyIndicator { visible: root.showcase.busy; running: visible; Layout.preferredWidth: 32; Layout.preferredHeight: 32 }
             ActionButton { text: "View project page"; subtle: true; visible: !!root.showcase.project.url; onClicked: root.app.openWeb(root.showcase.project.url) }
         }
-        SectionTabs { entries: [{key:"description",label:"Description",icon:"info"},{key:"gallery",label:"Gallery",icon:"image"},{key:"versions",label:"Versions",icon:"versions"}]; current: root.tab; onSelected: function(key) { root.tabRequested(key) } }
+        SectionTabs { objectName: "showcaseTabs"; entries: [{key:"description",label:"Description",icon:"info"}].concat(root.hasGallery ? [{key:"gallery",label:"Gallery",icon:"image"}] : []).concat([{key:"versions",label:"Versions",icon:"versions"}]); current: root.displayedTab; onSelected: function(key) { root.tabRequested(key) } }
         Text { Layout.fillWidth: true; visible: root.showcase.notice.length > 0; text: root.showcase.notice; color: Theme.colors.warning; font.pixelSize: 12; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
         Text { Layout.fillWidth: true; visible: root.browse.notice.length > 0; text: root.browse.notice; color: Theme.colors.warning; font.pixelSize: 12; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
         Text { Layout.fillWidth: true; visible: root.contentController.notice.length > 0; text: root.contentController.notice; color: Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
         StackLayout {
             Layout.fillWidth: true; Layout.fillHeight: true
-            currentIndex: ["description","gallery","versions"].indexOf(root.tab)
+            currentIndex: ["description","gallery","versions"].indexOf(root.displayedTab)
             BoundedScrollView {
                 id: descriptionScroll; clip: true
                 DescriptionView {
@@ -48,7 +57,6 @@ Item {
             }
             Item {
                 GalleryView { anchors.fill: parent; images: root.showcase.gallery; onImageRequested: function(index) { enlarged.show(root.showcase.gallery,index) } }
-                EmptyState { anchors.centerIn: parent; visible: !root.showcase.busy && root.showcase.gallery.length === 0; title: "No gallery images"; message: "This project has no available gallery images."; symbol: "image" }
             }
             ColumnLayout {
                 spacing: 14

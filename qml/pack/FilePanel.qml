@@ -17,7 +17,7 @@ Item {
             Text { Layout.fillWidth: true; text: "/ " + root.browser.folder; color: Theme.colors.text; font.pixelSize: 13; elide: Text.ElideMiddle; textFormat: Text.PlainText }
             ActionButton { text: "Open folder"; iconName: "folder"; subtle: true; onClicked: root.directoryRequested(root.browser.folder) }
         }
-        ListView { boundsBehavior: Flickable.StopAtBounds;
+        SmoothListView { boundsBehavior: Flickable.StopAtBounds;
             id: list; Layout.fillWidth: true; Layout.fillHeight: true; model: root.browser.entries; spacing: 6; clip: true; ScrollBar.vertical: ScrollBar {}
             delegate: Rectangle {
                 id: row; required property var modelData; width: list.width; height: 60; radius: 12; color: hover.hovered ? Theme.colors.hover : Theme.colors.card

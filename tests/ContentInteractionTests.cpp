@@ -34,6 +34,163 @@ class ContentInteractionTests : public QObject {
         QQuickStyle::setStyle("Basic");
         qputenv("CONFLUX_STYLE_SETTINGS_DIR", styleStorage.path().toUtf8());
     }
+    void wheelScrollingAnimatesAccumulatesAndStaysWithinBounds() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(340, 280);
+        QQmlComponent component(&engine);
+        component.setData(
+            R"(
+import QtQuick
+import "components"
+ContentListView { width:320; height:240; model:100
+    delegate: Rectangle { width:ListView.view.width; height:40 }
+})",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/ScrollMotionFixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> list(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY(list);
+        list->setParentItem(window.contentItem());
+        auto *appearance =
+            engine.singletonInstance<studio::Appearance *>(qmlTypeId("Conflux.Style", 1, 0, "Appearance"));
+        QVERIFY(appearance);
+        QVERIFY(appearance->setValue("scrollDistance", 200));
+        QVERIFY(appearance->setValue("scrollDuration", 200));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto wheel = [&](int angle, int pixels = 0) {
+            const QPointF position(100, 100);
+            QWheelEvent event(position, window.mapToGlobal(position.toPoint()), QPoint(0, pixels),
+                              QPoint(0, angle), Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+            QCoreApplication::sendEvent(&window, &event);
+        };
+        QSignalSpy settled(list.get(), SIGNAL(movementEnded()));
+        wheel(-120);
+        QTest::qWait(40);
+        QVERIFY(list->property("contentY").toReal() > 0);
+        QVERIFY(list->property("contentY").toReal() < 200);
+        QVERIFY(list->property("moving").toBool());
+        wheel(-120);
+        wheel(-120);
+        QTRY_VERIFY_WITH_TIMEOUT(!list->property("moving").toBool(), 1000);
+        QVERIFY(qAbs(list->property("contentY").toReal() - 600) < 1);
+        QVERIFY(settled.count() > 0);
+        wheel(120);
+        QTRY_VERIFY(!list->property("moving").toBool());
+        QVERIFY(qAbs(list->property("contentY").toReal() - 400) < 1);
+        wheel(0, -25);
+        QVERIFY(qAbs(list->property("contentY").toReal() - 425) < 1);
+        QVERIFY(!list->property("moving").toBool());
+        QVERIFY(appearance->setValue("reduceMotion", 1));
+        wheel(-120);
+        QVERIFY(qAbs(list->property("contentY").toReal() - 625) < 1);
+        list->setProperty("contentY", 0);
+        wheel(120);
+        QCOMPARE(list->property("contentY").toReal(), 0.0);
+        list->setProperty("contentY", list->property("contentHeight").toReal() - list->height());
+        wheel(-120);
+        QCOMPARE(list->property("contentY").toReal(),
+                 list->property("contentHeight").toReal() - list->height());
+        appearance->reset();
+    }
+    void nestedScrollAndModalFocusDoNotMoveTheBackground() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(400, 360);
+        QQmlComponent component(&engine);
+        component.setData(
+            R"(
+import QtQuick
+import QtQuick.Controls
+import "components"
+Item { width:400;height:360
+    BoundedScrollView { id:outer;objectName:"outerScroll";width:360;height:300
+        Item { width:outer.availableWidth;implicitHeight:2000
+            ContentListView { objectName:"innerScroll";width:300;height:160;model:50;delegate:Rectangle{width:ListView.view.width;height:40} }
+        }
+    }
+    FocusPopup { objectName:"motionPopup";x:100;y:100;width:200;height:120;contentItem:TextField{focus:true} }
+})",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/NestedMotionFixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> fixture(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY(fixture);
+        fixture->setParentItem(window.contentItem());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *inner = findItem(fixture.get(), "innerScroll");
+        auto *outer = findItem(fixture.get(), "outerScroll");
+        QVERIFY(inner && outer);
+        auto *viewport = outer->property("viewport").value<QQuickItem *>();
+        QVERIFY(viewport);
+        auto wheel = [&] {
+            const QPointF position(80, 80);
+            QWheelEvent event(position, window.mapToGlobal(position.toPoint()), QPoint{}, QPoint(0, -120),
+                              Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+            QCoreApplication::sendEvent(&window, &event);
+        };
+        wheel();
+        QTest::qWait(40);
+        QVERIFY(inner->property("contentY").toReal() > 0);
+        QCOMPARE(viewport->property("contentY").toReal(), 0.0);
+        auto *popup = fixture->findChild<QObject *>("motionPopup");
+        QVERIFY(popup);
+        QVERIFY(QMetaObject::invokeMethod(popup, "open"));
+        QTest::qWait(40);
+        const auto position = inner->property("contentY").toReal();
+        wheel();
+        QTest::qWait(250);
+        QCOMPARE(inner->property("contentY").toReal(), position);
+        QCOMPARE(viewport->property("contentY").toReal(), 0.0);
+    }
+    void galleryTabOnlyAppearsWithImagesAndEmptySelectionFallsBack() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(1000, 700);
+        QQmlComponent component(&engine);
+        component.setData(
+            R"(
+import QtQuick
+import "pages"
+Item { id:root;width:1000;height:700
+    property alias gallery:model.gallery
+    property alias selection:navigation.tab
+    property alias busy:model.busy
+    QtObject { id:navigation;property string tab:"gallery" }
+    QtObject { id:model;property var project:({title:"Example",sources:[]});property var gallery:[];property bool busy:false;property string notice:"";property var descriptionBlocks:[];signal changed();onGalleryChanged:changed();onBusyChanged:changed() }
+    QtObject { id:browser;property bool ready:false;property bool busy:false;property string notice:"";function installed(release,type){return false} }
+    QtObject { id:applicationModel;property bool repositoryBusy:false;function openWeb(url){} }
+    QtObject { id:content;property string notice:"" }
+    QtObject { id:filters;property var rows:[];property var options:({channels:[],versions:[],loaders:[]});property var filters:({channels:[],versions:[],loaders:[],source:"all"}) }
+    ShowcasePage { id:page;objectName:"galleryPage";anchors.fill:parent;showcase:model;browse:browser;app:applicationModel;contentController:content;releaseFilters:filters;tab:navigation.tab;onTabRequested:function(key){navigation.tab=key} }
+})",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/EmptyGalleryFixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> fixture(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY2(fixture, qPrintable(component.errorString()));
+        fixture->setParentItem(window.contentItem());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *page = findItem(fixture.get(), "galleryPage");
+        QVERIFY(page);
+        QCOMPARE(page->property("displayedTab").toString(), QString("description"));
+        QTRY_COMPARE(fixture->property("selection").toString(), QString("description"));
+        QVERIFY(!findItem(fixture.get(), "sectionTab_gallery"));
+        fixture->setProperty("selection", "versions");
+        QTRY_VERIFY(findItem(fixture.get(), "versionChannelFilter"));
+        QTemporaryDir temp;
+        QImage picture(30, 30, QImage::Format_ARGB32);
+        picture.fill(Qt::red);
+        QVERIFY(picture.save(temp.path() + "/image.png"));
+        fixture->setProperty("gallery",
+                             QStringList{QUrl::fromLocalFile(temp.path() + "/image.png").toString()});
+        QTRY_VERIFY(findItem(fixture.get(), "sectionTab_gallery"));
+        fixture->setProperty("selection", "gallery");
+        QCOMPARE(page->property("displayedTab").toString(), QString("gallery"));
+        fixture->setProperty("gallery", QStringList{});
+        QTRY_COMPARE(page->property("displayedTab").toString(), QString("description"));
+        QVERIFY(!findItem(fixture.get(), "sectionTab_gallery"));
+    }
     void sharedSelectBoxKeepsKeyboardSelectionWithGutter() {
         QQmlEngine engine;
         QQuickWindow window;

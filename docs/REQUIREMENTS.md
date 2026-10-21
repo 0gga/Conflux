@@ -114,3 +114,5 @@ The source statements and reference images distinguish these requirements from i
 - Content names, authors and version labels underline on hover. Content names open the project, version labels open Versions, and authors open all their content with both source platforms combined through verified identities.
 
 - Content already on its latest installed loader edition must not appear in Updates; Barehanded1.6.6 NeoForge versus its later-published Fabric build is the owner-reported regression.
+
+- Hide Gallery entirely when a content project has no gallery images. Scrolling should feel smoother and travel farther per wheel step, while retaining strict scroll bounds.

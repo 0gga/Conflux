@@ -107,6 +107,7 @@ qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     qml/components/IconPaths.js
     qml/components/BrandBadge.qml qml/components/ProjectCard.qml
     qml/components/CompatibilityBadges.qml qml/components/BoundedScrollView.qml
+    qml/components/SmoothScroll.qml qml/components/SmoothListView.qml
     qml/components/ContentListView.qml qml/components/ContentGridView.qml qml/components/ContentScrollBar.qml qml/components/ScrollViewportCorners.qml qml/components/ContentStatistic.qml
     qml/showcase/DescriptionView.qml qml/showcase/GalleryView.qml qml/showcase/GalleryViewer.qml
     qml/components/FocusPopup.qml qml/components/FocusDialog.qml

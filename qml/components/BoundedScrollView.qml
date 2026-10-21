@@ -7,6 +7,7 @@ ScrollView {
     rightPadding: 16
     ScrollBar.vertical: ContentScrollBar { parent: root; x: root.width-width; y: root.topPadding; height: root.availableHeight }
     readonly property Flickable viewport: contentItem as Flickable
+    SmoothScroll { viewport: root.viewport }
     Binding {
         target: root.viewport
         property: "boundsBehavior"

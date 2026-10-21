@@ -30,7 +30,7 @@ ComboBox {
         onAboutToShow: pendingIndex=Math.max(0,control.currentIndex)
         y: control.height + 6; width: control.width; padding: 6; implicitHeight: Math.min(list.contentHeight + 12, 280)
         background: Rectangle { radius: 12; color: Theme.colors.card; border.color: Theme.colors.border }
-        contentItem: ListView {
+        contentItem: SmoothListView {
             id: list; focus: true; clip: true; boundsBehavior: Flickable.StopAtBounds; implicitHeight: contentHeight; spacing: 2
             model: control.popup.visible ? control.delegateModel : null; currentIndex: menu.pendingIndex
             keyNavigationEnabled: false

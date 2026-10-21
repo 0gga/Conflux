@@ -28,7 +28,7 @@ Item {
         Text { visible: root.editor.error.length > 0; Layout.fillWidth: true; text: root.editor.error; color: Theme.colors.danger; font.pixelSize: 12; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
         Text { visible: root.editor.status.length > 0; Layout.fillWidth: true; text: root.editor.status; color: Theme.colors.accent; font.pixelSize: 12; wrapMode: Text.WordWrap }
         Text { visible: root.editor.unsupported > 0; Layout.fillWidth: true; text: root.editor.unsupported + " complex or unsupported values are preserved and omitted from this form."; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap }
-        ListView { boundsBehavior: Flickable.StopAtBounds;
+        SmoothListView { boundsBehavior: Flickable.StopAtBounds;
             id: list; Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 10
             model: root.editor.fields.filter(function(field) { return (field.label + " " + field.section + " " + field.description).toLowerCase().indexOf(root.query.toLowerCase()) !== -1 })
             ScrollBar.vertical: ScrollBar {}

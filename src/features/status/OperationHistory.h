@@ -42,5 +42,6 @@ class OperationHistory final : public QAbstractListModel {
   private:
     QVariantList m_entries;
     void set(quint64, const QString &, const QVariant &);
+    void prune();
 };
 } // namespace studio

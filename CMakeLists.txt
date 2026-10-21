@@ -46,6 +46,7 @@ target_include_directories(conflux_config PUBLIC src PRIVATE third_party)
 target_link_libraries(conflux_config PUBLIC pack_storage)
 qt_add_library(conflux_desktop STATIC
     src/DesktopSession.h src/DesktopSession.cpp
+    src/features/content/ContentUpdates.cpp
     src/features/navigation/NavigationHistory.h src/features/navigation/NavigationHistory.cpp
     src/features/navigation/NavigationInput.h src/features/navigation/NavigationInput.cpp
     src/features/preferences/WarningPreferences.h src/features/preferences/WarningPreferences.cpp
@@ -179,6 +180,15 @@ if(BUILD_TESTING)
     qt_add_executable(content-actions-tests tests/ContentActionsTests.cpp)
     target_link_libraries(content-actions-tests PRIVATE conflux_desktop Qt6::Test)
     add_test(NAME content-actions COMMAND content-actions-tests)
+    qt_add_executable(content-update-tests tests/ContentUpdateTests.cpp)
+    target_link_libraries(content-update-tests PRIVATE conflux_desktop Qt6::Test)
+    add_test(NAME content-updates COMMAND content-update-tests)
+    qt_add_executable(content-update-integration-tests tests/ContentUpdateIntegrationTests.cpp)
+    target_link_libraries(content-update-integration-tests PRIVATE conflux_desktop miniz Qt6::Test)
+    add_test(NAME content-update-integration COMMAND content-update-integration-tests)
+    qt_add_executable(content-operation-state-tests tests/ContentOperationStateTests.cpp)
+    target_link_libraries(content-operation-state-tests PRIVATE conflux_desktop Qt6::Test)
+    add_test(NAME content-operation-state COMMAND content-operation-state-tests)
     qt_add_executable(browse-installs-tests tests/BrowseInstallsTests.cpp)
     target_link_libraries(browse-installs-tests PRIVATE conflux_desktop Qt6::Test)
     add_test(NAME browse-installs COMMAND browse-installs-tests)

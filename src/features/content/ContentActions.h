@@ -176,6 +176,7 @@ class ContentActions final : public QObject {
 
   private:
     ContentInstallRequest updateRequest(const QVariantMap &) const;
+    void queueUpdates(const QVariantList &);
     QVariantMap find(const QString &) const;
     QString preferenceIdentity(const QVariantMap &) const;
     void applyPreferences();
@@ -216,6 +217,7 @@ class ContentActions final : public QObject {
     QString m_query, m_category = "all", m_sort = "name-asc", m_notice, m_versionError;
     QString m_activity = "idle", m_activityText;
     bool m_cancelRequested = false;
+    bool m_batchingUpdates = false;
     bool m_busy = false, m_versionsBusy = false;
     int m_generation = 0, m_versionGeneration = 0;
 };

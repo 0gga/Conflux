@@ -10,11 +10,16 @@ void ContentOperationExecutor::execute(ContentOperation operation, ContentFileSt
     QString blocked = before.error;
     if (targets.size() != operation.targets.size())
         blocked = "The selected content changed before this action could run.";
-    for (const auto &value : targets)
-        if (value.toMap().value("locked").toBool())
+    for (const auto &value : targets) {
+        const auto row = value.toMap();
+        const auto expected = operation.expectedHashes.constFind(contentRowKey(row));
+        if (expected != operation.expectedHashes.cend() && row.value("sha1").toString() != *expected)
+            blocked = "This content changed after the action was queued. Refresh before trying again.";
+        else if (row.value("locked").toBool())
             blocked = "Unlock this content before changing it.";
-        else if (operation.kind == ContentOperation::Install && value.toMap().value("frozen").toBool())
+        else if (operation.kind == ContentOperation::Install && row.value("frozen").toBool())
             blocked = "Unfreeze this version before changing it.";
+    }
     if (!blocked.isEmpty()) {
         callback({false, blocked}, before);
         return;

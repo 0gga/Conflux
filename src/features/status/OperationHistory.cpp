@@ -33,21 +33,22 @@ void OperationHistory::queued(quint64 id, const QVariantMap &pack, const QString
                                   {"message", QString{}},
                                   {"retryable", false}});
     endInsertRows();
-    while (m_entries.size() > 100) {
-        int index = -1;
-        for (int i = m_entries.size() - 1; i >= 0; --i)
-            if (m_entries[i].toMap().value("state") != "running" &&
-                m_entries[i].toMap().value("state") != "queued") {
-                index = i;
-                break;
-            }
-        if (index < 0)
-            break;
-        beginRemoveRows({}, index, index);
-        m_entries.removeAt(index);
-        endRemoveRows();
-    }
+    prune();
     emit changed();
+}
+void OperationHistory::prune() {
+    int inactive = m_entries.size() - activeCount();
+    for (int i = m_entries.size() - 1; inactive > 100 && i >= 0; --i) {
+        const auto row = m_entries[i].toMap();
+        if (row.value("state") == "running" || row.value("state") == "queued")
+            continue;
+        const auto id = row.value("id").toULongLong();
+        beginRemoveRows({}, i, i);
+        m_entries.removeAt(i);
+        endRemoveRows();
+        --inactive;
+        emit dismissed(id);
+    }
 }
 void OperationHistory::set(quint64 id, const QString &key, const QVariant &value) {
     for (int i = 0; i < m_entries.size(); ++i) {
@@ -68,9 +69,19 @@ void OperationHistory::progress(quint64 id, const QString &text) {
     set(id, "message", text);
 }
 void OperationHistory::finish(quint64 id, bool ok, const QString &error, bool retryable) {
-    set(id, "state", ok && error.isEmpty() ? "done" : "failed");
-    set(id, "message", error);
-    set(id, "retryable", !ok && retryable);
+    for (int i = 0; i < m_entries.size(); ++i) {
+        auto row = m_entries[i].toMap();
+        if (row.value("id").toULongLong() != id)
+            continue;
+        row["state"] = ok && error.isEmpty() ? "done" : "failed";
+        row["message"] = error;
+        row["retryable"] = !ok && retryable;
+        m_entries[i] = row;
+        emit dataChanged(index(i), index(i), {Qt::UserRole + 1});
+        break;
+    }
+    prune();
+    emit changed();
     if (ok && error.isEmpty())
         QTimer::singleShot(1800, this, [this, id] { dismiss(id); });
 }

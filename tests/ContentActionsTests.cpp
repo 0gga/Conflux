@@ -744,10 +744,12 @@ class ContentActionsTests : public QObject {
         content.freeze("shaderpacks/old.zip", true);
         content.updateAll();
         QCOMPARE(catalogue->refreshCount, checks);
-        QCOMPARE(installer->requested.size(), 3);
+        QCOMPARE(installer->requested.size(), 1);
         QCOMPARE(installer->requested[0].contentType, QString("mod"));
-        QCOMPARE(installer->requested[1].contentType, QString("resourcepack"));
-        QCOMPARE(installer->requested[2].contentType, QString("datapack"));
+        content.cancel();
+        QTRY_COMPARE(installer->requested.first().contentType, QString("resourcepack"));
+        content.cancel();
+        QTRY_COMPARE(installer->requested.first().contentType, QString("datapack"));
         content.cancel();
         QTRY_VERIFY(!content.busy());
         QVERIFY(content.notice().isEmpty());

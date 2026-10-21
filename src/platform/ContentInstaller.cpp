@@ -41,7 +41,7 @@ void ContentInstaller::finishBatch(ContentWriteResult result) {
     }
     if (!result.error.isEmpty())
         m_warnings << result.error;
-    const auto current = PackRepository::inspect(m_pack.value("path").toString());
+    const auto current = PackRepository::inspectContent(m_pack.value("path").toString());
     if (!current.ok) {
         finish({false, current.error});
         return;
@@ -78,7 +78,7 @@ void ContentInstaller::startNextBatch() {
         finish(std::move(result));
     });
     watcher->setFuture(QtConcurrent::run([pack, rows, stage, path, files, shallow] {
-        const auto current = PackRepository::inspect(path);
+        const auto current = PackRepository::inspectContent(path);
         if (!current.ok)
             return ContentWriteResult{false, current.error};
         return files->commitStagedContent(pack, rows, path, current.manifest, shallow);

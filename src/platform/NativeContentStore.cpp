@@ -69,7 +69,7 @@ ContentFileState NativeContentStore::reload(const QVariantMap &pack, const QVari
     if (!policyError.isEmpty())
         return {pack, {}, policyError};
     if (pack.value("managed").toBool()) {
-        const auto repository = PackRepository::inspect(pack.value("path").toString());
+        const auto repository = PackRepository::inspectContent(pack.value("path").toString());
         if (!repository.ok)
             return {pack, {}, repository.error};
         current["mods"] = repository.manifest.value("mods").toArray().toVariantList();
@@ -160,7 +160,7 @@ ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, const QLis
         return {false, "The pack folder is unavailable."};
     QJsonObject originalManifest;
     if (pack.value("managed").toBool()) {
-        const auto current = PackRepository::inspect(root);
+        const auto current = PackRepository::inspectContent(root);
         if (!current.ok)
             return {false, current.error};
         originalManifest = current.manifest;
@@ -407,7 +407,7 @@ ContentWriteResult NativeContentStore::applyStaged(const QVariantMap &pack, cons
     QList<Edit> removals, additions;
     QJsonArray managedPins;
     if (pack.value("managed").toBool()) {
-        const auto current = PackRepository::inspect(root);
+        const auto current = PackRepository::inspectContent(root);
         if (!current.ok)
             return {false, current.error};
         for (const auto &pin : current.manifest.value("mods").toArray())
@@ -504,7 +504,7 @@ ContentWriteResult NativeContentStore::installAsset(const QVariantMap &pack, con
     edits << Edit{{}, target, source, {}};
     QJsonArray pins;
     if (pack.value("managed").toBool()) {
-        const auto current = PackRepository::inspect(root);
+        const auto current = PackRepository::inspectContent(root);
         if (!current.ok)
             return {false, current.error};
         if (current.manifest.value("assets").toArray() !=
@@ -697,7 +697,7 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
             additions << Edit{{}, target, source, {}};
         }
     if (pack.value("managed").toBool()) {
-        const auto original = PackRepository::inspect(root);
+        const auto original = PackRepository::inspectContent(root);
         if (!original.ok)
             return {false, original.error};
         for (const auto &kind : {QString("mods"), QString("assets")}) {

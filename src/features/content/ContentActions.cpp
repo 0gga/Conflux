@@ -26,7 +26,8 @@ ContentActions::ContentActions(std::shared_ptr<const IContentFileStore> files,
     connect(this, &ContentActions::changed, this, &ContentActions::syncVisibleRows);
     connect(&m_queue, &ContentOperationQueue::changed, this, [this] {
         emit operationsChanged();
-        emit changed();
+        if (!m_batchingUpdates)
+            emit changed();
         if (!m_queue.busy()) {
             if (m_anyChanged) {
                 m_anyChanged = false;
@@ -103,102 +104,114 @@ void ContentActions::refresh(bool checkUpdates) {
     emit changed();
     auto *watcher = new QFutureWatcher<ContentFileState>(this);
     const QPointer<ContentActions> guard(this);
-    connect(watcher, &QFutureWatcher<QVariantList>::finished, this,
-            [this, guard, watcher, generation, checkUpdates, previous] {
-                const auto state = watcher->result();
-                const auto rows = state.rows;
-                watcher->deleteLater();
-                if (generation != m_generation)
+    connect(
+        watcher, &QFutureWatcher<QVariantList>::finished, this,
+        [this, guard, watcher, generation, checkUpdates, previous] {
+            const auto state = watcher->result();
+            const auto rows = state.rows;
+            watcher->deleteLater();
+            if (generation != m_generation)
+                return;
+            if (!state.error.isEmpty()) {
+                m_busy = false;
+                reject(state.error, "Reading content");
+                return;
+            }
+            m_pack = state.pack;
+            ++m_lockRevision;
+            auto result = rows;
+            QVariantList unidentified;
+            const QStringList metadata{"sourceIds",        "external",      "provider",        "projectId",
+                                       "installedRelease", "updateRelease", "updateAvailable", "projectUrl",
+                                       "author",           "authorIcon",    "environment",     "openSource",
+                                       "authorIds"};
+            // Prefer an unchanged path/hash pair; a shared binary alone can be ambiguous.
+            QHash<QPair<QString, QString>, QVariantMap> previousByHash, previousByPath;
+            QSet<QPair<QString, QString>> ambiguousHashes;
+            previousByHash.reserve(previous.size());
+            for (const auto &value : previous) {
+                const auto row = value.toMap();
+                const auto hash = row.value("sha1").toString();
+                const auto key = qMakePair(row.value("category").toString(), hash);
+                previousByPath.insert(
+                    {row.value("category").toString(), row.value("relativePath").toString()}, row);
+                if (!hash.isEmpty()) {
+                    if (previousByHash.contains(key))
+                        ambiguousHashes.insert(key);
+                    previousByHash.insert(key, row);
+                }
+            }
+            for (int i = 0; i < result.size(); ++i) {
+                auto row = result.at(i).toMap();
+                const auto key = qMakePair(row.value("category").toString(), row.value("sha1").toString());
+                auto old = previousByPath.value(
+                    {row.value("category").toString(), row.value("relativePath").toString()});
+                if (row.value("sha1").toString().isEmpty())
+                    old.clear();
+                else if (old.value("sha1") != row.value("sha1"))
+                    old = ambiguousHashes.contains(key) ? QVariantMap{} : previousByHash.value(key);
+                if (!old.isEmpty())
+                    for (const auto &key : metadata)
+                        if (old.contains(key))
+                            row[key] = old.value(key);
+                if (old.isEmpty())
+                    unidentified << row;
+                result[i] = row;
+            }
+            const auto done = [guard, generation, checkUpdates](QVariantList rows, QString error) {
+                if (!guard || generation != guard->m_generation)
                     return;
-                if (!state.error.isEmpty()) {
-                    m_busy = false;
-                    reject(state.error, "Reading content");
-                    return;
-                }
-                m_pack = state.pack;
-                ++m_lockRevision;
-                auto result = rows;
-                QVariantList unidentified;
-                const QStringList metadata{
-                    "sourceIds",     "external",        "provider",   "projectId", "installedRelease",
-                    "updateRelease", "updateAvailable", "projectUrl", "author",    "authorIcon",
-                    "environment",   "openSource",      "authorIds"};
-                // Category and binary hash are the identity; names and paths can change.
-                QHash<QPair<QString, QString>, QVariantMap> previousByHash;
-                previousByHash.reserve(previous.size());
-                for (const auto &value : previous) {
-                    const auto row = value.toMap();
-                    const auto hash = row.value("sha1").toString();
-                    const auto key = qMakePair(row.value("category").toString(), hash);
-                    if (!hash.isEmpty() && !previousByHash.contains(key))
-                        previousByHash.insert(key, row);
-                }
-                for (int i = 0; i < result.size(); ++i) {
-                    auto row = result.at(i).toMap();
-                    const auto old = previousByHash.constFind(
-                        qMakePair(row.value("category").toString(), row.value("sha1").toString()));
-                    if (old != previousByHash.cend())
-                        for (const auto &key : metadata)
-                            if (old->contains(key))
-                                row[key] = old->value(key);
-                    if (old == previousByHash.cend())
-                        unidentified << row;
-                    result[i] = row;
-                }
-                const auto done = [guard, generation, checkUpdates](QVariantList rows, QString error) {
-                    if (!guard || generation != guard->m_generation)
-                        return;
-                    guard->m_rows = reconcileContentRows(rows, guard->m_rows);
-                    guard->m_busy = false;
-                    if (checkUpdates)
-                        guard->m_checkUpdatesPending = false;
-                    guard->m_notice = error;
-                    guard->m_activity = error.isEmpty() ? "idle" : "error";
-                    guard->applyPreferences();
-                    QSet<QString> available;
-                    for (const auto &value : rows)
-                        available.insert(value.toMap().value("relativePath").toString());
-                    QStringList retained;
-                    for (const auto &path : guard->m_selected)
-                        if (available.contains(path))
-                            retained << path;
-                    guard->m_selected = retained;
-                    emit guard->changed();
-                };
-                m_rows = reconcileContentRows(result, previous);
-                applyPreferences();
-                emit changed();
-                if (checkUpdates || !unidentified.isEmpty()) {
-                    const auto lookup = checkUpdates ? result : unidentified;
-                    m_catalogue->refresh(
-                        lookup, m_pack.value("minecraft").toString(),
-                        compatibleLoaders(m_pack.value("loader").toString(), result).join('|'),
-                        [done, result, checkUpdates](QVariantList indexed, QString error) mutable {
-                            if (checkUpdates) {
-                                done(indexed, error);
-                                return;
-                            }
-                            QHash<QPair<QString, QString>, QVariantMap> indexedByPath;
-                            indexedByPath.reserve(indexed.size());
-                            for (const auto &entry : indexed) {
-                                const auto row = entry.toMap();
-                                const auto key = qMakePair(row.value("relativePath").toString(),
-                                                           row.value("sha1").toString());
-                                if (!indexedByPath.contains(key))
-                                    indexedByPath.insert(key, row);
-                            }
-                            for (auto &value : result) {
-                                const auto row = value.toMap();
-                                const auto item = indexedByPath.constFind(qMakePair(
-                                    row.value("relativePath").toString(), row.value("sha1").toString()));
-                                if (item != indexedByPath.cend())
-                                    value = *item;
-                            }
-                            done(result, error);
-                        });
-                } else
-                    done(result, {});
-            });
+                guard->m_rows = reconcileContentRows(rows, guard->m_rows);
+                guard->m_busy = false;
+                if (checkUpdates)
+                    guard->m_checkUpdatesPending = false;
+                guard->m_notice = error;
+                guard->m_activity = error.isEmpty() ? "idle" : "error";
+                guard->applyPreferences();
+                QSet<QString> available;
+                for (const auto &value : rows)
+                    available.insert(value.toMap().value("relativePath").toString());
+                QStringList retained;
+                for (const auto &path : guard->m_selected)
+                    if (available.contains(path))
+                        retained << path;
+                guard->m_selected = retained;
+                emit guard->changed();
+            };
+            m_rows = reconcileContentRows(result, previous);
+            applyPreferences();
+            emit changed();
+            if (checkUpdates || !unidentified.isEmpty()) {
+                const auto lookup = checkUpdates ? result : unidentified;
+                m_catalogue->refresh(
+                    lookup, m_pack.value("minecraft").toString(),
+                    compatibleLoaders(m_pack.value("loader").toString(), result).join('|'),
+                    [done, result, checkUpdates](QVariantList indexed, QString error) mutable {
+                        if (checkUpdates) {
+                            done(indexed, error);
+                            return;
+                        }
+                        QHash<QPair<QString, QString>, QVariantMap> indexedByPath;
+                        indexedByPath.reserve(indexed.size());
+                        for (const auto &entry : indexed) {
+                            const auto row = entry.toMap();
+                            const auto key =
+                                qMakePair(row.value("relativePath").toString(), row.value("sha1").toString());
+                            if (!indexedByPath.contains(key))
+                                indexedByPath.insert(key, row);
+                        }
+                        for (auto &value : result) {
+                            const auto row = value.toMap();
+                            const auto item = indexedByPath.constFind(qMakePair(
+                                row.value("relativePath").toString(), row.value("sha1").toString()));
+                            if (item != indexedByPath.cend())
+                                value = *item;
+                        }
+                        done(result, error);
+                    });
+            } else
+                done(result, {});
+        });
     watcher->setFuture(QtConcurrent::run([files, pack, inventory] {
         try {
             return files->reload(pack, inventory, true);
@@ -309,15 +322,6 @@ QVariantList ContentActions::filteredRows() const {
     });
     return result;
 }
-int ContentActions::updateCount() const {
-    int count = 0;
-    for (const auto &value : m_rows) {
-        const auto row = value.toMap();
-        if (row.value("updateAvailable").toBool())
-            ++count;
-    }
-    return count;
-}
 void ContentActions::setQuery(const QString &value) {
     if (value != m_query) {
         m_query = value;
@@ -401,6 +405,12 @@ void ContentActions::syncVisibleRows() {
 }
 QVariantList ContentActions::withPreferences(const QVariantMap &pack, QVariantList rows) const {
     const auto path = pack.value("path").toString();
+    QSet<QString> sourceLocks;
+    for (const auto &value : pack.value("sourceContent").toList()) {
+        const auto source = value.toMap();
+        if (source.value("launcherLocked").toBool() && !source.value("projectId").toString().isEmpty())
+            sourceLocks.insert(source.value("projectId").toString());
+    }
     for (auto &value : rows) {
         auto row = value.toMap();
         const auto identity = preferenceIdentity(row);
@@ -408,28 +418,19 @@ QVariantList ContentActions::withPreferences(const QVariantMap &pack, QVariantLi
         if (relative.endsWith(".disabled"))
             relative.chop(9);
         row["launcherLocked"] = row.value("launcherLocked").toBool();
-        auto policyProject = row;
-        policyProject["targetPack"] = pack;
-        row["launcherLocked"] = row.value("launcherLocked").toBool() || !sourceLock(policyProject).isEmpty();
-        row["locked"] = row.value("launcherLocked").toBool() ||
-                        ((identity.startsWith("modrinth:") || identity.startsWith("curseforge:")) &&
-                         m_preferences->locked(path, identity)) ||
-                        m_preferences->locked(path, "path:" + relative);
+        const auto ids = row.value("sourceIds").toMap();
+        row["launcherLocked"] =
+            row.value("launcherLocked").toBool() || sourceLocks.contains(ids.value("modrinth").toString());
+        bool locked = row.value("launcherLocked").toBool() || m_preferences->locked(path, "path:" + relative);
+        for (auto it = ids.cbegin(); !locked && it != ids.cend(); ++it)
+            if (!it.value().toString().isEmpty())
+                locked = m_preferences->locked(path, it.key() + ':' + it.value().toString());
+        row["locked"] = locked;
         row["updatedAt"] = m_preferences->updatedAt(path, identity);
         row["frozen"] = m_preferences->frozen(path, identity);
         value = row;
     }
     return rows;
-}
-int ContentActions::actionableUpdateCount() const {
-    int count = 0;
-    for (const auto &value : m_rows) {
-        const auto row = value.toMap();
-        if (row.value("updateAvailable").toBool() && !row.value("locked").toBool() &&
-            !row.value("frozen").toBool() && !row.value("pending").toBool())
-            ++count;
-    }
-    return count;
 }
 bool ContentActions::hasPending(const QString &path) const {
     for (const auto &operation : m_pendingOperations)
@@ -456,6 +457,8 @@ void ContentActions::syncLocks(const QString &path) {
     m_locks->setRows(path, rows);
 }
 void ContentActions::publishProjection() {
+    if (m_batchingUpdates)
+        return;
     const auto path = m_pack.value("path").toString();
     if (!m_states.contains(path))
         return;
@@ -527,13 +530,19 @@ bool ContentActions::enqueue(ContentOperation operation) {
         ++m_generation;
         m_busy = false;
     }
-    m_pendingOperations << operation;
     const auto state = m_states.value(operation.packPath);
+    if (operation.expectedHashes.isEmpty())
+        for (const auto &value : resolveContentTargets(state.rows, operation.targets)) {
+            const auto row = value.toMap();
+            operation.expectedHashes.insert(contentRowKey(row), row.value("sha1").toString());
+        }
+    m_pendingOperations << operation;
     QStringList titles;
-    for (const auto &value : resolveContentTargets(state.rows, operation.targets))
-        titles << value.toMap().value("title").toString();
-    if (titles.isEmpty())
+    if (!operation.predictions.isEmpty())
         for (const auto &value : operation.predictions)
+            titles << value.toMap().value("title").toString();
+    else
+        for (const auto &value : resolveContentTargets(state.rows, operation.targets))
             titles << value.toMap().value("title").toString();
     if (titles.isEmpty() && !operation.sourceLock.isEmpty())
         titles << operation.sourceLock.value("relativePath").toString();
@@ -564,18 +573,44 @@ void ContentActions::startOperation(ContentOperation operation, ContentOperation
     }
     m_activeOperationId = operation.id;
     m_operations.start(operation.id);
-    auto before = m_states.value(operation.packPath);
-    before.rows = withPreferences(before.pack, before.rows);
-    syncLocks(operation.packPath);
     m_activity = operation.kind == ContentOperation::Install ? "installing" : "applying";
     m_cancelRequested = false;
     const QPointer<ContentActions> guard(this);
-    m_executor->execute(
-        operation, before,
-        [guard, operation, done](ContentWriteResult result, ContentFileState current) mutable {
-            if (guard)
-                guard->completeOperation(operation, result, std::move(current), std::move(done));
-        });
+    auto execute = [guard, operation, done](ContentFileState before) {
+        if (!guard)
+            return;
+        before.rows = guard->withPreferences(before.pack, before.rows);
+        if (before.error.isEmpty())
+            guard->m_states[operation.packPath] = before;
+        guard->syncLocks(operation.packPath);
+        guard->m_executor->execute(
+            operation, before,
+            [guard, operation, done](ContentWriteResult result, ContentFileState current) mutable {
+                if (guard)
+                    guard->completeOperation(operation, result, std::move(current), std::move(done));
+            });
+    };
+    const auto before = m_states.value(operation.packPath);
+    if (before.error.isEmpty()) {
+        execute(before);
+        return;
+    }
+    // A transient post-write read failure must not poison every remaining item.
+    // Recover a verified inventory on a worker before permitting the next write.
+    auto *watcher = new QFutureWatcher<ContentFileState>(this);
+    connect(watcher, &QFutureWatcher<ContentFileState>::finished, this, [watcher, execute] {
+        const auto current = watcher->result();
+        watcher->deleteLater();
+        execute(current);
+    });
+    const auto files = m_files;
+    watcher->setFuture(QtConcurrent::run([files, before] {
+        try {
+            return files->reload(before.pack, before.rows, true);
+        } catch (...) {
+            return ContentFileState{before.pack, before.rows, "Could not recover the content inventory."};
+        }
+    }));
 }
 void ContentActions::completeOperation(ContentOperation operation, ContentWriteResult result,
                                        ContentFileState current, ContentOperationQueue::Completion done) {
@@ -593,13 +628,16 @@ void ContentActions::completeOperation(ContentOperation operation, ContentWriteR
     current.rows =
         reconcileContentRows(current.rows, before.rows, result.ok ? operation.predictions : QVariantList{});
     if (result.ok && operation.kind == ContentOperation::Install) {
+        QHash<QString, QVariant> previousHashes;
+        previousHashes.reserve(before.rows.size());
+        for (const auto &value : before.rows)
+            previousHashes.insert(contentRowKey(value.toMap()), value.toMap().value("sha1"));
         for (const auto &value : current.rows) {
             const auto row = value.toMap();
-            for (const auto &old : before.rows)
-                if (contentRowKey(old.toMap()) == contentRowKey(row) &&
-                    old.toMap().value("sha1") != row.value("sha1"))
-                    m_preferences->setUpdatedAt(operation.packPath, preferenceIdentity(row),
-                                                QDateTime::currentMSecsSinceEpoch());
+            const auto previous = previousHashes.constFind(contentRowKey(row));
+            if (previous != previousHashes.cend() && *previous != row.value("sha1"))
+                m_preferences->setUpdatedAt(operation.packPath, preferenceIdentity(row),
+                                            QDateTime::currentMSecsSinceEpoch());
         }
     }
     m_states[operation.packPath] = current;
@@ -621,7 +659,7 @@ void ContentActions::completeOperation(ContentOperation operation, ContentWriteR
         m_notice = result.error;
         emit operationFailed(result.error);
     }
-    if (!result.ok && !cancelled)
+    if (!result.ok && !cancelled && !result.changed)
         m_failedOperations[operation.id] = operation;
     m_operations.finish(operation.id, result.ok || cancelled, cancelled ? QString{} : result.error,
                         !result.changed);
@@ -734,57 +772,11 @@ void ContentActions::install(const QVector<ContentInstallRequest> &requests, con
             continue;
         if (!row.value("contentKey").toString().isEmpty())
             operation.targets << contentRowKey(row);
-        row["title"] = request.title;
-        row["category"] = category;
-        row["sourceIds"] = request.sourceIds.toVariantMap();
-        row["provider"] = request.release.provider;
-        row["projectId"] = request.release.projectId;
-        const auto stableKey = contentRowKey(row);
-        row["relativePath"] =
-            category + '/' +
-            (category == "mods" && target.value("managed").toBool() ? request.release.sha1 + ".jar"
-                                                                    : request.release.filename) +
-            (row.contains("enabled") && !row.value("enabled").toBool() ? ".disabled" : "");
-        if (!stableKey.isEmpty() && stableKey != ":")
-            row["contentKey"] = stableKey;
-        row["fileName"] = request.release.filename;
-        row["version"] = request.release.version;
-        row["sha1"] = request.release.sha1;
-        row["installedRelease"] = request.release.toVariant();
-        row["updateAvailable"] = false;
-        row["contentKey"] = contentRowKey(row);
-        if (!row.contains("enabled"))
-            row["enabled"] = true;
-        operation.predictions << row;
+        operation.predictions << contentInstallPrediction(request, target, row);
     }
     if (operation.predictions.size() != requests.size())
         return;
     enqueue(operation);
-}
-ContentInstallRequest ContentActions::updateRequest(const QVariantMap &row) const {
-    return {releaseFromVariant(row.value("updateRelease").toMap()), row.value("title").toString(),
-            QJsonObject::fromVariantMap(row.value("sourceIds").toMap()),
-            categoryType(row.value("category").toString()), false};
-}
-void ContentActions::update(const QString &path) {
-    const auto row = find(path);
-    if (!row.value("updateAvailable").toBool() || row.value("frozen").toBool() ||
-        row.value("locked").toBool()) {
-        if (row.value("locked").toBool())
-            reject("Unlock this content before updating it.", row.value("title").toString());
-        return;
-    }
-    install({updateRequest(row)});
-}
-void ContentActions::updateAll() {
-    QVector<ContentInstallRequest> requests;
-    for (const auto &value : m_rows) {
-        const auto row = value.toMap();
-        if (row.value("updateAvailable").toBool() && !row.value("frozen").toBool() &&
-            !row.value("locked").toBool() && !row.value("pending").toBool())
-            requests << updateRequest(row);
-    }
-    install(requests);
 }
 QVariantList ContentActions::selection() const {
     QVariantList rows;
@@ -794,16 +786,6 @@ QVariantList ContentActions::selection() const {
             rows << row;
     }
     return rows;
-}
-void ContentActions::updateSelected() {
-    QVector<ContentInstallRequest> requests;
-    for (const auto &value : selection()) {
-        const auto row = value.toMap();
-        if (row.value("updateAvailable").toBool() && !row.value("frozen").toBool() &&
-            !row.value("locked").toBool() && !row.value("pending").toBool())
-            requests << updateRequest(row);
-    }
-    install(requests);
 }
 void ContentActions::setSelectedEnabled(bool enabled) {
     ContentOperation operation;
@@ -837,73 +819,6 @@ void ContentActions::copySelected(const QString &format) {
     }
     if (!text.isEmpty())
         emit copyRequested(text.join('\n'));
-}
-void ContentActions::openVersions(const QString &path) {
-    m_versionTarget = find(path);
-    m_versions.clear();
-    m_versionError.clear();
-    if (m_versionTarget.isEmpty())
-        return;
-    const int generation = ++m_versionGeneration;
-    m_versionsBusy = true;
-    emit changed();
-    const QPointer<ContentActions> guard(this);
-    m_catalogue->versions(m_versionTarget, m_pack.value("minecraft").toString(),
-                          compatibleLoaders(m_pack.value("loader").toString(), m_rows).join('|'),
-                          [guard, generation](QVector<Release> releases, QString error) {
-                              if (!guard || generation != guard->m_versionGeneration)
-                                  return;
-                              guard->m_versions.clear();
-                              for (const auto &release : releases)
-                                  guard->m_versions << release.toVariant();
-                              guard->m_versionError = error;
-                              guard->m_versionsBusy = false;
-                              emit guard->changed();
-                          });
-}
-void ContentActions::installVersion(int index) {
-    if (index < 0 || index >= m_versions.size() || m_versionTarget.value("frozen").toBool() ||
-        find(m_versionTarget.value("relativePath").toString()).value("locked").toBool())
-        return;
-    auto project = m_versionTarget;
-    project["type"] = categoryType(m_versionTarget.value("category").toString());
-    installRelease(m_versions.at(index).toMap(), project);
-}
-void ContentActions::installRelease(const QVariantMap &release, const QVariantMap &project) {
-    auto type = project.value("type", "mod").toString();
-    if (type == "datapack" && release.value("filename").toString().endsWith(".jar", Qt::CaseInsensitive))
-        type = "mod";
-    const auto target = project.value("targetPack", m_pack).toMap();
-    const auto path = target.value("path").toString();
-    const auto rows = path == m_pack.value("path").toString() ? m_rows : m_states.value(path).rows;
-    auto ids = project.value("sourceIds").toMap();
-    if (ids.isEmpty())
-        ids[release.value("provider").toString()] = release.value("projectId");
-    if (hasDataPackFormatConflict(contentCategory(type), ids, rows)) {
-        m_notice = "This project is installed in another format. Remove that copy before switching formats.";
-        emit operationFailed(m_notice);
-        emit changed();
-        return;
-    }
-    for (const auto &value : rows) {
-        const auto row = value.toMap();
-        const auto installed = row.value("sourceIds").toMap();
-        bool match = false;
-        for (auto it = ids.begin(); it != ids.end(); ++it)
-            if (!it.value().toString().isEmpty() && installed.value(it.key()) == it.value())
-                match = true;
-        if (match && (row.value("locked").toBool() || row.value("frozen").toBool())) {
-            m_notice = "Unlock this content or unfreeze its version before changing it.";
-            emit operationFailed(m_notice);
-            emit changed();
-            return;
-        }
-    }
-    auto destination = project;
-    destination["targetPack"] = target;
-    install({{releaseFromVariant(release), project.value("title").toString(),
-              QJsonObject::fromVariantMap(ids), type}},
-            destination);
 }
 void ContentActions::copyLink(const QString &path) {
     const auto row = find(path);

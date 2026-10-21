@@ -25,7 +25,7 @@ static bool managedModPath(const QString &relative, const QString &hash) {
 }
 RepositoryResult PackRepository::applyInstallation(const QString &path, const QJsonObject &expected,
                                                    const QJsonArray &references, const QString &staging) {
-    auto current = inspect(path);
+    auto current = inspectContent(path);
     if (!current.ok)
         return current;
     if (current.manifest != expected)
@@ -104,7 +104,7 @@ RepositoryResult PackRepository::applyInstallation(const QString &path, const QJ
         if (QFileInfo(absolute).isSymLink() || fileHash(absolute) != hash || !QFile::remove(absolute))
             warnings << "A superseded mod file was edited or could not be removed; review " + relative;
     }
-    auto result = inspect(path);
+    auto result = inspectContent(path);
     if (result.ok)
         result.error = warnings.join('\n');
     return result;
@@ -148,12 +148,13 @@ QString PackRepository::slug(const QString &name) {
         value.prepend("pack-");
     return value.left(72);
 }
-RepositoryResult PackRepository::write(const QString &path, const QJsonObject &manifest) {
+RepositoryResult PackRepository::write(const QString &path, const QJsonObject &manifest,
+                                       bool includeHistory) {
     QSaveFile file(QDir(path).filePath("pack.json"));
     const auto bytes = QJsonDocument(manifest).toJson(QJsonDocument::Indented);
     if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
         return {false, "Could not save pack.json: " + file.errorString(), path};
-    return inspect(path);
+    return includeHistory ? inspect(path) : inspectContent(path);
 }
 RepositoryResult PackRepository::create(const QString &root, const QString &name, const QString &game,
                                         const QString &loader) {
@@ -189,7 +190,7 @@ RepositoryResult PackRepository::create(const QString &root, const QString &name
                         {"loaderVersion", QJsonValue::Null},
                         {"mods", QJsonArray{}}});
 }
-RepositoryResult PackRepository::inspect(const QString &path) {
+RepositoryResult PackRepository::inspectContent(const QString &path) {
     QFile file(QDir(path).filePath("pack.json"));
     if (!file.open(QIODevice::ReadOnly))
         return {false, "This folder does not contain a readable pack.json.", path};
@@ -201,6 +202,12 @@ RepositoryResult PackRepository::inspect(const QString &path) {
         return {false, "The pack manifest is invalid or uses an unsupported schema.", path};
     if (!QFileInfo::exists(QDir(path).filePath(".git")))
         return {false, "The pack folder is not a Git repository.", path};
+    return {true, {}, path, {}, {}, manifest};
+}
+RepositoryResult PackRepository::inspect(const QString &path) {
+    auto current = inspectContent(path);
+    if (!current.ok)
+        return current;
     bool ok;
     const auto status = git(path, {"status", "--short"}, &ok);
     if (!ok)
@@ -209,7 +216,7 @@ RepositoryResult PackRepository::inspect(const QString &path) {
     git(path, {"rev-parse", "--verify", "HEAD"}, &hasHead);
     const auto history = hasHead ? git(path, {"log", "-8", "--format=%h  %s"})
                                  : "No saved changes yet. Your first save creates the initial commit.";
-    return {true, {}, path, status, history, manifest};
+    return {true, {}, path, status, history, current.manifest};
 }
 RepositoryResult PackRepository::pin(const QString &path, const QJsonObject &reference) {
     auto current = inspect(path);
@@ -245,7 +252,7 @@ RepositoryResult PackRepository::updateContentPins(const QString &path, const QJ
 }
 RepositoryResult PackRepository::updateContentReferences(const QString &path, const QJsonObject &expected,
                                                          const QJsonArray &mods, const QJsonArray &assets) {
-    auto current = inspect(path);
+    auto current = inspectContent(path);
     if (!current.ok)
         return current;
     if (current.manifest != expected)
@@ -275,7 +282,7 @@ RepositoryResult PackRepository::updateContentReferences(const QString &path, co
                 return {false, "Could not exclude downloaded packs from Git.", path};
         }
     }
-    auto result = write(path, current.manifest);
+    auto result = write(path, current.manifest, false);
     if (!result.ok && updatedIgnore != originalIgnore) {
         QSaveFile restore(ignorePath);
         if (!restore.open(QIODevice::WriteOnly) || restore.write(originalIgnore) != originalIgnore.size() ||

@@ -13,6 +13,40 @@ using namespace studio;
 class StatusTests : public QObject {
     Q_OBJECT
   private slots:
+    void largeQueuesKeepActiveTasksAndOnlyTheLatestHundredFailures() {
+        OperationHistory history;
+        QSignalSpy retired(&history, &OperationHistory::dismissed),
+            resets(&history, &QAbstractItemModel::modelReset);
+        for (quint64 id = 1; id <= 350; ++id)
+            history.queued(id, {}, QString::number(id), "Update");
+        history.start(350);
+        for (quint64 id = 1; id <= 300; ++id)
+            history.finish(id, false, QString("Failure %1").arg(id));
+        QCOMPARE(history.activeCount(), 50);
+        QCOMPARE(history.failedCount(), 100);
+        QCOMPARE(history.rowCount(), 150);
+        QCOMPARE(retired.size(), 200);
+        QCOMPARE(resets.size(), 0);
+        QVERIFY(history.details(1).isEmpty());
+        QVERIFY(history.details(201).contains("Failure 201"));
+        QVERIFY(!history.details(350).isEmpty());
+        history.dismiss(350);
+        QCOMPARE(history.activeCount(), 50);
+    }
+    void taskCompletionPublishesStateAndMessageTogether() {
+        OperationHistory history;
+        history.queued(1, {}, "Fixture", "Update");
+        QSignalSpy changes(&history, &OperationHistory::changed);
+        connect(&history, &OperationHistory::changed, &history, [&] {
+            const auto row = history.entries().first().toMap();
+            if (row.value("state") == "failed") {
+                QCOMPARE(row.value("message").toString(), QString("Failure"));
+                QVERIFY(row.value("retryable").toBool());
+            }
+        });
+        history.finish(1, false, "Failure");
+        QCOMPARE(changes.size(), 1);
+    }
     void taskFailuresKeepDetailsAndRetryIntentUntilDismissed() {
         OperationHistory history;
         QSignalSpy retry(&history, &OperationHistory::retryRequested);

@@ -50,7 +50,7 @@ class BrowseInstallsTests : public QObject {
         QVERIFY(model.state(project()).value("canInstall").toBool());
         QVERIFY(!model.installed({{"sha1", "hash"}}));
     }
-    void staleVersionLookupCannotInstallIntoAnotherInstance() {
+    void acceptedVersionLookupRetainsItsOriginalInstanceAcrossNavigation() {
         auto source = std::make_shared<DeferredVersionCatalogue>();
         BrowseInstalls model(source);
         model.setTargetPath("a");
@@ -68,10 +68,39 @@ class BrowseInstallsTests : public QObject {
         release.url = "https://example.invalid/mod.jar";
         release.gameVersions = {"1.21.1"};
         source->pending.first()({release}, {});
-        QCOMPARE(installs.count(), 0);
-        model.install(project());
-        source->pending.last()({release}, {});
         QCOMPARE(installs.count(), 1);
+        QCOMPARE(installs.first()[1].toMap().value("targetPack").toMap().value("path").toString(),
+                 QString("a"));
+        model.install(project());
+        QTRY_COMPARE(source->pending.size(), 2);
+        source->pending.last()({release}, {});
+        QCOMPARE(installs.count(), 2);
+        QCOMPARE(installs.last()[1].toMap().value("targetPack").toMap().value("path").toString(),
+                 QString("b"));
+    }
+    void independentProjectLookupsAreOptimisticAndQueuedWithoutGlobalBusy() {
+        auto source = std::make_shared<DeferredVersionCatalogue>();
+        BrowseInstalls model(source);
+        model.setTargetPath("a");
+        model.setContext({{"path", "a"}, {"minecraft", "1.21.1"}}, {}, false);
+        auto first = project(), second = project();
+        second["id"] = "other";
+        second["sourceIds"] = QVariantMap{{"modrinth", "other"}};
+        model.install(first);
+        model.install(second);
+        QVERIFY(!model.busy());
+        QVERIFY(model.state(first).value("installed").toBool());
+        QVERIFY(model.state(second).value("installed").toBool());
+        QCOMPARE(source->pending.size(), 1);
+        QSignalSpy errors(&model, &BrowseInstalls::operationFailed);
+        source->pending.first()({}, "Fixture provider error");
+        QCOMPARE(errors.count(), 1);
+        QVERIFY(!model.state(first).value("installed").toBool());
+        QTRY_COMPARE(source->pending.size(), 2);
+        model.cancelPending();
+        source->pending.last()({}, "Cancelled lookup");
+        QCOMPARE(errors.count(), 1);
+        QVERIFY(!model.state(second).value("installed").toBool());
     }
     void dataPacksAreInstanceScopedAndDisabledFilesRemainInstalled() {
         BrowseInstalls model(std::make_shared<DeferredVersionCatalogue>());

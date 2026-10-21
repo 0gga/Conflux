@@ -64,11 +64,17 @@ target_sources(conflux_desktop PRIVATE
     src/platform/BrowseSettingsStore.h src/platform/BrowseSettingsStore.cpp
     src/platform/AssetInstaller.h src/platform/AssetInstaller.cpp
     src/features/content/ContentActions.h src/features/content/ContentActions.cpp
+    src/features/content/ContentOperationQueue.h src/features/content/ContentOperationQueue.cpp
+    src/features/content/ContentOperationExecutor.h src/features/content/ContentOperationExecutor.cpp
+    src/features/content/ContentListModel.h src/features/content/ContentListModel.cpp
+    src/features/content/ContentOperationState.h src/features/content/ContentOperationState.cpp
+    src/features/content/ContentLockRegistry.h src/features/content/ContentLockRegistry.cpp
     src/features/preferences/ContentPreferences.h src/features/preferences/ContentPreferences.cpp
     src/platform/NativeContentStore.h src/platform/NativeContentStore.cpp
     src/platform/ContentInstaller.h src/platform/ContentInstaller.cpp
     src/services/ContentCatalogue.h src/services/ContentCatalogue.cpp
     src/platform/PackChangeMonitor.h src/platform/PackChangeMonitor.cpp
+    src/platform/WindowFrame.h src/platform/WindowFrame.cpp
     src/features/launch/WorldLaunch.h src/features/launch/WorldLaunch.cpp
     src/platform/WorldLaunchAdapters.h src/platform/WorldLaunchAdapters.cpp
     src/features/showcase/DescriptionRenderer.h src/features/showcase/DescriptionRenderer.cpp
@@ -81,6 +87,9 @@ target_sources(conflux_desktop PRIVATE
     src/platform/CatalogueShowcaseSource.h src/platform/CatalogueShowcaseSource.cpp)
 target_include_directories(conflux_desktop PUBLIC src)
 target_link_libraries(conflux_desktop PUBLIC conflux_content conflux_config pack_foundation Qt6::Concurrent PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(conflux_desktop PRIVATE dwmapi)
+endif()
 qt_add_executable(modpack-studio src/main.cpp src/ApplicationController.h src/ApplicationController.cpp src/verification/DesktopSmokeTest.h src/verification/DesktopSmokeTest.cpp)
 qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     QML_FILES
@@ -106,6 +115,7 @@ qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     qml/components/Icon.qml
     qml/components/IconPaths.js
     qml/components/BrandBadge.qml qml/components/ProjectCard.qml
+    qml/components/WindowControls.qml qml/components/WindowDragArea.qml qml/components/WindowResizeEdges.qml
     qml/components/CompatibilityBadges.qml qml/components/BoundedScrollView.qml
     qml/components/SmoothScroll.qml qml/components/SmoothListView.qml
     qml/components/ContentListView.qml qml/components/ContentGridView.qml qml/components/ContentScrollBar.qml qml/components/ScrollViewportCorners.qml qml/components/ContentStatistic.qml
@@ -128,6 +138,9 @@ target_link_libraries(modpack-studio PRIVATE pack_foundation conflux_desktop con
 set_target_properties(modpack-studio PROPERTIES WIN32_EXECUTABLE TRUE MACOSX_BUNDLE TRUE)
 include(CTest)
 if(BUILD_TESTING)
+    qt_add_executable(window-frame-tests tests/WindowFrameTests.cpp)
+    target_link_libraries(window-frame-tests PRIVATE conflux_desktop Qt6::Test)
+    add_test(NAME window-frame COMMAND window-frame-tests)
     qt_add_executable(appearance-tests tests/AppearanceTests.cpp)
     target_link_libraries(appearance-tests PRIVATE conflux_style conflux_styleplugin Qt6::Test)
     add_test(NAME appearance COMMAND appearance-tests)

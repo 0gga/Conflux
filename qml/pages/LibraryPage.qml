@@ -28,7 +28,6 @@ Item {
                     Text { text: "Library"; color: Theme.colors.text; font.pixelSize: 31; font.weight: Font.DemiBold; font.letterSpacing: -0.7 }
                     Rectangle { implicitWidth: total.implicitWidth + 18; implicitHeight: 26; radius: 8; color: Theme.colors.input; Text { id: total; anchors.centerIn: parent; text: root.app.visiblePackCount; color: Theme.colors.muted; font.pixelSize: 12 } }
                 }
-                Text { text: "Your modpacks, across every launcher."; color: Theme.colors.muted; font.pixelSize: 13 }
             }
             Item { Layout.fillWidth: true }
             ActionButton { iconName: "refresh"; text: root.app.libraryBusy ? "Scanning…" : "Refresh"; enabled: !root.app.libraryBusy; subtle: true; onClicked: root.app.refreshLibrary() }
@@ -36,14 +35,12 @@ Item {
         Rectangle {
             objectName: "libraryOnboarding"
             visible: root.app.visiblePackCount === 0 && !root.app.libraryBusy
-            Layout.fillWidth: true; implicitHeight: 150; color: Theme.colors.card; border.color: Theme.colors.border; radius: 12
+            Layout.fillWidth: true; implicitHeight: 108; color: Theme.colors.card; border.color: Theme.colors.border; radius: 12
             RowLayout {
                 anchors.fill: parent; anchors.margins: 24; spacing: 24
                 ColumnLayout {
                     Layout.fillWidth: true; spacing: 12
-                    Text { text: "A home for every mod."; color: Theme.colors.text; font.pixelSize: 25; font.weight: Font.DemiBold }
                     Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: root.app.hiddenPackCount > 0 ? "Your packs are hidden. Restore them in Hidden, or start something new." : "Create a pack or connect your Modrinth and CurseForge folders in Settings."; color: Theme.colors.muted; font.pixelSize: 13 }
-                    Text { text: "MODRINTH  +  CURSEFORGE  +  GIT"; color: Theme.colors.accent; font.pixelSize: 10; font.letterSpacing: 2 }
                 }
                 ActionButton { text: "Explore mods →"; primary: true; onClicked: root.discoverRequested() }
             }
@@ -60,7 +57,6 @@ Item {
         }
         RowLayout {
             Layout.fillWidth: true; spacing: 4
-            Text { text: "Sources"; color: Theme.colors.muted; font.pixelSize: 12; Layout.rightMargin: 12 }
             Repeater {
                 model: ["all", "conflux", "modrinth", "curseforge"]
                 delegate: ActionButton {

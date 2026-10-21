@@ -40,6 +40,47 @@ class WorkspaceTests : public QObject {
         QVERIFY(mz_zip_writer_end(&zip));
     }
   private slots:
+    void backgroundMetadataRefreshDoesNotMakeRepositoryControlsBusy() {
+        QTemporaryDir temp;
+        ApplicationController app(nullptr, temp.path() + "/packs", temp.path() + "/settings.ini");
+        app.createPack("Quiet metadata", "1.21.1", "fabric");
+        QTRY_VERIFY(!app.repositoryBusy());
+        QVERIFY(!app.activePack().isEmpty());
+        QSignalSpy changes(&app, &ApplicationController::stateChanged);
+        app.refreshActivePack();
+        QVERIFY(app.activeRefreshPending());
+        QVERIFY(!app.repositoryBusy());
+        QVERIFY(!app.navigationBusy());
+        QTRY_VERIFY(!app.activeRefreshPending());
+        QVERIFY(changes.count() > 0);
+        QVERIFY(!app.repositoryBusy());
+    }
+    void sameInstanceMetadataChangesKeepPublishedFilesVisible() {
+        class Inspector final : public IPackContentInspector {
+          public:
+            mutable std::atomic<bool> hold{false};
+            mutable QSemaphore entered, proceed;
+            PackContentResult inspect(const QVariantMap &) const override {
+                if (hold.load()) {
+                    entered.release();
+                    proceed.tryAcquire(1, 5000);
+                }
+                return {{{QVariantMap{{"relativePath", "mods/example.jar"}}}}, {}, {}, {}};
+            }
+        };
+        auto inspector = std::make_shared<Inspector>();
+        PackWorkspace workspace(inspector);
+        workspace.setPack({{"path", "same"}, {"name", "Original"}});
+        QTRY_VERIFY(!workspace.busy());
+        inspector->hold = true;
+        workspace.setPack({{"path", "same"}, {"name", "Renamed"}});
+        QVERIFY(workspace.busy());
+        QCOMPARE(workspace.files().size(), 1);
+        QTRY_COMPARE(inspector->entered.available(), 1);
+        inspector->proceed.release();
+        QTRY_VERIFY(!workspace.busy());
+        QCOMPARE(workspace.files().size(), 1);
+    }
     void refreshBurstsAreSerializedAndKeepPublishedContent() {
         class Inspector final : public IPackContentInspector {
           public:

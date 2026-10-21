@@ -116,3 +116,7 @@ The source statements and reference images distinguish these requirements from i
 - Content already on its latest installed loader edition must not appear in Updates; Barehanded1.6.6 NeoForge versus its later-published Fabric build is the owner-reported regression.
 
 - Hide Gallery entirely when a content project has no gallery images. Scrolling should feel smoother and travel farther per wheel step, while retaining strict scroll bounds.
+
+The owner requests custom window chrome instead of the standard title bar, centered icons in their containing controls, and removal of redundant labels and descriptive chrome copy. Settings remains accessible; the sidebar tagline, WORKSPACE caption, Sources heading and Library marketing subtitle are removed. The existing unsaved-config close guard remains authoritative.
+
+Content file actions must respond immediately in the UI, execute heavy work through a hidden queue and notify errors without disturbing the current page. Installing/importing content, enable/disable, removal and updates use optimistic state with reconciliation and rollback. Persistent content locks prevent Conflux updates, version switching, enable/disable and removal; locked content remains visible in Updates. Locked and recently updated filters are required. The implementation uses a seven-day window for versions changed through Conflux; this is a default implementation choice. Locks do not change external filesystem permissions.

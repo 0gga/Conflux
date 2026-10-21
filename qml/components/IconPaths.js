@@ -1,6 +1,10 @@
 .pragma library
 // Lucide c29c276f16590cf017126671535ad8c792be64d8; see third_party/LICENSE.lucide.
 var markup = {
+  "unlock": "<rect x='4' y='11' width='16' height='10' rx='2'/><path d='M8 11V7a4 4 0 0 1 7.8-1.2'/><path d='M12 15v2'/>",
+  "minimize": "<path d='M5 12h14'/>",
+  "maximize": "<rect x='5' y='5' width='14' height='14' rx='2'/>",
+  "window-restore": "<rect x='4' y='8' width='12' height='12' rx='2'/><path d='M8 8V5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-3'/>",
   "heart": '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>',
   "history": '<path d="M3 12a9 9 0 1 0 2.7-6.4L3 8"/><path d="M3 3v5h5m4-1v5l3 2"/>',
   "external": '<path d="M15 3h6v6m0-6-9 9"/><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/>',

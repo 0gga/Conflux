@@ -1,12 +1,21 @@
 #pragma once
+#include "ContentListModel.h"
+#include "ContentLockRegistry.h"
+#include "ContentOperationExecutor.h"
+#include "ContentOperationQueue.h"
+#include "ContentOperationState.h"
 #include "ContentPorts.h"
 #include "features/preferences/ContentVisibility.h"
+#include <QHash>
 #include <QObject>
 #include <memory>
 namespace studio {
 class ContentActions final : public QObject {
     Q_OBJECT
-    Q_PROPERTY(QVariantList rows READ rows NOTIFY changed)
+    Q_PROPERTY(QVariantList rows READ rows NOTIFY rowsChanged)
+    Q_PROPERTY(QAbstractItemModel *model READ model CONSTANT)
+    Q_PROPERTY(bool operationsBusy READ operationsBusy NOTIFY operationsChanged)
+    Q_PROPERTY(int actionableUpdateCount READ actionableUpdateCount NOTIFY changed)
     Q_PROPERTY(QStringList authors READ authors NOTIFY changed)
     Q_PROPERTY(QStringList selected READ selected NOTIFY changed)
     Q_PROPERTY(QVariantMap filters READ filters NOTIFY changed)
@@ -33,7 +42,19 @@ class ContentActions final : public QObject {
     void setCurseforgeKey(const QByteArray &key) {
         m_catalogue->setCurseforgeKey(key);
     }
-    QVariantList rows() const;
+    QVariantList rows() const {
+        return m_visibleRows;
+    }
+    QAbstractItemModel *model() {
+        return &m_model;
+    }
+    bool operationsBusy() const {
+        return m_queue.busy();
+    }
+    int actionableUpdateCount() const;
+    void setLockRegistry(std::shared_ptr<ContentLockRegistry> locks) {
+        m_locks = std::move(locks);
+    }
     QStringList authors() const;
     QStringList selected() const {
         return m_selected;
@@ -51,10 +72,10 @@ class ContentActions final : public QObject {
         return m_sort;
     }
     bool busy() const {
-        return m_busy;
+        return m_busy || m_queue.busy();
     }
     bool cancellable() const {
-        return m_busy && (!m_mutating || m_installer->cancellable());
+        return m_queue.busy() ? m_installer->cancellable() : m_busy;
     }
     QVariantList inventory() const {
         return m_rows;
@@ -106,6 +127,7 @@ class ContentActions final : public QObject {
     Q_INVOKABLE void remove(const QString &);
     Q_INVOKABLE void removeSelected();
     Q_INVOKABLE void freeze(const QString &, bool);
+    Q_INVOKABLE void setLocked(const QString &, bool);
     Q_INVOKABLE void update(const QString &);
     Q_INVOKABLE void updateAll();
     Q_INVOKABLE void updateSelected();
@@ -123,6 +145,9 @@ class ContentActions final : public QObject {
     }
   signals:
     void changed();
+    void rowsChanged();
+    void operationsChanged();
+    void operationFailed(QString message);
     void contentChanged();
     void copyRequested(QString text);
 
@@ -131,21 +156,38 @@ class ContentActions final : public QObject {
     QVariantMap find(const QString &) const;
     QString preferenceIdentity(const QVariantMap &) const;
     void applyPreferences();
-    void runWrite(std::function<ContentWriteResult()>);
-    void finishWrite(ContentWriteResult);
-    void install(const QVector<ContentInstallRequest> &);
+    QVariantList filteredRows() const;
+    void syncVisibleRows();
+    bool hasPending(const QString &) const;
+    void enqueue(ContentOperation);
+    void startOperation(ContentOperation, ContentOperationQueue::Completion);
+    void completeOperation(ContentOperation, ContentWriteResult, ContentFileState,
+                           ContentOperationQueue::Completion);
+    void publishProjection();
+    void syncLocks(const QString &);
+    void install(const QVector<ContentInstallRequest> &, const QVariantMap &project = {});
+    QVariantList withPreferences(const QVariantMap &, QVariantList) const;
     std::shared_ptr<IContentVisibility> m_visibility;
     std::shared_ptr<const IContentFileStore> m_files;
     std::shared_ptr<IContentCatalogue> m_catalogue;
     std::shared_ptr<IContentInstaller> m_installer;
     std::shared_ptr<IContentPreferences> m_preferences;
+    std::unique_ptr<ContentOperationExecutor> m_executor;
+    ContentOperationQueue m_queue;
+    ContentListModel m_model;
+    std::shared_ptr<ContentLockRegistry> m_locks;
+    QHash<QString, ContentFileState> m_states;
+    QList<ContentOperation> m_pendingOperations;
+    QVariantList m_visibleRows;
+    quint64 m_operationId = 0;
+    bool m_anyChanged = false, m_checkUpdatesPending = false;
     QVariantMap m_pack, m_filters, m_versionTarget;
     QVariantList m_inventory, m_rows, m_versions;
     QStringList m_selected;
     QString m_query, m_category = "all", m_sort = "name-asc", m_notice, m_versionError;
     QString m_activity = "idle", m_activityText;
     bool m_cancelRequested = false;
-    bool m_busy = false, m_mutating = false, m_dirty = false, m_versionsBusy = false;
+    bool m_busy = false, m_versionsBusy = false;
     int m_generation = 0, m_versionGeneration = 0;
 };
 } // namespace studio

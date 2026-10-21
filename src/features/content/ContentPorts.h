@@ -8,10 +8,19 @@ struct ContentWriteResult {
     QString error, backupPath;
     bool changed = false;
 };
+struct ContentFileState {
+    QVariantMap pack;
+    QVariantList rows;
+    QString error;
+};
 class IContentFileStore {
   public:
     virtual ~IContentFileStore() = default;
     virtual QVariantList snapshot(const QVariantMap &pack, const QVariantList &files) const = 0;
+    virtual ContentFileState reload(const QVariantMap &pack, const QVariantList &previous,
+                                    bool inspectInventory = true) const {
+        return {pack, inspectInventory ? snapshot(pack, previous) : previous, {}};
+    }
     virtual ContentWriteResult setEnabled(const QVariantMap &, const QVariantMap &, bool) const = 0;
     virtual ContentWriteResult setEnabledBatch(const QVariantMap &pack, const QVariantList &rows,
                                                bool enabled) const {
@@ -47,5 +56,13 @@ class IContentPreferences {
     virtual bool frozen(const QString &pack, const QString &identity) const = 0;
     virtual bool hasFrozenPreference(const QString &pack, const QString &identity) const = 0;
     virtual void setFrozen(const QString &pack, const QString &identity, bool) = 0;
+    virtual bool locked(const QString &, const QString &) const {
+        return false;
+    }
+    virtual void setLocked(const QString &, const QString &, bool) {}
+    virtual qint64 updatedAt(const QString &, const QString &) const {
+        return 0;
+    }
+    virtual void setUpdatedAt(const QString &, const QString &, qint64) {}
 };
 } // namespace studio

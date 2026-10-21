@@ -143,7 +143,8 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                 controller.createPack("UI verification pack", "1.21.1", "fabric");
                 break;
             case 3:
-                if (controller.repositoryBusy() || controller.catalogueBusy())
+                if ((controller.repositoryBusy() || controller.activeRefreshPending()) ||
+                    controller.catalogueBusy())
                     return;
                 if (controller.activePack().isEmpty() || controller.projects().isEmpty()) {
                     fail("Pack creation or filtered search failed: " + controller.notice());
@@ -164,7 +165,9 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                 session.browse()->install(controller.projects().first().toMap());
                 break;
             case 5: {
-                if (controller.repositoryBusy() || session.browse()->busy() || session.workspace()->busy())
+                if ((controller.repositoryBusy() || controller.activeRefreshPending()) ||
+                    (session.browse()->busy() || session.browse()->lookupsPending()) ||
+                    session.workspace()->busy())
                     return;
                 if (controller.activeMods().size() != 1) {
                     fail("Pin failed: " + controller.notice());
@@ -190,7 +193,8 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                 break;
             }
             case 6: {
-                if (controller.repositoryBusy() || session.workspace()->busy())
+                if ((controller.repositoryBusy() || controller.activeRefreshPending()) ||
+                    session.workspace()->busy())
                     return;
                 if (!controller.history().contains("Pin first mod release") ||
                     !controller.gitStatus().isEmpty()) {
@@ -303,7 +307,8 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     {{"page", "workspace"}, {"packPath", state->managedPath}, {"section", "configs"}});
                 break;
             case 12:
-                if (controller.repositoryBusy() || session.workspace()->busy() ||
+                if ((controller.repositoryBusy() || controller.activeRefreshPending()) ||
+                    session.workspace()->busy() ||
                     controller.activePack().value("path") != state->managedPath)
                     return;
                 if (!capture("configs")) {
@@ -425,7 +430,8 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                 break;
             }
             case 19:
-                if (controller.repositoryBusy() || session.workspace()->busy() || session.content()->busy())
+                if ((controller.repositoryBusy() || controller.activeRefreshPending()) ||
+                    session.workspace()->busy() || session.content()->busy())
                     return;
                 if (session.content()->rows().isEmpty()) {
                     fail("Content actions did not load the installed fixture");
@@ -544,7 +550,9 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     {{"page", "workspace"}, {"packPath", state->externalPath}, {"section", "configs"}});
                 break;
             case 29:
-                if (session.workspace()->busy() || controller.repositoryBusy() || session.content()->busy())
+                if (session.workspace()->busy() ||
+                    (controller.repositoryBusy() || controller.activeRefreshPending()) ||
+                    session.content()->busy())
                     return;
                 if (!capture("launcher-configs")) {
                     fail("Launcher config availability render failed");
@@ -559,8 +567,9 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     {{"type", "resourcepack"}, {"query", "Fast Better Grass"}, {"source", "modrinth"}});
                 break;
             case 30:
-                if (controller.repositoryBusy() || session.catalogue()->busy() ||
-                    session.workspace()->busy() || session.browse()->busy())
+                if ((controller.repositoryBusy() || controller.activeRefreshPending()) ||
+                    session.catalogue()->busy() || session.workspace()->busy() ||
+                    (session.browse()->busy() || session.browse()->lookupsPending()))
                     return;
                 if (session.catalogue()->projects().isEmpty() || !session.browse()->ready() ||
                     session.browse()->pack().value("path") != state->managedPath) {
@@ -571,7 +580,9 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                 session.browse()->install(state->assetProject);
                 break;
             case 31:
-                if (controller.repositoryBusy() || session.browse()->busy() || session.workspace()->busy())
+                if ((controller.repositoryBusy() || controller.activeRefreshPending()) ||
+                    (session.browse()->busy() || session.browse()->lookupsPending()) ||
+                    session.workspace()->busy())
                     return;
                 if (!session.browse()->state(state->assetProject).value("installed").toBool() ||
                     controller.activePack().value("assets").toList().isEmpty()) {
@@ -589,7 +600,8 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                                           {"showcaseTab", "versions"}});
                 break;
             case 32:
-                if (session.showcase()->busy() || session.browse()->busy())
+                if (session.showcase()->busy() ||
+                    (session.browse()->busy() || session.browse()->lookupsPending()))
                     return;
                 {
                     bool installed = false;

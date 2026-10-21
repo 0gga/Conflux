@@ -100,6 +100,7 @@ class DesktopSession final : public QObject {
     std::shared_ptr<IBrowseSettingsStore> m_browseStore;
     std::shared_ptr<ContentVisibility> m_visibility;
     std::shared_ptr<const NativePackFileStore> m_fileStore;
+    std::shared_ptr<ContentLockRegistry> m_contentLocks;
     std::shared_ptr<const NativeContentStore> m_contentFiles;
     std::shared_ptr<ContentInstaller> m_contentInstaller;
     NavigationHistory m_navigation;

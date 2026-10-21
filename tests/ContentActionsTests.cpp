@@ -11,11 +11,15 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QPersistentModelIndex>
 #include <QSaveFile>
+#include <QSemaphore>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QtTest>
+#include <atomic>
+#include <stdexcept>
 using namespace studio;
 class ContentActionsTests : public QObject {
     Q_OBJECT
@@ -53,6 +57,263 @@ class ContentActionsTests : public QObject {
                 {"updateRelease", next.toVariant()}};
     }
   private slots:
+    void fileActionsAreOptimisticSerializedAndRollbackOnlyTheFailedIntent() {
+        class Files final : public IContentFileStore {
+          public:
+            mutable QSemaphore entered, proceed;
+            mutable std::atomic<int> calls{0}, active{0}, peak{0};
+            QVariantList snapshot(const QVariantMap &, const QVariantList &rows) const override {
+                return rows;
+            }
+            ContentWriteResult setEnabled(const QVariantMap &, const QVariantMap &, bool) const override {
+                return {};
+            }
+            ContentWriteResult setEnabledBatch(const QVariantMap &, const QVariantList &,
+                                               bool) const override {
+                const int call = ++calls;
+                const int running = ++active;
+                peak.store(qMax(peak.load(), running));
+                entered.release();
+                proceed.tryAcquire(1, 5000);
+                --active;
+                if (call == 1)
+                    throw std::runtime_error("Fixture write prevented");
+                return ContentWriteResult{true, {}};
+            }
+            ContentWriteResult remove(const QVariantMap &, const QVariantList &) const override {
+                return {};
+            }
+            ContentWriteResult importFiles(const QVariantMap &, const QList<QUrl> &,
+                                           const QString &) const override {
+                return {};
+            }
+        };
+        QTemporaryDir temp;
+        auto files = std::make_shared<Files>();
+        ContentActions content(files, std::make_shared<ContentCatalogueFixture>(),
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        content.setContext({{"path", temp.path()}},
+                           {row("Alpha", "Author"), row("Bravo", "Author"), row("Charlie", "Author")});
+        QTRY_VERIFY(!content.busy());
+        const QPersistentModelIndex untouched(content.model()->index(2, 0));
+        QSignalSpy reset(content.model(), &QAbstractItemModel::modelReset),
+            changed(&content, &ContentActions::rowsChanged),
+            errors(&content, &ContentActions::operationFailed);
+        content.setEnabled("mods/Alpha.jar", false);
+        content.setEnabled("mods/Bravo.jar", false);
+        QVERIFY(!content.rows()[0].toMap().value("enabled").toBool());
+        QVERIFY(!content.rows()[1].toMap().value("enabled").toBool());
+        QTRY_COMPARE(files->entered.available(), 1);
+        files->entered.acquire();
+        QCOMPARE(files->calls.load(), 1);
+        const int notifications = changed.count();
+        for (int i = 0; i < 5; ++i)
+            content.setProgress("Background work");
+        QCOMPARE(changed.count(), notifications);
+        QCOMPARE(reset.count(), 0);
+        files->proceed.release();
+        QTRY_COMPARE(files->entered.available(), 1);
+        files->entered.acquire();
+        QVERIFY(content.rows()[0].toMap().value("enabled").toBool());
+        QVERIFY(!content.rows()[1].toMap().value("enabled").toBool());
+        QCOMPARE(errors.count(), 1);
+        QCOMPARE(files->peak.load(), 1);
+        files->proceed.release();
+        QTRY_VERIFY(!content.busy());
+        QVERIFY(untouched.isValid());
+        QCOMPARE(untouched.data(Qt::UserRole + 1).toMap().value("title").toString(), QString("Charlie"));
+        QCOMPARE(reset.count(), 0);
+    }
+    void rapidOppositeTogglesUseConfirmedPathsAndLocksBlockQueuedChanges() {
+        class Files final : public IContentFileStore {
+          public:
+            mutable QSemaphore entered, proceed;
+            mutable QStringList paths;
+            QVariantList snapshot(const QVariantMap &, const QVariantList &rows) const override {
+                return rows;
+            }
+            ContentWriteResult setEnabled(const QVariantMap &, const QVariantMap &, bool) const override {
+                return {};
+            }
+            ContentWriteResult setEnabledBatch(const QVariantMap &, const QVariantList &rows,
+                                               bool) const override {
+                paths << rows.first().toMap().value("relativePath").toString();
+                entered.release();
+                proceed.tryAcquire(1, 5000);
+                return {true, {}};
+            }
+            ContentWriteResult remove(const QVariantMap &, const QVariantList &) const override {
+                return {};
+            }
+            ContentWriteResult importFiles(const QVariantMap &, const QList<QUrl> &,
+                                           const QString &) const override {
+                return {};
+            }
+        };
+        QTemporaryDir temp;
+        auto files = std::make_shared<Files>();
+        ContentActions content(files, std::make_shared<ContentCatalogueFixture>(),
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        content.setContext({{"path", temp.path()}}, {row("Alpha", "Author"), row("Bravo", "Author")});
+        QTRY_VERIFY(!content.busy());
+        content.setEnabled("mods/Alpha.jar", false);
+        QTRY_COMPARE(files->entered.available(), 1);
+        files->entered.acquire();
+        content.setEnabled("mods/Alpha.jar", true);
+        content.setEnabled("mods/Bravo.jar", false);
+        content.setLocked("mods/Bravo.jar", true);
+        QVERIFY(content.rows()[0].toMap().value("enabled").toBool());
+        files->proceed.release();
+        QTRY_COMPARE(files->entered.available(), 1);
+        files->entered.acquire();
+        QCOMPARE(files->paths, QStringList({"mods/Alpha.jar", "mods/Alpha.jar.disabled"}));
+        files->proceed.release();
+        QTRY_VERIFY(!content.busy());
+        QVERIFY(content.rows()[0].toMap().value("enabled").toBool());
+        QVERIFY(content.rows()[1].toMap().value("enabled").toBool());
+        QVERIFY(content.rows()[1].toMap().value("locked").toBool());
+        QCOMPARE(files->paths.size(), 2);
+    }
+    void locksPersistAndUpdatesRemainVisibleWithRecentUpdateFiltering() {
+        QTemporaryDir temp;
+        auto prefs = std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini");
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        ContentActions content(std::make_shared<ContentFileFixture>(),
+                               std::make_shared<ContentCatalogueFixture>(), installer, prefs);
+        const QVariantMap pack{{"path", temp.path()}};
+        auto alpha = row("Alpha", "Author"), bravo = row("Bravo", "Author");
+        auto next = bravo.value("updateRelease").toMap();
+        next["sha1"] = "new-binary";
+        next["filename"] = "Bravo.jar";
+        bravo["updateRelease"] = next;
+        content.setContext(pack, {alpha, bravo});
+        QTRY_VERIFY(!content.busy());
+        content.setLocked("mods/Alpha.jar", true);
+        QCOMPARE(content.updateCount(), 2);
+        QCOMPARE(content.actionableUpdateCount(), 1);
+        content.setEnabled("mods/Alpha.jar", false);
+        content.remove("mods/Alpha.jar");
+        QCOMPARE(content.rows().size(), 2);
+        QVERIFY(content.rows()[0].toMap().value("enabled").toBool());
+        content.updateAll();
+        QCOMPARE(installer->requested.size(), 1);
+        QCOMPARE(installer->requested.first().title, QString("Bravo"));
+        installer->completion({true, {}});
+        QTRY_VERIFY(!content.busy());
+        content.setFilter("updates", true);
+        QCOMPARE(content.rows().size(), 1);
+        QCOMPARE(content.rows()[0].toMap().value("title").toString(), QString("Alpha"));
+        content.clearFilters();
+        content.setFilter("recent", true);
+        QCOMPARE(content.rows().size(), 1);
+        QCOMPARE(content.rows()[0].toMap().value("title").toString(), QString("Bravo"));
+        content.clearFilters();
+        content.setFilter("locked", true);
+        QCOMPARE(content.rows().size(), 1);
+        SettingsContentPreferences reopened(temp.path() + "/prefs.ini");
+        QVERIFY(reopened.locked(temp.path(), "modrinth:Alpha"));
+        QVERIFY(reopened.updatedAt(temp.path(), "modrinth:Bravo") > 0);
+    }
+    void nativeLocksGuardRenamesRemovalAndStagedDependencyReplacement() {
+        QTemporaryDir temp;
+        const auto path = temp.path() + "/mods/old.jar";
+        write(path, "old");
+        auto locks = std::make_shared<ContentLockRegistry>();
+        auto nativeFiles = std::make_shared<NativePackFileStore>();
+        NativeContentStore files(std::make_shared<NativeInstalledModIdentity>(nativeFiles),
+                                 temp.path() + "/backups", locks);
+        const QVariantMap pack{{"path", temp.path()}};
+        QVariantMap installed{{"category", "mods"},
+                              {"relativePath", "mods/old.jar"},
+                              {"sha1", hash("old")},
+                              {"enabled", true},
+                              {"sourceIds", QVariantMap{{"modrinth", "project"}}}};
+        auto locked = installed;
+        locked["locked"] = true;
+        locks->setRows(temp.path(), {locked});
+        QVERIFY(!files.setEnabled(pack, installed, false).ok);
+        QVERIFY(!files.remove(pack, {installed}).ok);
+        QTemporaryDir stage;
+        write(stage.path() + "/mods/new.jar", "new");
+        const QJsonObject manifest{{"mods", QJsonArray{QJsonObject{{"provider", "modrinth"},
+                                                                   {"projectId", "project"},
+                                                                   {"sha1", hash("new")},
+                                                                   {"filename", "new.jar"},
+                                                                   {"installPath", "mods/new.jar"}}}}};
+        const auto result = files.applyStaged(pack, {installed}, stage.path(), manifest);
+        QVERIFY(!result.ok);
+        QVERIFY2(result.error.contains("lock", Qt::CaseInsensitive), qPrintable(result.error));
+        QCOMPARE(read(path), QByteArray("old"));
+        QVERIFY(!QFileInfo::exists(temp.path() + "/mods/new.jar"));
+    }
+    void lockingPendingNewContentProtectsItsHashNamedDestination() {
+        QTemporaryDir temp, stage;
+        QDir().mkpath(temp.path() + "/mods");
+        const auto nextHash = hash("new");
+        write(stage.path() + "/mods/new.jar", "new");
+        auto locks = std::make_shared<ContentLockRegistry>();
+        const QVariantMap prediction{{"relativePath", "mods/new.jar"},
+                                     {"category", "mods"},
+                                     {"sha1", nextHash},
+                                     {"locked", true},
+                                     {"pending", true},
+                                     {"sourceIds", QVariantMap{{"modrinth", "project"}}}};
+        locks->setRows(temp.path(), {prediction});
+        QVERIFY(locks->locked(temp.path(), "mods/" + nextHash + ".jar"));
+        QVERIFY(locks->projectLocked(temp.path(), "modrinth", "project"));
+        const auto nativeFiles = std::make_shared<NativePackFileStore>();
+        NativeContentStore files(std::make_shared<NativeInstalledModIdentity>(nativeFiles),
+                                 temp.path() + "/backups", locks);
+        const QJsonObject manifest{{"mods", QJsonArray{QJsonObject{{"provider", "modrinth"},
+                                                                   {"projectId", "project"},
+                                                                   {"sha1", nextHash},
+                                                                   {"filename", "new.jar"},
+                                                                   {"installPath", "mods/new.jar"}}}}};
+        const auto result = files.applyStaged({{"path", temp.path()}}, {}, stage.path(), manifest);
+        QVERIFY(!result.ok);
+        QVERIFY2(result.error.contains("lock", Qt::CaseInsensitive), qPrintable(result.error));
+        QVERIFY(QDir(temp.path() + "/mods").entryList(QDir::Files).isEmpty());
+    }
+    void switchingInstanceImmediatelyReplacesRowsWhileAcceptedWorkContinues() {
+        QTemporaryDir temp;
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        ContentActions content(std::make_shared<ContentFileFixture>(),
+                               std::make_shared<ContentCatalogueFixture>(), installer,
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        const QVariantMap first{{"path", temp.path() + "/first"}}, second{{"path", temp.path() + "/second"}};
+        content.setContext(first, {row("Alpha", "Author")});
+        QTRY_VERIFY(!content.busy());
+        content.update("mods/Alpha.jar");
+        QVERIFY(content.operationsBusy());
+        content.setContext(second, {});
+        QVERIFY(content.rows().isEmpty());
+        content.setContext(second, {row("Bravo", "Author")}, true);
+        QTRY_COMPARE(content.rows().first().toMap().value("title").toString(), QString("Bravo"));
+        installer->completion({true, {}});
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(content.rows().size(), 1);
+        QCOMPARE(content.rows().first().toMap().value("title").toString(), QString("Bravo"));
+    }
+    void unidentifiedContentLocksRemainScopedToTheirOwnPath() {
+        QTemporaryDir temp;
+        auto first = row("Alpha", "Author"), second = row("Bravo", "Author");
+        for (auto *entry : {&first, &second}) {
+            entry->remove("sha1");
+            entry->remove("sourceIds");
+            entry->remove("projectId");
+        }
+        ContentActions content(std::make_shared<ContentFileFixture>(),
+                               std::make_shared<ContentCatalogueFixture>(),
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        content.setContext({{"path", temp.path()}}, {first, second});
+        QTRY_VERIFY(!content.busy());
+        content.setLocked("mods/Alpha.jar", true);
+        QVERIFY(content.rows()[0].toMap().value("locked").toBool());
+        QVERIFY(!content.rows()[1].toMap().value("locked").toBool());
+    }
     void refreshMetadataUsesExactCategoryAndHashIncludingRenames() {
         QTemporaryDir temp;
         auto catalogue = std::make_shared<ContentCatalogueFixture>();
@@ -354,7 +615,7 @@ class ContentActionsTests : public QObject {
         QCOMPARE(installer->requested[1].contentType, QString("resourcepack"));
         QCOMPARE(installer->requested[2].contentType, QString("datapack"));
         content.cancel();
-        QVERIFY(!content.busy());
+        QTRY_VERIFY(!content.busy());
         QVERIFY(content.notice().isEmpty());
         QCOMPARE(content.activity(), QString("cancelled"));
         content.setCategory("datapacks");
@@ -417,13 +678,14 @@ class ContentActionsTests : public QObject {
         QCOMPARE(content.rows().size(), 1);
         content.clearFilters();
         content.freeze("mods/Alpha.jar", true);
-        QCOMPARE(content.updateCount(), 1);
+        QCOMPARE(content.updateCount(), 2);
+        QCOMPARE(content.actionableUpdateCount(), 1);
         content.updateAll();
         QVERIFY(content.busy());
         QCOMPARE(installer->requested.size(), 1);
         QCOMPARE(installer->requested.first().release.projectId, QString("Bravo"));
         installer->completion({true, {}, {}});
-        QVERIFY(!content.busy());
+        QTRY_VERIFY(!content.busy());
         SettingsContentPreferences reopened(temp.path() + "/prefs.ini");
         QVERIFY(reopened.frozen(temp.path(), "modrinth:Alpha"));
         content.clearSelection();

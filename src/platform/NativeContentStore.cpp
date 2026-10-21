@@ -1,6 +1,7 @@
 #include "NativeContentStore.h"
 #include "domain/ContentTypes.h"
 #include "platform/PackFileStore.h"
+#include "services/PackContent.h"
 #include "services/PackRepository.h"
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -30,12 +31,29 @@ static bool contentPath(const QString &relative) {
            !parts.last().isEmpty() && parts.last() != "." && parts.last() != ".." &&
            !parts.last().contains('\\');
 }
-NativeContentStore::NativeContentStore(std::shared_ptr<const IInstalledModIdentity> identity, QString backups)
+NativeContentStore::NativeContentStore(std::shared_ptr<const IInstalledModIdentity> identity, QString backups,
+                                       std::shared_ptr<ContentLockRegistry> locks)
     : m_identity(std::move(identity)),
       m_backupRoot(backups.isEmpty()
                        ? QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) +
                              "/content-backups"
-                       : std::move(backups)) {}
+                       : std::move(backups)),
+      m_locks(std::move(locks)) {}
+ContentFileState NativeContentStore::reload(const QVariantMap &pack, const QVariantList &previous,
+                                            bool inspectInventory) const {
+    auto current = pack;
+    if (pack.value("managed").toBool()) {
+        const auto repository = PackRepository::inspect(pack.value("path").toString());
+        if (!repository.ok)
+            return {pack, {}, repository.error};
+        current["mods"] = repository.manifest.value("mods").toArray().toVariantList();
+        current["assets"] = repository.manifest.value("assets").toArray().toVariantList();
+    }
+    if (!inspectInventory)
+        return {current, previous, {}};
+    const auto inventory = PackContent::scan(current);
+    return {current, snapshot(current, inventory.files), {}};
+}
 QVariantList NativeContentStore::snapshot(const QVariantMap &pack, const QVariantList &files) const {
     QVariantList rows;
     for (const auto &value : files) {
@@ -97,6 +115,13 @@ ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, const QLis
             return {false, current.error};
         originalManifest = current.manifest;
     }
+    const auto locked = [&](const Edit &edit) {
+        return m_locks && (m_locks->locked(pack.value("path").toString(), edit.from) ||
+                           m_locks->locked(pack.value("path").toString(), edit.to));
+    };
+    for (const auto &edit : edits)
+        if (locked(edit))
+            return {false, "Unlock this content before changing it."};
     QSet<QString> targets, removedPaths;
     for (const auto &edit : edits)
         if (!edit.from.isEmpty() && edit.to.isEmpty())
@@ -150,6 +175,13 @@ ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, const QLis
         return ok;
     };
     for (const auto &edit : edits) {
+        if (locked(edit)) {
+            const bool restored = rollback();
+            return {false,
+                    restored ? "Content was locked before this operation completed. Changes were restored."
+                             : "Content was locked; recovery needs attention. Backups: " + backup,
+                    backup};
+        }
         // Recheck immediately before each change; never overwrite a new destination.
         const auto from = QDir(root).filePath(edit.from), to = QDir(root).filePath(edit.to);
         if (!edit.from.isEmpty() && sha1File(from) != edit.expectedSha1) {
@@ -232,6 +264,8 @@ ContentWriteResult NativeContentStore::setEnabledBatch(const QVariantMap &pack, 
     for (const auto &value : rows) {
         const auto row = value.toMap();
         const auto path = row.value("relativePath").toString();
+        if (row.value("locked").toBool())
+            return {false, "Unlock this content before changing it."};
         if (row.value("directory").toBool() || row.value("sha1").toString().isEmpty())
             return {false, "Only verified content files can be enabled or disabled."};
         const bool currentlyEnabled = !path.endsWith(".disabled");
@@ -246,6 +280,8 @@ ContentWriteResult NativeContentStore::remove(const QVariantMap &pack, const QVa
     QList<Edit> edits;
     for (const auto &value : rows) {
         const auto row = value.toMap();
+        if (row.value("locked").toBool())
+            return {false, "Unlock this content before removing it."};
         edits << Edit{row.value("relativePath").toString(), {}, {}, row.value("sha1").toString()};
     }
     return apply(pack, edits);
@@ -327,6 +363,10 @@ ContentWriteResult NativeContentStore::applyStaged(const QVariantMap &pack, cons
         if (!old.isEmpty() && old.value("sha1").toString() == hash &&
             (!pack.value("managed").toBool() || old.value("relativePath").toString() == target))
             continue;
+        if (old.value("locked").toBool() ||
+            (m_locks && m_locks->projectLocked(root, ref.value("provider").toString(),
+                                               ref.value("projectId").toString())))
+            return {false, "A locked dependency would be changed. Unlock it before installing this content."};
         if (!old.isEmpty()) {
             const auto oldPath = old.value("relativePath").toString();
             if (replaced.contains(oldPath))
@@ -369,6 +409,9 @@ ContentWriteResult NativeContentStore::installAsset(const QVariantMap &pack, con
     }
     if (!old.isEmpty() && old.value("sha1").toString() == release.sha1)
         return {true, {}};
+    if (old.value("locked").toBool() ||
+        (m_locks && m_locks->projectLocked(root, release.provider, release.projectId)))
+        return {false, "Unlock this content before changing it."};
     const auto target = directory + '/' + release.filename +
                         (!old.isEmpty() && !old.value("enabled").toBool() ? ".disabled" : "");
     QList<Edit> edits;

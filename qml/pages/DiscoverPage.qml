@@ -54,12 +54,6 @@ Item {
                 PaginationBar { Layout.fillWidth: true; catalogue: root.catalogue; contextBusy: root.browse.busy }
                 ActiveBrowseFilters { Layout.fillWidth: true; catalogue: root.catalogue; instanceLocked: root.browse.ready && !root.catalogue.filters.unlocked }
                 Text { Layout.fillWidth: true; visible: root.catalogue.notice.length>0; text: root.catalogue.notice; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
-                Text { Layout.fillWidth: true; visible: root.browse.notice.length>0; text: root.browse.notice; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
-                RowLayout {
-                    visible: root.content.notice.length>0; Layout.fillWidth: true
-                    Text { Layout.fillWidth: true; text: root.content.notice; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap; maximumLineCount: 3; elide: Text.ElideRight; textFormat: Text.PlainText }
-                    ActionButton { visible: root.content.busy; text: "Cancel"; compact: true; subtle: true; enabled: root.content.cancellable; onClicked: root.content.cancel() }
-                }
                 Item {
                     Layout.fillWidth: true; Layout.fillHeight: true
                     ContentListView {
@@ -75,7 +69,7 @@ Item {
                             preferredLoader: root.browse.pack.loader || ""
                             selectedLoaders: root.catalogue.filters.loaders || []
                             hiddenMode: !!root.catalogue.filters.hidden
-                            installState: { const ready=root.browse.ready; const busy=root.browse.busy; const state=root.browse.state(modelData); state.canInstall = state.canInstall && !root.app.repositoryBusy; return state }
+                            installState: { const ready=root.browse.ready; const busy=root.browse.busy; const state=root.browse.state(modelData); state.canInstall = state.canInstall && !root.app.navigationBusy; return state }
                             onOpened: { root.catalogue.scrollPosition=results.contentY;root.showcaseRequested(modelData,"description") }
                             onVersionsRequested: { root.catalogue.scrollPosition=results.contentY;root.showcaseRequested(modelData,"versions") }
                             onAuthorRequested: function(author) { root.authorRequested(author) }
@@ -87,10 +81,21 @@ Item {
                     EmptyState { anchors.centerIn: parent; visible: !root.catalogue.busy && root.catalogue.projects.length===0; title: root.catalogue.filters.hidden ? "No hidden content matches" : "No matching content"; message: "Try another search or filter."; symbol: "search" }
                 }
             }
-            Rectangle {
-                objectName: "browseFilterPanel"
-                Layout.preferredWidth: Appearance.filterWidthFor(root.width - 56); Layout.fillHeight: true; radius: 16; color: Theme.colors.panel; border.color: Theme.colors.border
-                BrowseFilters { anchors.fill: parent; anchors.margins: 14; catalogue: root.catalogue; hasInstance: root.browse.ready; connectorAvailable: root.browse.connectorAvailable }
+            ColumnLayout {
+                Layout.preferredWidth: Appearance.filterWidthFor(root.width - 56)
+                Layout.minimumWidth: Layout.preferredWidth; Layout.maximumWidth: Layout.preferredWidth
+                Layout.fillHeight: true; spacing: 12
+                SelectBox {
+                    objectName: "browseInstanceSelector"; Layout.fillWidth: true
+                    model: ["Browse without an instance"].concat(root.instances.map(function(pack) { return pack.title + " - " + Branding.label(pack.provider) }))
+                    currentIndex: root.instances.findIndex(function(pack) { return pack.path === root.targetPath })+1
+                    onActivated: root.instanceRequested(currentIndex > 0 ? root.instances[currentIndex-1].path : "")
+                }
+                Rectangle {
+                    objectName: "browseFilterPanel"
+                    Layout.fillWidth: true; Layout.fillHeight: true; radius: 16; color: Theme.colors.panel; border.color: Theme.colors.border
+                    BrowseFilters { anchors.fill: parent; anchors.margins: 14; catalogue: root.catalogue; hasInstance: root.browse.ready; connectorAvailable: root.browse.connectorAvailable }
+                }
             }
         }
     }

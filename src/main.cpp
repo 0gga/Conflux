@@ -1,5 +1,6 @@
 #include "ApplicationController.h"
 #include "DesktopSession.h"
+#include "platform/WindowFrame.h"
 #include "verification/DesktopSmokeTest.h"
 #include <QClipboard>
 #include <QDir>
@@ -48,8 +49,13 @@ int main(int argc, char *argv[]) {
                      &studio::DesktopSession::setCurseforgeKey);
     QObject::connect(session.content(), &studio::ContentActions::contentChanged, &controller,
                      &studio::ApplicationController::refreshActivePack);
-    QObject::connect(session.content(), &studio::ContentActions::changed, &controller,
-                     [&controller, &session] { controller.setContentBusy(session.content()->busy()); });
+    QObject::connect(
+        session.content(), &studio::ContentActions::operationsChanged, &controller,
+        [&controller, &session] { controller.setContentBusy(session.content()->operationsBusy()); });
+    QObject::connect(session.content(), &studio::ContentActions::operationFailed, &controller,
+                     &studio::ApplicationController::reportContentError);
+    QObject::connect(session.browse(), &studio::BrowseInstalls::operationFailed, &controller,
+                     &studio::ApplicationController::reportContentError);
     QObject::connect(session.content(), &studio::ContentActions::copyRequested, &application,
                      [](const QString &text) { QGuiApplication::clipboard()->setText(text); });
     QQmlApplicationEngine engine;
@@ -58,6 +64,7 @@ int main(int argc, char *argv[]) {
     engine.load(QUrl("qrc:/qt/qml/ModpackStudio/qml/Main.qml"));
     if (engine.rootObjects().isEmpty())
         return 1;
+    studio::WindowFrame frame(*qobject_cast<QWindow *>(engine.rootObjects().first()));
     session.attachWindow(*engine.rootObjects().first());
     controller.refreshLibrary();
     if (verification.enabled())

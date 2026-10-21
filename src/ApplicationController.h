@@ -32,6 +32,7 @@ class ApplicationController : public QObject {
     Q_PROPERTY(bool catalogueBusy READ catalogueBusy NOTIFY stateChanged)
     Q_PROPERTY(bool detailBusy READ detailBusy NOTIFY stateChanged)
     Q_PROPERTY(bool repositoryBusy READ repositoryBusy NOTIFY stateChanged)
+    Q_PROPERTY(bool navigationBusy READ navigationBusy NOTIFY stateChanged)
     Q_PROPERTY(bool installBusy READ installBusy NOTIFY stateChanged)
     Q_PROPERTY(bool installCancellable READ installCancellable NOTIFY stateChanged)
     Q_PROPERTY(QString installationStatus READ installationStatus NOTIFY stateChanged)
@@ -116,9 +117,23 @@ class ApplicationController : public QObject {
     QString packsRoot() const;
     Q_INVOKABLE void refreshLibrary();
     void refreshActivePack();
+    bool activeRefreshPending() const {
+        return m_activeRefreshPending;
+    }
+    Q_INVOKABLE void reportContentError(const QString &error) {
+        m_notice = error;
+        emit stateChanged();
+    }
+    bool navigationBusy() const {
+        return m_repositoryBusy || m_installer.busy();
+    }
     void setContentBusy(bool busy) {
         if (m_contentBusy != busy) {
             m_contentBusy = busy;
+            if (busy) {
+                ++m_activeRefreshGeneration;
+                m_activeRefreshPending = false;
+            }
             emit stateChanged();
         }
     }
@@ -162,9 +177,9 @@ class ApplicationController : public QObject {
     QStringList m_gallery;
     QString m_searchGame, m_searchLoader;
     QString m_installationStatus;
-    int m_searchGeneration = 0, m_detailGeneration = 0;
+    int m_searchGeneration = 0, m_detailGeneration = 0, m_activeRefreshGeneration = 0;
     bool m_libraryBusy = false, m_catalogueBusy = false, m_detailBusy = false, m_repositoryBusy = false;
-    bool m_contentBusy = false;
+    bool m_contentBusy = false, m_activeRefreshPending = false;
     void refreshPacks();
     void runRepository(std::function<RepositoryResult()> operation, bool navigate = false);
 };

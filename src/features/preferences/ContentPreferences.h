@@ -9,6 +9,10 @@ class SettingsContentPreferences final : public IContentPreferences {
     bool frozen(const QString &, const QString &) const override;
     bool hasFrozenPreference(const QString &, const QString &) const override;
     void setFrozen(const QString &, const QString &, bool) override;
+    bool locked(const QString &, const QString &) const override;
+    void setLocked(const QString &, const QString &, bool) override;
+    qint64 updatedAt(const QString &, const QString &) const override;
+    void setUpdatedAt(const QString &, const QString &, qint64) override;
 
   private:
     static QString key(const QString &, const QString &);

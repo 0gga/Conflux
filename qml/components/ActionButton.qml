@@ -32,9 +32,9 @@ Button {
     contentItem: Item {
         implicitWidth: labelRow.implicitWidth; implicitHeight: labelRow.implicitHeight
         Row {
-            id: labelRow
-            x: control.alignLeft ? 0 : (parent.width - width) / 2
-            anchors.verticalCenter: parent.verticalCenter
+            id: labelRow; objectName: "actionContentRow"
+            x: control.alignLeft && control.text.length ? 0 : (parent.width - width) / 2
+            anchors.verticalCenter: parent.verticalCenter; anchors.alignWhenCentered: false
             spacing: control.iconName.length && control.text.length ? 8 : 0
             Icon {
                 visible: control.iconName.length > 0; anchors.verticalCenter: parent.verticalCenter

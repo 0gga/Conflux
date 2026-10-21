@@ -177,7 +177,7 @@ void ApplicationController::setPackHidden(const QString &path, bool hidden) {
         }
 }
 void ApplicationController::openLibraryPack(const QString &path, bool explore) {
-    if (repositoryBusy())
+    if (navigationBusy())
         return;
     for (const auto &item : libraryPacks()) {
         const auto pack = item.toMap();
@@ -234,8 +234,34 @@ void ApplicationController::refreshLibrary() {
 }
 void ApplicationController::refreshActivePack() {
     const auto path = m_activePack.value("path").toString();
-    if (m_activePack.value("managed").toBool() && !path.isEmpty())
-        runRepository([path] { return PackRepository::inspect(path); });
+    if (m_activePack.value("managed").toBool() && !path.isEmpty()) {
+        const int generation = ++m_activeRefreshGeneration;
+        m_activeRefreshPending = true;
+        auto *watcher = new QFutureWatcher<RepositoryResult>(this);
+        connect(watcher, &QFutureWatcher<RepositoryResult>::finished, this,
+                [this, watcher, path, generation] {
+                    const auto result = watcher->result();
+                    watcher->deleteLater();
+                    if (generation != m_activeRefreshGeneration)
+                        return;
+                    m_activeRefreshPending = false;
+                    if (m_activePack.value("path") != path || m_repositoryBusy || m_contentBusy)
+                        return;
+                    if (!result.ok) {
+                        reportContentError(result.error);
+                        return;
+                    }
+                    m_activePack = result.manifest.toVariantMap();
+                    m_activePack["path"] = path;
+                    m_activePack["managed"] = true;
+                    m_activePack["provider"] = "conflux";
+                    m_activeMods = result.manifest.value("mods").toArray().toVariantList();
+                    m_gitStatus = result.status;
+                    m_history = result.history;
+                    emit stateChanged();
+                });
+        watcher->setFuture(QtConcurrent::run([path] { return PackRepository::inspect(path); }));
+    }
     refreshLibrary();
 }
 void ApplicationController::search(const QString &query, const QString &source, const QString &game,
@@ -272,8 +298,10 @@ void ApplicationController::closeProject() {
     emit stateChanged();
 }
 void ApplicationController::runRepository(std::function<RepositoryResult()> operation, bool navigate) {
-    if (repositoryBusy())
+    if (navigationBusy() || (!navigate && m_contentBusy))
         return;
+    ++m_activeRefreshGeneration;
+    m_activeRefreshPending = false;
     m_repositoryBusy = true;
     m_notice.clear();
     emit stateChanged();

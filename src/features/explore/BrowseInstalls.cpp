@@ -1,6 +1,8 @@
 #include "BrowseInstalls.h"
 #include "domain/ContentCompatibility.h"
 #include "domain/ContentTypes.h"
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QPointer>
 #include <algorithm>
 namespace studio {
@@ -8,8 +10,6 @@ BrowseInstalls::BrowseInstalls(std::shared_ptr<IContentCatalogue> source, QObjec
     : QObject(parent), m_catalogue(std::move(source)) {}
 void BrowseInstalls::setContext(const QVariantMap &pack, const QVariantList &rows, bool busy) {
     if (m_pack.value("path") != pack.value("path")) {
-        ++m_generation;
-        m_loading = false;
         m_notice.clear();
     }
     m_pack = pack;
@@ -21,8 +21,6 @@ void BrowseInstalls::setTargetPath(const QString &path) {
     if (m_target == path)
         return;
     m_target = path;
-    ++m_generation;
-    m_loading = false;
     m_notice.clear();
     emit changed();
 }
@@ -30,6 +28,12 @@ QVariantMap BrowseInstalls::state(const QVariantMap &project) const {
     QVariantMap out{{"installed", false},
                     {"canInstall", ready() && !busy()},
                     {"label", ready() ? "Install" : "Choose instance"}};
+    if (m_pendingLookups.contains(lookupKey(project))) {
+        out["installed"] = true;
+        out["canInstall"] = false;
+        out["label"] = "Installed";
+        return out;
+    }
     const auto type = project.value("type", "mod").toString();
     if (!ready())
         return out;
@@ -47,6 +51,7 @@ QVariantMap BrowseInstalls::state(const QVariantMap &project) const {
         const auto known = row.value("sourceIds").toMap();
         for (auto it = ids.cbegin(); it != ids.cend(); ++it)
             if (!it.value().toString().isEmpty() && known.value(it.key()) == it.value()) {
+                out["locked"] = row.value("locked").toBool();
                 out["installed"] = true;
                 out["canInstall"] = false;
                 out["label"] = row.value("enabled", true).toBool() ? "Installed" : "Installed · disabled";
@@ -102,6 +107,8 @@ void BrowseInstalls::installVersion(const QVariantMap &release, const QVariantMa
         return;
     }
     auto target = project;
+    target["targetPack"] = m_pack;
+    target["targetRows"] = m_rows;
     if (project.value("type") == "datapack" &&
         release.value("filename").toString().endsWith(".jar", Qt::CaseInsensitive))
         target["type"] = "mod";
@@ -109,42 +116,81 @@ void BrowseInstalls::installVersion(const QVariantMap &release, const QVariantMa
     emit changed();
     emit installRequested(release, target);
 }
+QString BrowseInstalls::lookupKey(const QVariantMap &project) const {
+    auto ids = project.value("sourceIds").toMap();
+    if (ids.isEmpty())
+        ids[project.value("provider").toString()] = project.value("id");
+    return m_pack.value("path").toString() + '|' + project.value("type", "mod").toString() + '|' +
+           QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(ids)).toJson(QJsonDocument::Compact));
+}
+void BrowseInstalls::cancelPending() {
+    ++m_lookupGeneration;
+    m_pendingLookups.clear();
+    emit changed();
+}
 void BrowseInstalls::install(const QVariantMap &project) {
     if (!state(project).value("canInstall").toBool())
         return;
-    m_loading = true;
-    m_notice = "Finding a compatible version…";
+    const auto key = lookupKey(project);
+    const auto pack = m_pack;
+    const auto rows = m_rows;
+    const auto loaders = versionLoaders();
+    const int generation = m_lookupGeneration;
+    m_pendingLookups.insert(key);
+    m_notice.clear();
     emit changed();
-    const auto generation = ++m_generation;
-    const QPointer<BrowseInstalls> guard(this);
-    auto row = project;
-    row["category"] = contentCategory(project.value("type", "mod").toString());
-    m_catalogue->versions(
-        row, m_pack.value("minecraft").toString(), versionLoaders(),
-        [guard, generation, project](QVector<Release> releases, QString error) {
-            if (!guard || generation != guard->m_generation)
-                return;
-            guard->m_loading = false;
-            if (project.value("type") == "datapack")
-                std::stable_sort(releases.begin(), releases.end(), [](const Release &a, const Release &b) {
-                    return a.filename.endsWith(".jar", Qt::CaseInsensitive) &&
-                           !b.filename.endsWith(".jar", Qt::CaseInsensitive);
-                });
-            for (const auto &release : releases)
-                if (release.channel == "release" && release.provider == "modrinth" &&
-                    !release.url.isEmpty() && !release.sha1.isEmpty() &&
-                    release.gameVersions.contains(guard->m_pack.value("minecraft").toString())) {
-                    guard->m_notice.clear();
-                    emit guard->changed();
-                    guard->installVersion(release.toVariant(), project);
+    m_lookups.enqueue([this, project, key, pack, rows, loaders,
+                       generation](ContentOperationQueue::Completion done) {
+        if (generation != m_lookupGeneration) {
+            done();
+            return;
+        }
+        auto row = project;
+        row["category"] = contentCategory(project.value("type", "mod").toString());
+        const QPointer<BrowseInstalls> guard(this);
+        m_catalogue->versions(
+            row, pack.value("minecraft").toString(), loaders,
+            [guard, project, key, pack, rows, generation, done](QVector<Release> releases, QString error) {
+                if (!guard)
+                    return;
+                if (generation != guard->m_lookupGeneration) {
+                    done();
                     return;
                 }
-            guard->m_notice =
-                error.isEmpty()
-                    ? "No compatible stable download is available. Open Versions to review alternatives."
-                    : error;
-            emit guard->changed();
-        });
+                if (project.value("type") == "datapack")
+                    std::stable_sort(releases.begin(), releases.end(),
+                                     [](const Release &a, const Release &b) {
+                                         return a.filename.endsWith(".jar", Qt::CaseInsensitive) &&
+                                                !b.filename.endsWith(".jar", Qt::CaseInsensitive);
+                                     });
+                bool installed = false;
+                for (const auto &release : releases)
+                    if (release.channel == "release" && release.provider == "modrinth" &&
+                        !release.url.isEmpty() && !release.sha1.isEmpty() &&
+                        release.gameVersions.contains(pack.value("minecraft").toString())) {
+                        auto target = project;
+                        target["targetPack"] = pack;
+                        target["targetRows"] = rows;
+                        if (project.value("type") == "datapack" &&
+                            release.filename.endsWith(".jar", Qt::CaseInsensitive))
+                            target["type"] = "mod";
+                        emit guard->installRequested(release.toVariant(), target);
+                        installed = true;
+                        break;
+                    }
+                guard->m_pendingLookups.remove(key);
+                if (!installed) {
+                    const auto failure = error.isEmpty()
+                                             ? QString("No compatible stable download is available. Open "
+                                                       "Versions to review alternatives.")
+                                             : error;
+                    guard->m_notice = failure;
+                    emit guard->operationFailed(failure);
+                }
+                emit guard->changed();
+                done();
+            });
+    });
 }
 bool BrowseInstalls::connectorAvailable() const {
     return ready() && hasFabricBridge(m_pack.value("loader").toString(), m_rows);

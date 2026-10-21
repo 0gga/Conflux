@@ -89,7 +89,7 @@ Item {
                             }
                             SourceBadge { source: version.release.provider || "modrinth"; iconOnly: true }
                             Text { visible: version.groupInstalled && !version.installed; text: "Installed"; color: Theme.colors.accent; font.pixelSize: 12 }
-                            ActionButton { text: version.installed ? "Installed" : "Install version"; iconName: version.installed ? "check" : "plus"; primary: !version.installed; visible: version.release.provider === "modrinth"; enabled: root.browse.ready && !root.browse.busy && !root.app.repositoryBusy && !version.installed; onClicked: root.browse.installVersion(version.release,root.showcase.project) }
+                            ActionButton { text: version.installed ? "Installed" : "Install version"; iconName: version.installed ? "check" : "plus"; primary: !version.installed; visible: version.release.provider === "modrinth"; enabled: root.browse.ready && !root.browse.busy && !root.app.navigationBusy && !root.browse.state(root.showcase.project).locked && !version.installed; onClicked: root.browse.installVersion(version.release,root.showcase.project) }
                             ActionButton { text: "View release"; onClicked: root.app.openWeb(version.release.pageUrl) }
                         }
                     }

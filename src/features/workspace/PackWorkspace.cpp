@@ -8,8 +8,10 @@ void PackWorkspace::setPack(const QVariantMap &pack) {
     if (pack == m_pack)
         return;
     const bool wasBusy = m_busy;
+    const bool changedRoot = pack.value("path") != m_pack.value("path");
     m_pack = pack;
-    m_content = {};
+    if (changedRoot)
+        m_content = {};
     refresh();
     if (wasBusy && m_busy)
         emit changed();

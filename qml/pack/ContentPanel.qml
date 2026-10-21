@@ -21,7 +21,7 @@ Item {
         RowLayout {
             Layout.fillWidth: true; spacing: 10
             SearchField { Layout.fillWidth: true; leadingIcon: "search"; placeholderText: "Search " + root.rows.length + " projects…"; text: root.controller.query; onTextEdited: root.controller.query = text }
-            ActionButton { text: "Upload files"; iconName: "folder"; enabled: !root.controller.busy; onClicked: upload.open() }
+            ActionButton { text: "Upload files"; iconName: "folder"; onClicked: upload.open() }
             ActionButton { text: "Browse content"; iconName: "compass"; primary: true; onClicked: root.browseRequested() }
         }
         Flow {
@@ -36,7 +36,7 @@ Item {
                     model: [{key:"all",label:"All"},{key:"mods",label:"Mods"},{key:"resourcepacks",label:"Resource Packs"},{key:"shaderpacks",label:"Shaders"},{key:"datapacks",label:"Data Packs"}]
                     delegate: ActionButton { required property var modelData; text: modelData.label; compact: true; pill: true; subtle: true; selected: root.controller.category === modelData.key; onClicked: root.controller.category = modelData.key }
                 }
-                ActionButton { text: "Clear"; compact: true; subtle: true; visible: !!root.controller.filters.author || !!root.controller.filters.environment || !!root.controller.filters.state || root.controller.filters.openSource || root.controller.filters.external; onClicked: root.controller.clearFilters() }
+                ActionButton { text: "Clear"; compact: true; subtle: true; visible: !!root.controller.filters.author || !!root.controller.filters.environment || !!root.controller.filters.state || root.controller.filters.openSource || root.controller.filters.external || root.controller.filters.locked || root.controller.filters.recent; onClicked: root.controller.clearFilters() }
                 PopupButton { id: filterButton; popup: filters; text: "Filter"; iconName: "plus"; compact: true }
             }
             Item {
@@ -47,10 +47,10 @@ Item {
                     Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 22; Layout.leftMargin: 4; Layout.rightMargin: 10; color: Theme.colors.border }
                     ActionButton { objectName: "contentHiddenFilter"; text: "Hidden"; hint: root.controller.filters.hidden ? "Showing hidden content" : "Show hidden content"; iconName: "hide"; compact: true; subtle: true; selected: !!root.controller.filters.hidden; onClicked: root.controller.setFilter("hidden",!root.controller.filters.hidden) }
                     ActionButton { objectName: "contentUpdatesFilter"; text: "Updates"; iconName: "download"; hint: "Show content with updates"; compact: true; subtle: true; selected: !!root.controller.filters.updates; onClicked: root.controller.setFilter("updates",!root.controller.filters.updates) }
-                    ActionButton { objectName: "contentUpdateAll"; iconName: "download"; text: "Update all"; compact: true; subtle: true; accented: true; enabled: root.controller.updateCount > 0 && !root.controller.busy; hint: root.controller.updateCount + " compatible updates · frozen versions are skipped"; onClicked: root.controller.updateAll() }
+                    ActionButton { objectName: "contentUpdateAll"; iconName: "download"; text: "Update all"; compact: true; subtle: true; accented: true; enabled: root.controller.actionableUpdateCount > 0; hint: root.controller.updateCount + " compatible updates · frozen versions are skipped"; onClicked: root.controller.updateAll() }
                     Item { Layout.fillWidth: true }
                     ContentActivity { controller: root.controller }
-                    ActionButton { objectName: "contentRefresh"; iconName: "refresh"; text: "Refresh"; compact: true; subtle: true; enabled: !root.controller.busy; onClicked: root.controller.refresh() }
+                    ActionButton { objectName: "contentRefresh"; iconName: "refresh"; text: "Refresh"; compact: true; subtle: true; onClicked: root.controller.refresh() }
                 }
             }
         }
@@ -72,7 +72,7 @@ Item {
                 Item {
                     Layout.fillWidth: true; Layout.fillHeight: true
                     ContentListView {
-                        id: list; objectName: "instanceContentList"; bottomInset: selectionBar.visible ? selectionBar.height+24 : 0; cornerRadius: 0; anchors.fill: parent; clip: true; model: root.rows;
+                        id: list; objectName: "instanceContentList"; bottomInset: selectionBar.visible ? selectionBar.height+24 : 0; cornerRadius: 0; anchors.fill: parent; clip: true; model: root.controller.model;
                         delegate: Rectangle {
                             id: entry; objectName: "contentRow"
                             required property var modelData
@@ -103,10 +103,10 @@ Item {
                                 }
                                 RowLayout {
                                     Layout.preferredWidth: 180; spacing: 1
-                                    Icon { name: "lock"; size: 16; opacity: entry.modelData.frozen ? 1 : 0; color: Theme.colors.muted }
-                                    ActionButton { Layout.preferredWidth: 34; iconName: entry.modelData.updateAvailable ? "download" : "switch"; accented: !!entry.modelData.updateAvailable; subtle: true; compact: true; hint: entry.modelData.frozen ? "Version frozen" : entry.modelData.updateAvailable ? "Update to " + entry.modelData.updateRelease.version : "Switch version"; enabled: !root.controller.busy && !entry.modelData.frozen && !!entry.modelData.projectId; onClicked: { if(entry.modelData.updateAvailable) root.controller.update(entry.modelData.relativePath); else { root.controller.openVersions(entry.modelData.relativePath); versions.open() } } }
-                                    ToggleSwitch { objectName: "contentToggle"; Layout.preferredWidth: 48; checked: !!entry.modelData.enabled; enabled: !root.controller.busy && !!entry.modelData.sha1 && !entry.modelData.directory; Accessible.name: "Enable " + entry.modelData.title; onToggled: { root.controller.setEnabled(entry.modelData.relativePath,checked); checked = Qt.binding(function() { return !!entry.modelData.enabled }) } }
-                                    ActionButton { Layout.preferredWidth: 34; iconName: "trash"; hint: "Remove content"; subtle: true; compact: true; enabled: !root.controller.busy && !!entry.modelData.sha1; onClicked: { removeDialog.path = entry.modelData.relativePath; removeDialog.modTitle = entry.modelData.title; removeDialog.open() } }
+                                    ActionButton { objectName: "contentLock"; Layout.preferredWidth: 26; iconName: entry.modelData.locked ? "lock" : "unlock"; hint: entry.modelData.locked ? "Unlock content" : "Lock content"; selected: !!entry.modelData.locked; subtle: true; compact: true; onClicked: root.controller.setLocked(entry.modelData.relativePath,!entry.modelData.locked) }
+                                    ActionButton { Layout.preferredWidth: 34; iconName: entry.modelData.updateAvailable ? "download" : "switch"; accented: !!entry.modelData.updateAvailable; subtle: true; compact: true; hint: entry.modelData.frozen ? "Version frozen" : entry.modelData.updateAvailable ? "Update to " + entry.modelData.updateRelease.version : "Switch version"; enabled: !entry.modelData.locked && !entry.modelData.frozen && !entry.modelData.pending && !!entry.modelData.projectId; onClicked: { if(entry.modelData.updateAvailable) root.controller.update(entry.modelData.relativePath); else { root.controller.openVersions(entry.modelData.relativePath); versions.open() } } }
+                                    ToggleSwitch { objectName: "contentToggle"; Layout.preferredWidth: 48; checked: !!entry.modelData.enabled; enabled: !entry.modelData.locked && !!entry.modelData.sha1 && !entry.modelData.directory; Accessible.name: "Enable " + entry.modelData.title; onToggled: { root.controller.setEnabled(entry.modelData.relativePath,checked); checked = Qt.binding(function() { return !!entry.modelData.enabled }) } }
+                                    ActionButton { Layout.preferredWidth: 34; iconName: "trash"; hint: "Remove content"; subtle: true; compact: true; enabled: !entry.modelData.locked && !!entry.modelData.sha1; onClicked: { removeDialog.path = entry.modelData.relativePath; removeDialog.modTitle = entry.modelData.title; removeDialog.open() } }
                                 PopupButton { popup: rowMenu; id: moreButton; objectName: "contentMore"; Layout.preferredWidth: 34; iconName: "more"; hint: "More actions"; subtle: true; compact: true }
                                 }
                             }
@@ -119,12 +119,12 @@ Item {
                                     ActionButton { Layout.fillWidth: true; text: "Show file"; iconName: "folder"; subtle: true; alignLeft: true; onClicked: { root.showFilesRequested(entry.modelData.relativePath); rowMenu.close() } }
                                     ActionButton { Layout.fillWidth: true; objectName: "copyContentLink"; text: "Copy link"; iconName: "copy"; subtle: true; alignLeft: true; enabled: !!entry.modelData.projectUrl; onClicked: { root.controller.copyLink(entry.modelData.relativePath); rowMenu.close() } }
                                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.border; Layout.topMargin: 5; Layout.bottomMargin: 5 }
-                                    ActionButton { Layout.fillWidth: true; text: entry.modelData.frozen ? "Unfreeze version" : "Freeze version"; iconName: "lock"; subtle: true; alignLeft: true; enabled: !root.controller.busy && (!!entry.modelData.projectId || !!entry.modelData.sha1); onClicked: { root.controller.freeze(entry.modelData.relativePath,!entry.modelData.frozen); rowMenu.close() } }
+                                    ActionButton { Layout.fillWidth: true; text: entry.modelData.frozen ? "Unfreeze version" : "Freeze version"; iconName: "lock"; subtle: true; alignLeft: true; enabled: !!entry.modelData.projectId || !!entry.modelData.sha1; onClicked: { root.controller.freeze(entry.modelData.relativePath,!entry.modelData.frozen); rowMenu.close() } }
                                 }
                             }
                         }
                     }
-                    EmptyState { anchors.centerIn: parent; visible: root.rows.length === 0; title: root.controller.busy ? "Reading your content…" : "No matching content"; message: "Try another filter, clear your search, or browse content."; symbol: "content" }
+                    EmptyState { anchors.centerIn: parent; visible: root.rows.length === 0; title: root.controller.query.length ? "No matching content" : "No content"; message: ""; symbol: "content" }
                 }
             }
             // Contiguous rows fill the table; only its outer frame has rounded corners.
@@ -150,7 +150,7 @@ Item {
             Text { Layout.fillWidth: true; text: "Remove " + removeDialog.modTitle + " from this pack? The original files will be backed up. Required dependencies are kept."; color: Theme.colors.muted; font.pixelSize: 13; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
             RowLayout { Layout.alignment: Qt.AlignRight
                 ActionButton { text: "Cancel"; subtle: true; onClicked: removeDialog.close() }
-                ActionButton { text: "Remove"; iconName: "trash"; enabled: !root.controller.busy; onClicked: { if(removeDialog.path.length) root.controller.remove(removeDialog.path); else root.controller.removeSelected(); removeDialog.close() } }
+                ActionButton { text: "Remove"; iconName: "trash"; onClicked: { if(removeDialog.path.length) root.controller.remove(removeDialog.path); else root.controller.removeSelected(); removeDialog.close() } }
             }
         }
     }

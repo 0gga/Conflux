@@ -41,7 +41,7 @@ FocusDialog {
             Layout.fillWidth: true
             ActionButton { text: "Cancel"; subtle: true; onClicked: root.close() }
             Item { Layout.fillWidth: true }
-            ActionButton { text: "Install version"; primary: true; enabled: root.selectedVersion >= 0 && !root.controller.busy && !root.controller.versionTarget.frozen && root.controller.versions[root.selectedVersion].provider === "modrinth"; onClicked: { root.controller.installVersion(root.selectedVersion); root.close() } }
+            ActionButton { text: "Install version"; primary: true; enabled: root.selectedVersion >= 0 && !root.controller.versionTarget.locked && !root.controller.versionTarget.frozen && root.controller.versions[root.selectedVersion].provider === "modrinth"; onClicked: { root.controller.installVersion(root.selectedVersion); root.close() } }
         }
     }
 }

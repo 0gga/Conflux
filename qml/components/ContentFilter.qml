@@ -26,7 +26,7 @@ FocusPopup {
             }
             Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.border; Layout.topMargin: 4; Layout.bottomMargin: 4 }
             Repeater {
-                model: [{key:"openSource",label:"Open source"},{key:"external",label:"External"}]
+                model: [{key:"openSource",label:"Open source"},{key:"external",label:"External"},{key:"locked",label:"Locked"},{key:"recent",label:"Updated in the last 7 days"}]
                 delegate: ActionButton {
                     required property var modelData
                     text: modelData.label; subtle: true; alignLeft: true; Layout.fillWidth: true

@@ -1,6 +1,8 @@
 #pragma once
+#include "features/content/ContentOperationQueue.h"
 #include "features/content/ContentPorts.h"
 #include <QObject>
+#include <QSet>
 #include <memory>
 namespace studio {
 // Instance-scoped browse state; all identity comes from indexed files, never titles.
@@ -25,7 +27,10 @@ class BrowseInstalls final : public QObject {
         return !m_target.isEmpty() && m_pack.value("path").toString() == m_target;
     }
     bool busy() const {
-        return m_indexing || m_loading;
+        return m_indexing;
+    }
+    bool lookupsPending() const {
+        return !m_pendingLookups.isEmpty();
     }
     bool connectorAvailable() const;
     QString versionLoaders() const;
@@ -36,8 +41,10 @@ class BrowseInstalls final : public QObject {
     Q_INVOKABLE bool installed(const QVariantMap &, const QString &type = {}) const;
     Q_INVOKABLE void install(const QVariantMap &);
     Q_INVOKABLE void installVersion(const QVariantMap &, const QVariantMap &);
+    Q_INVOKABLE void cancelPending();
   signals:
     void changed();
+    void operationFailed(QString message);
     void installRequested(QVariantMap release, QVariantMap project);
 
   private:
@@ -45,7 +52,10 @@ class BrowseInstalls final : public QObject {
     QVariantMap m_pack;
     QVariantList m_rows;
     QString m_target, m_notice;
-    bool m_indexing = false, m_loading = false;
-    int m_generation = 0;
+    bool m_indexing = false;
+    int m_lookupGeneration = 0;
+    ContentOperationQueue m_lookups;
+    QSet<QString> m_pendingLookups;
+    QString lookupKey(const QVariantMap &) const;
 };
 } // namespace studio

@@ -34,6 +34,110 @@ class ContentInteractionTests : public QObject {
         QQuickStyle::setStyle("Basic");
         qputenv("CONFLUX_STYLE_SETTINGS_DIR", styleStorage.path().toUtf8());
     }
+    void brandAndNavigationIconsRemainCenteredAtEveryScale() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        QQmlComponent component(&engine);
+        component.setData(
+            R"(
+import QtQuick
+import "components"
+Item { width:400; height:200
+    BrandBadge { id:badge; objectName:"badge"; brand:"neoforge"; iconOnly:true; x:20; y:20 }
+    NavigationButton { objectName:"navigation"; x:100; y:20; width:56; iconName:"settings"; text:"" }
+})",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/BadgeCenterFixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> fixture(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY(fixture);
+        fixture->setParentItem(window.contentItem());
+        window.resize(400, 200);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *badge = findItem(fixture.get(), "badge"), *navigation = findItem(fixture.get(), "navigation");
+        QVERIFY(badge);
+        QVERIFY(navigation);
+        for (const auto &brand :
+             {QString("neoforge"), QString("fabric"), QString("modrinth"), QString("forge")}) {
+            badge->setProperty("brand", brand);
+            for (const double scale : {0.75, 1.0, 1.5}) {
+                badge->setProperty("badgeScale", scale);
+                QTest::qWait(20);
+                auto *art = findItem(badge, "brandBadgeImage");
+                if (!art)
+                    art = findItem(badge, "brandBadgeGlyph");
+                QVERIFY(art);
+                const auto center = art->mapToItem(badge, QPointF(art->width() / 2, art->height() / 2));
+                QVERIFY2(qAbs(center.x() - badge->width() / 2) <= 0.51,
+                         qPrintable(QString("%1 scale%2 center%3 width%4 art%5 parent%6 grand%7")
+                                        .arg(brand)
+                                        .arg(scale)
+                                        .arg(center.x())
+                                        .arg(badge->width())
+                                        .arg(art->width())
+                                        .arg(art->parentItem()->x())
+                                        .arg(art->parentItem()->parentItem()->x())));
+                QVERIFY2(qAbs(center.y() - badge->height() / 2) <= 0.51,
+                         qPrintable(QString("%1 scale%2 center%3,%4 badge%5,%6 art%7,%8 parent%9,%10")
+                                        .arg(brand)
+                                        .arg(scale)
+                                        .arg(center.x())
+                                        .arg(center.y())
+                                        .arg(badge->width())
+                                        .arg(badge->height())
+                                        .arg(art->y())
+                                        .arg(art->height())
+                                        .arg(art->parentItem()->y())
+                                        .arg(art->parentItem()->height())));
+            }
+        }
+        auto *body = findItem(navigation, "actionContentRow");
+        QVERIFY(body);
+        const auto center = body->mapToItem(navigation, QPointF(body->width() / 2, body->height() / 2));
+        QVERIFY(qAbs(center.x() - navigation->width() / 2) <= 0.51);
+        QVERIFY(qAbs(center.y() - navigation->height() / 2) <= 0.51);
+    }
+    void customWindowControlsRespectCloseGuardAndRestoreState() {
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData(
+            R"(
+import QtQuick
+import QtQuick.Controls
+import "components"
+ApplicationWindow { id:w; width:600; height:300; visible:true; flags:Qt.Window|Qt.FramelessWindowHint
+    property int closeAttempts:0
+    onClosing:function(event) { closeAttempts++;event.accepted=false }
+    WindowResizeEdges { objectName:"resizeEdges"; anchors.fill:parent;targetWindow:w;z:2 }
+    WindowDragArea { objectName:"drag"; width:200; height:48; targetWindow:w }
+    WindowControls { anchors.top:parent.top; anchors.right:parent.right; targetWindow:w }
+})",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/WindowControlsFixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickWindow> window(qobject_cast<QQuickWindow *>(component.create()));
+        QVERIFY(window);
+        QVERIFY(QTest::qWaitForWindowExposed(window.get()));
+        auto click = [&](const QString &name) {
+            auto *button = findItem(window->contentItem(), name);
+            QVERIFY(button);
+            QTest::mouseClick(
+                window.get(), Qt::LeftButton, Qt::NoModifier,
+                button->mapToScene(QPointF(button->width() / 2, button->height() / 2)).toPoint());
+        };
+        click("windowMaximize");
+        QTRY_COMPARE(window->visibility(), QWindow::Maximized);
+        click("windowMaximize");
+        QTRY_COMPARE(window->visibility(), QWindow::Windowed);
+        auto *drag = findItem(window->contentItem(), "drag");
+        QVERIFY(drag);
+        QTest::mouseDClick(window.get(), Qt::LeftButton, Qt::NoModifier, QPoint(80, 20));
+        QTRY_COMPARE(window->visibility(), QWindow::Maximized);
+        click("windowMaximize");
+        QTRY_COMPARE(window->visibility(), QWindow::Windowed);
+        click("windowClose");
+        QTRY_COMPARE(window->property("closeAttempts").toInt(), 1);
+        QVERIFY(window->isVisible());
+    }
     void wheelScrollingAnimatesAccumulatesAndStaysWithinBounds() {
         QQmlEngine engine;
         QQuickWindow window;
@@ -159,7 +263,7 @@ Item { id:root;width:1000;height:700
     QtObject { id:navigation;property string tab:"gallery" }
     QtObject { id:model;property var project:({title:"Example",sources:[]});property var gallery:[];property bool busy:false;property string notice:"";property var descriptionBlocks:[];signal changed();onGalleryChanged:changed();onBusyChanged:changed() }
     QtObject { id:browser;property bool ready:false;property bool busy:false;property string notice:"";function installed(release,type){return false} }
-    QtObject { id:applicationModel;property bool repositoryBusy:false;function openWeb(url){} }
+    QtObject { id:applicationModel;property bool repositoryBusy:false;property bool navigationBusy:false;function openWeb(url){} }
     QtObject { id:content;property string notice:"" }
     QtObject { id:filters;property var rows:[];property var options:({channels:[],versions:[],loaders:[]});property var filters:({channels:[],versions:[],loaders:[],source:"all"}) }
     ShowcasePage { id:page;objectName:"galleryPage";anchors.fill:parent;showcase:model;browse:browser;app:applicationModel;contentController:content;releaseFilters:filters;tab:navigation.tab;onTabRequested:function(key){navigation.tab=key} }
@@ -1278,6 +1382,21 @@ Item {
         QTRY_COMPARE(copied.count(), 1);
         QCOMPARE(copied.first().first().toString(), QString("https://modrinth.com/mod/project"));
         QCOMPARE(showcase.count(), 0);
+        auto *originalToggle = findItem(panel, "contentToggle");
+        QVERIFY(originalToggle);
+        for (int i = 0; i < 5; ++i)
+            model.setProgress("Background work");
+        QCOMPARE(findItem(panel, "contentToggle"), originalToggle);
+        QTest::mouseClick(
+            &window, Qt::LeftButton, Qt::NoModifier,
+            originalToggle->mapToScene(QPointF(originalToggle->width() / 2, originalToggle->height() / 2))
+                .toPoint());
+        QVERIFY(!model.rows().first().toMap().value("enabled").toBool());
+        QCOMPARE(findItem(panel, "contentToggle"), originalToggle);
+        QTRY_VERIFY(!model.operationsBusy());
+        QCOMPARE(findItem(panel, "contentToggle"), originalToggle);
+        model.setLocked(model.rows().first().toMap().value("relativePath").toString(), true);
+        QVERIFY(!originalToggle->isEnabled());
     }
 };
 QTEST_MAIN(ContentInteractionTests)

@@ -1,4 +1,5 @@
 #include "DesktopSession.h"
+#include "domain/ContentTypes.h"
 #include "features/preferences/ContentPreferences.h"
 #include "platform/BrowseSettingsStore.h"
 #include "platform/CatalogueShowcaseSource.h"
@@ -12,9 +13,10 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
     : QObject(parent), m_browseStore(std::make_shared<BrowseSettingsStore>(settingsFile)),
       m_visibility(std::make_shared<ContentVisibility>(m_browseStore)),
       m_fileStore(std::make_shared<NativePackFileStore>(backupRoot)),
-      m_contentFiles(
-          std::make_shared<NativeContentStore>(std::make_shared<NativeInstalledModIdentity>(m_fileStore),
-                                               backupRoot.isEmpty() ? QString{} : backupRoot + "/content")),
+      m_contentLocks(std::make_shared<ContentLockRegistry>()),
+      m_contentFiles(std::make_shared<NativeContentStore>(
+          std::make_shared<NativeInstalledModIdentity>(m_fileStore),
+          backupRoot.isEmpty() ? QString{} : backupRoot + "/content", m_contentLocks)),
       m_contentInstaller(std::make_shared<ContentInstaller>(m_contentFiles)), m_navigation(this),
       m_input(m_navigation, this),
       m_warnings(std::make_shared<SettingsWarningPreferenceStore>(settingsFile), this),
@@ -33,6 +35,7 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
                   std::make_shared<BrowseFilterPreferences>(m_browseStore), this),
       m_changes(this) {
     m_content.setVisibility(m_visibility);
+    m_content.setLockRegistry(m_contentLocks);
     connect(m_visibility.get(), &ContentVisibility::changed, &m_content, &ContentActions::visibilityChanged);
     connect(m_visibility.get(), &ContentVisibility::changed, &m_catalogue, &BrowseCatalogue::refresh);
     m_catalogue.setDefaults(m_browsePreferences.defaults());
@@ -77,7 +80,7 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
     connect(&m_browse, &BrowseInstalls::installRequested, &m_content, &ContentActions::installRelease);
     connect(&m_content, &ContentActions::changed, this, [this] {
         m_browse.setContext(m_workspace.pack(), m_content.inventory(),
-                            m_content.busy() || m_workspace.busy());
+                            m_content.inventory().isEmpty() && (m_content.busy() || m_workspace.busy()));
     });
 
     connect(&m_navigation, &NavigationHistory::changed, this, &DesktopSession::activateRoute);
@@ -110,7 +113,8 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
 }
 void DesktopSession::setPack(const QVariantMap &pack) {
     const auto root = pack.value("path").toString();
-    if (root != m_workspace.pack().value("path").toString()) {
+    const bool changedRoot = root != m_workspace.pack().value("path").toString();
+    if (changedRoot) {
         m_editor.close();
         m_showcase.close();
         m_browser.setRoot(root);
@@ -118,6 +122,8 @@ void DesktopSession::setPack(const QVariantMap &pack) {
         m_worlds.setRoot(root);
     }
     m_workspace.setPack(pack);
+    if (changedRoot)
+        m_content.setContext(pack, {});
     m_changes.setRoot(root);
     m_launch.setPack(pack);
     activateRoute();
@@ -142,6 +148,24 @@ void DesktopSession::activateRoute() {
         }
         const auto path = route.value("modPath").toString();
         if (!path.isEmpty() && m_showcase.filePath() != path) {
+            bool pending = false;
+            for (const auto &value : m_content.inventory()) {
+                const auto row = value.toMap();
+                if (row.value("relativePath") == path && row.value("pending").toBool() &&
+                    !row.value("projectId").toString().isEmpty()) {
+                    auto project = row;
+                    project["id"] = row.value("projectId");
+                    project["type"] = categoryType(row.value("category").toString());
+                    const auto key =
+                        project.value("provider").toString() + ':' + project.value("id").toString();
+                    if (m_showcase.requestKey() != key)
+                        m_showcase.openProject(pack, project);
+                    pending = true;
+                    break;
+                }
+            }
+            if (pending)
+                return;
             for (const auto &item : m_workspace.files()) {
                 const auto file = item.toMap();
                 if (file.value("relativePath") == path && file.value("category") != "configs") {

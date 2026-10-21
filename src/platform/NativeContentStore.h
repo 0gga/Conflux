@@ -1,4 +1,5 @@
 #pragma once
+#include "features/content/ContentLockRegistry.h"
 #include "features/content/ContentPorts.h"
 #include "features/showcase/ProjectShowcaseSource.h"
 #include <memory>
@@ -6,8 +7,10 @@ namespace studio {
 class NativeContentStore final : public IContentFileStore {
   public:
     explicit NativeContentStore(std::shared_ptr<const IInstalledModIdentity> identity,
-                                QString backupRoot = {});
+                                QString backupRoot = {}, std::shared_ptr<ContentLockRegistry> locks = {});
     QVariantList snapshot(const QVariantMap &, const QVariantList &) const override;
+    ContentFileState reload(const QVariantMap &, const QVariantList &,
+                            bool inspectInventory = true) const override;
     ContentWriteResult setEnabled(const QVariantMap &, const QVariantMap &, bool) const override;
     ContentWriteResult setEnabledBatch(const QVariantMap &, const QVariantList &, bool) const override;
     ContentWriteResult remove(const QVariantMap &, const QVariantList &) const override;
@@ -27,5 +30,6 @@ class NativeContentStore final : public IContentFileStore {
                              const QJsonArray *replacementAssets = nullptr) const;
     std::shared_ptr<const IInstalledModIdentity> m_identity;
     QString m_backupRoot;
+    std::shared_ptr<ContentLockRegistry> m_locks;
 };
 } // namespace studio

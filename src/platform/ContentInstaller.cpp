@@ -11,7 +11,9 @@
 namespace studio {
 ContentInstaller::ContentInstaller(std::shared_ptr<const NativeContentStore> files, QObject *parent,
                                    bool local)
-    : QObject(parent), m_installer(this), m_assets(files, this, local), m_files(std::move(files)) {
+    : QObject(parent),
+      m_installer(this, local ? QUrl("http://127.0.0.1/") : QUrl("https://api.modrinth.com/v2/")),
+      m_assets(files, this, local), m_files(std::move(files)) {
     connect(&m_installer, &ModInstaller::progress, this, &ContentInstaller::progress);
     connect(&m_assets, &AssetInstaller::progress, this, &ContentInstaller::progress);
     connect(&m_installer, &ModInstaller::finished, this,
@@ -191,8 +193,20 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
                 hashes.value(relative) != row.value("sha1").toString())
                 return ContentFileState{
                     pack, {}, "Installed content changed before staging. Refresh and retry."};
+            auto ref = QJsonObject::fromVariantMap(row.value("installedRelease").toMap());
+            auto stagedRelative = relative;
+            if (!ref.isEmpty() && row.value("category") == "mods") {
+                const auto hash = row.value("sha1").toString().toLower();
+                if (ref.value("sha1").toString().compare(hash, Qt::CaseInsensitive) != 0)
+                    return ContentFileState{
+                        pack, {}, "Installed release metadata differs from its file. Refresh and retry."};
+                // The isolated workspace is a managed pack, even for external instances.
+                // Retained pins must satisfy its hash-path contract without renaming input files.
+                stagedRelative = "mods/" + hash + ".jar" + (row.value("enabled").toBool() ? "" : ".disabled");
+                ref["sha1"] = hash;
+            }
             const auto source = NativePackFileStore::resolve(pack.value("path").toString(), relative),
-                       destination = QDir(result.path).filePath(relative);
+                       destination = QDir(result.path).filePath(stagedRelative);
             if (source.isEmpty() || !QDir().mkpath(QFileInfo(destination).absolutePath()))
                 return ContentFileState{pack, {}, "Could not prepare content staging."};
             std::error_code error;
@@ -205,9 +219,8 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
 #endif
             if (error && !QFile::copy(source, destination))
                 return ContentFileState{pack, {}, "Could not stage " + relative};
-            auto ref = QJsonObject::fromVariantMap(row.value("installedRelease").toMap());
             if (!ref.isEmpty()) {
-                ref["installPath"] = relative;
+                ref["installPath"] = stagedRelative;
                 ref["projectTitle"] = row.value("title").toString();
                 ref["projectSourceIds"] = QJsonObject::fromVariantMap(row.value("sourceIds").toMap());
                 ref["enabled"] = row.value("enabled").toBool();

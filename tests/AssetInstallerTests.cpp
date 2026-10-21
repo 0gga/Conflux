@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
@@ -89,7 +90,128 @@ class AssetInstallerTests : public QObject {
         r.release.gameVersions = {"1.21.1"};
         return r;
     }
+    static QByteArray mod(const QString &path, const QString &id, const QString &version) {
+        mz_zip_archive archive{};
+        if (!mz_zip_writer_init_file(&archive, path.toUtf8().constData(), 0))
+            return {};
+        const auto metadata =
+            QJsonDocument(QJsonObject{{"schemaVersion", 1}, {"id", id}, {"version", version}}).toJson();
+        mz_zip_writer_add_mem(&archive, "fabric.mod.json", metadata.constData(), size_t(metadata.size()),
+                              MZ_BEST_COMPRESSION);
+        mz_zip_writer_finalize_archive(&archive);
+        mz_zip_writer_end(&archive);
+        return read(path);
+    }
   private slots:
+    void externalModUpdatesPreserveUnrelatedFiles_data() {
+        QTest::addColumn<bool>("corrupt");
+        QTest::newRow("eight-updates") << false;
+        QTest::newRow("failed-download-preserves-everything") << true;
+    }
+    void externalModUpdatesPreserveUnrelatedFiles() {
+        QFETCH(bool, corrupt);
+        QTemporaryDir temp;
+        const auto root = temp.path() + "/launcher-profile";
+        QVERIFY(QDir().mkpath(root));
+        // Launcher manifests are deliberately opaque and must never be rewritten.
+        const QByteArray launcherManifest = "external launcher metadata";
+        write(root + "/profile.json", launcherManifest);
+        QVariantMap pack{{"path", root}, {"minecraft", "1.21.1"}, {"loader", "fabric"}, {"managed", false}};
+        QVariantList rows;
+        QMap<QString, QByteArray> originals, downloads;
+        QVector<ContentInstallRequest> requests;
+        QTcpServer server;
+        QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+        const auto url = "http://127.0.0.1:" + QString::number(server.serverPort());
+        for (int i = 0; i < 11; ++i) {
+            const auto id = "fixture" + QString::number(i);
+            const auto relative = "mods/" + id + "-1.0+fabric.jar" + (i == 9 ? ".disabled" : "");
+            const auto bytes = mod(temp.path() + '/' + id + ".jar", id, "1.0");
+            QVERIFY(!bytes.isEmpty());
+            originals[relative] = bytes;
+            write(root + '/' + relative, bytes);
+            Release old;
+            old.provider = "modrinth";
+            old.projectId = id;
+            old.id = id + "-old";
+            old.filename = QFileInfo(relative).fileName();
+            old.version = "1.0";
+            old.sha1 = QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha1).toHex());
+            old.fileSize = bytes.size();
+            old.gameVersions = {"1.21.1"};
+            old.loaders = {"fabric"};
+            rows << QVariantMap{{"relativePath", relative},
+                                {"category", "mods"},
+                                {"title", id},
+                                {"sha1", old.sha1},
+                                {"enabled", i != 9},
+                                {"modId", id},
+                                {"sourceIds", i == 10 ? QVariantMap{} : QVariantMap{{"modrinth", id}}},
+                                {"installedRelease", i == 10 ? QVariantMap{} : old.toVariant()}};
+            if (i >= 8)
+                continue;
+            const auto next = mod(temp.path() + '/' + id + "-new.jar", id, "2.0");
+            auto release = old;
+            release.id = id + "-new";
+            release.version = "2.0";
+            release.filename = id + "-2.0+fabric.jar";
+            release.url = url + '/' + release.filename;
+            release.sha1 =
+                QString::fromLatin1(QCryptographicHash::hash(next, QCryptographicHash::Sha1).toHex());
+            release.fileSize = next.size();
+            // Direct updates must not resolve this deliberately unavailable dependency.
+            release.dependencyRefs = {
+                QJsonObject{{"dependency_type", "required"}, {"project_id", "unavailable-library"}}};
+            downloads['/' + release.filename] = next;
+            requests << ContentInstallRequest{release, id, QJsonObject{{"modrinth", id}}, "mod", false};
+        }
+        int served = 0;
+        connect(&server, &QTcpServer::newConnection, &server, [&] {
+            auto *socket = server.nextPendingConnection();
+            connect(socket, &QTcpSocket::readyRead, socket, [&, socket] {
+                const auto input = socket->property("request").toByteArray() + socket->readAll();
+                socket->setProperty("request", input);
+                if (!input.contains("\r\n\r\n") || socket->property("answered").toBool())
+                    return;
+                socket->setProperty("answered", true);
+                const auto target = QString::fromUtf8(input.split(' ').value(1));
+                QVERIFY2(downloads.contains(target), qPrintable("Unexpected provider request: " + target));
+                auto bytes = downloads.value(target);
+                if (corrupt && served == 7)
+                    bytes[0] = char(bytes[0] ^ 1);
+                ++served;
+                socket->write("HTTP/1.1 200 OK\r\nContent-Length: " + QByteArray::number(bytes.size()) +
+                              "\r\nConnection: close\r\n\r\n" + bytes);
+                socket->disconnectFromHost();
+            });
+            connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+        });
+        auto files = std::make_shared<NativeContentStore>(nullptr, temp.path() + "/backups");
+        ContentInstaller installer(files, nullptr, true);
+        ContentWriteResult result;
+        bool done = false;
+        installer.install(pack, rows, requests, [&](ContentWriteResult value) {
+            result = value;
+            done = true;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(done, 15000);
+        QVERIFY2(result.ok == !corrupt, qPrintable(result.error));
+        QCOMPARE(served, 8);
+        QCOMPARE(result.changed, !corrupt);
+        QCOMPARE(read(root + "/profile.json"), launcherManifest);
+        QVERIFY(!QFileInfo::exists(root + "/pack.json"));
+        QCOMPARE(QDir(root + "/mods").entryList(QDir::Files).size(), 11);
+        for (auto it = originals.cbegin(); it != originals.cend(); ++it) {
+            const auto index = it.key().mid(QString("mods/fixture").size()).section('-', 0, 0).toInt();
+            if (corrupt || index >= 8)
+                QCOMPARE(read(root + '/' + it.key()), it.value());
+            else {
+                QVERIFY(!QFileInfo::exists(root + '/' + it.key()));
+                const auto filename = requests[index].release.filename;
+                QCOMPARE(read(root + "/mods/" + filename), downloads.value('/' + filename));
+            }
+        }
+    }
     void mixedZipQueuePreservesManagedAssetPins_data() {
         QTest::addColumn<bool>("failLast");
         QTest::newRow("complete") << false;

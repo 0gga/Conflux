@@ -14,7 +14,7 @@ Rectangle {
     readonly property real contentScale: Appearance.values.contentScale / 100
     readonly property real inset: Appearance.values.cardPadding * contentScale
     readonly property var supportedLoaders: (project.loaders || []).filter(function(loader) {
-        return loader !== "minecraft" && loader !== "datapack" && (!root.selectedLoaders.length || root.selectedLoaders.indexOf(loader) !== -1)
+        return loader !== "minecraft" && ((root.project.type || "mod") !== "mod" || !root.selectedLoaders.length || root.selectedLoaders.indexOf(loader) !== -1)
     })
     signal opened
     signal visibilityRequested(bool hidden)
@@ -24,8 +24,7 @@ Rectangle {
     radius: 14
     color: hover.hovered ? Theme.colors.hover : Theme.colors.card
     border.width: 0
-    readonly property bool unavailable: !installState.canInstall && !installState.installed
-    opacity: unavailable ? Appearance.values.unavailableOpacity / 100 : 1
+    opacity: installState.installed ? Appearance.values.installedOpacity / 100 : 1
     function updatedAge(value) {
         const days=Math.max(0,Math.floor((Date.now()-Date.parse(value))/86400000))
         if (!isFinite(days)) return ""
@@ -63,19 +62,18 @@ Rectangle {
             id: badges; spacing: 5 * root.contentScale
             Repeater {
                 model: root.project.sources && root.project.sources.length ? root.project.sources : (root.project.provider ? [root.project.provider] : [])
-                delegate: BrandBadge { required property string modelData; objectName: "browsePlatformBadge"; brand: modelData; iconOnly: true; badgeScale: root.contentScale }
+                delegate: BrandBadge { required property string modelData; objectName: "browsePlatformBadge"; brand: modelData; iconOnly: true; tooltipsEnabled: false; badgeScale: root.contentScale }
             }
             Repeater {
                 model: root.supportedLoaders
-                delegate: BrandBadge { required property string modelData; objectName: "browseLoaderBadge"; brand: modelData; iconOnly: true; badgeScale: root.contentScale }
+                delegate: BrandBadge { required property string modelData; objectName: "browseLoaderBadge"; brand: modelData; iconOnly: true; tooltipsEnabled: false; badgeScale: root.contentScale }
             }
             Rectangle {
                 objectName: "browseVersionBadge"
                 visible: root.minecraft.length > 0
                 width: versionText.implicitWidth + 16 * root.contentScale; height: tags.height; radius: height/2; color: Theme.colors.input
                 Text { id: versionText; anchors.centerIn: parent; text: root.minecraft; color: Theme.colors.muted; font.pixelSize: 11 * root.contentScale }
-                HoverHandler { id: versionHover }
-                RoundedToolTip { showWhen: versionHover.hovered; text: "Minecraft " + root.minecraft }
+                Accessible.name: "Minecraft " + root.minecraft
             }
             Item { width: 3 * root.contentScale; height: 1 }
             Rectangle {
@@ -83,8 +81,7 @@ Rectangle {
                 visible: !!Appearance.values.showEnvironment && !!root.project.environment && root.project.environment !== "unknown"
                 width: tags.height; height: tags.height; radius: height/2; color: Theme.colors.input
                 Icon { anchors.centerIn: parent; name: root.project.environment === "client" ? "monitor" : "world"; size: 14 * root.contentScale }
-                HoverHandler { id: environmentHover }
-                RoundedToolTip { showWhen: environmentHover.hovered; text: Branding.label(root.project.environment || "") }
+                Accessible.name: Branding.label(root.project.environment || "")
             }
             Repeater {
                 model: Appearance.values.showCategories ? (root.project.categories || []).filter(function(tag) { return (root.project.loaders || []).indexOf(tag) === -1 }) : []
@@ -107,6 +104,7 @@ Rectangle {
         width: Math.max(140 * root.contentScale, installButton.implicitWidth, statistics.implicitWidth, updated.implicitWidth)
         spacing: 4 * root.contentScale
         ActionButton {
+            tooltipsEnabled: false
             id: installButton; objectName: "browseInstallButton"
             Layout.alignment: Qt.AlignRight
             text: root.installState.label || "Install"; iconName: root.installState.installed ? "check" : "plus"
@@ -118,12 +116,13 @@ Rectangle {
         RowLayout {
             id: statistics; objectName: "browseStatistics"
             Layout.alignment: Qt.AlignRight; spacing: 8 * root.contentScale
-            Repeater { model: Appearance.values.showDownloads ? (root.project.downloadStats || []) : []; delegate: ContentStatistic { required property var modelData; brand: modelData.provider; text: modelData.count; hint: Branding.label(brand) + " downloads"; statisticScale: root.contentScale } }
-            ContentStatistic { visible: !!Appearance.values.showFollowers && (root.project.followersRaw || 0)>0; iconName: "heart"; text: root.project.followers || ""; hint: "Followers"; statisticScale: root.contentScale }
+            Repeater { model: Appearance.values.showDownloads ? (root.project.downloadStats || []) : []; delegate: ContentStatistic { tooltipsEnabled: false; required property var modelData; brand: modelData.provider; text: modelData.count; hint: Branding.label(brand) + " downloads"; statisticScale: root.contentScale } }
+            ContentStatistic { tooltipsEnabled: false; visible: !!Appearance.values.showFollowers && (root.project.followersRaw || 0)>0; iconName: "heart"; text: root.project.followers || ""; hint: "Followers"; statisticScale: root.contentScale }
         }
-        ContentStatistic { id: updated; objectName: "browseUpdated"; Layout.alignment: Qt.AlignRight; visible: !!Appearance.values.showUpdated && !!root.project.updated; iconName: "history"; text: root.updatedAge(root.project.updated || ""); hint: root.project.updated || ""; statisticScale: root.contentScale }
+        ContentStatistic { tooltipsEnabled: false; id: updated; objectName: "browseUpdated"; Layout.alignment: Qt.AlignRight; visible: !!Appearance.values.showUpdated && !!root.project.updated; iconName: "history"; text: root.updatedAge(root.project.updated || "");  statisticScale: root.contentScale }
     }
     PopupButton {
+        tooltipsEnabled: false
         popup: menu
         id: more; objectName: "browseMoreButton"
         anchors.right: parent.right; anchors.rightMargin: root.inset; anchors.top: parent.top; anchors.topMargin: root.inset

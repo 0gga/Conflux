@@ -90,13 +90,27 @@ class AppearanceTests final : public QObject {
         Appearance finalState(nullptr, dir.path());
         QCOMPARE(finalState.values(), restored.values());
     }
+    void installedOpacityMigratesOnceAndNewChoiceWins() {
+        QTemporaryDir dir;
+        auto store = std::make_shared<NativeAppearanceStore>(dir.path());
+        store->save({{"unavailableOpacity", 65}});
+        Appearance migrated(store);
+        QCOMPARE(migrated.values().value("installedOpacity").toInt(), 65);
+        QVERIFY(!migrated.values().contains("unavailableOpacity"));
+        QVERIFY(migrated.setValue("installedOpacity", 75));
+        Appearance reopened(store);
+        QCOMPARE(reopened.values().value("installedOpacity").toInt(), 75);
+        store->save({{"unavailableOpacity", 65}, {"installedOpacity", 80}});
+        Appearance both(store);
+        QCOMPARE(both.values().value("installedOpacity").toInt(), 80);
+    }
     void layoutPreferencesPersistAndRejectUnsafeSizes() {
         QTemporaryDir dir;
         Appearance layout(nullptr, dir.path());
         QCOMPARE(layout.values().value("artworkSize").toInt(), 88);
-        QCOMPARE(layout.values().value("unavailableOpacity").toInt(), 50);
-        QVERIFY(layout.setValue("unavailableOpacity", 65));
-        QVERIFY(!layout.setValue("unavailableOpacity", 10));
+        QCOMPARE(layout.values().value("installedOpacity").toInt(), 50);
+        QVERIFY(layout.setValue("installedOpacity", 65));
+        QVERIFY(!layout.setValue("installedOpacity", 10));
         QVERIFY(layout.setValue("uiScale", 125));
         QVERIFY(layout.setValue("contentScale", 120));
         QVERIFY(layout.setValue("filterScale", 85));

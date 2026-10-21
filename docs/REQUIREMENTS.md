@@ -90,7 +90,7 @@ The source statements and reference images distinguish these requirements from i
 
 - Popups take focus and block background interaction, including conflict-warning popups. Instance content tables have no outer outline; row hover fills the contiguous table cells inside one rounded outer frame. Unavailable actions, including Installed, have no hover response.
 
-- Reserve scrollbar space beside cards and other scrollable content; clipped hover backgrounds retain rounded viewport corners. Align content author and title baselines. Use icon-led card statistics and configurable unavailable-content opacity with a live Appearance preview.
+- Reserve scrollbar space beside cards and other scrollable content; clipped hover backgrounds retain rounded viewport corners. Align content author and title baselines. Use icon-led card statistics and configurable installed-content opacity with a live Appearance preview.
 - Preserve source description imagery and useful markup in the native theme. Gallery images open in a focused enlarged viewer with navigation and zoom.
 - Shared hover/press behavior must preserve control geometry and pill silhouettes. Search fields have an internal trailing clear button. In instance content, put Updates between Hidden and Update all, use a padded short divider after Filter and put Refresh at the far right.
 
@@ -106,3 +106,5 @@ The source statements and reference images distinguish these requirements from i
 - Clicking outside an enlarged gallery image closes the viewer; image interaction and toolbar controls remain usable. At100% zoom the image should occupy roughly the previous83% size. Gallery fit is configurable in Appearance.
 
 - Preserve whole-card hover while the pointer is over tags, downloads and other descendant controls.
+
+- Discovery cards have no tooltips, including metadata and dates. Installed content is dimmed using Appearance opacity; uninstalled content stays at normal opacity. Resource and Data Pack discovery omit loader filters but retain platform/loader metadata tags. Version pages support OR platform selection including Data Pack, with searchable game-version menus, selected counts and inline clearing.

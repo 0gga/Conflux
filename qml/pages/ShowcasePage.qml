@@ -55,8 +55,8 @@ Item {
                 Flow {
                     Layout.fillWidth: true; spacing: 6
                     ChoiceFilter { objectName: "versionChannelFilter"; label: "Channel"; choices: root.releaseFilters.options.channels || []; values: root.releaseFilters.filters.channels; onSelectionRequested: function(selection) { root.releaseFilters.configure({channels:selection}) } }
-                    ChoiceFilter { label: "Game version"; choices: root.releaseFilters.options.versions || []; values: root.releaseFilters.filters.versions; onSelectionRequested: function(selection) { root.releaseFilters.configure({versions:selection}) } }
-                    ChoiceFilter { visible: root.showcase.project.type === "mod"; label: "Loader"; loaderNames: true; choices: root.releaseFilters.options.loaders || []; values: root.releaseFilters.filters.loaders; onSelectionRequested: function(selection) { root.releaseFilters.configure({loaders:selection}) } }
+                    ChoiceFilter { searchable: true; label: "Game version"; choices: root.releaseFilters.options.versions || []; values: root.releaseFilters.filters.versions; onSelectionRequested: function(selection) { root.releaseFilters.configure({versions:selection}) } }
+                    ChoiceFilter { objectName: "versionPlatformFilter"; visible: (root.releaseFilters.options.loaders || []).length > 0; label: "Platform"; loaderNames: true; choices: root.releaseFilters.options.loaders || []; values: root.releaseFilters.filters.loaders; onSelectionRequested: function(selection) { root.releaseFilters.configure({loaders:selection}) } }
                     SelectBox { implicitHeight: 36; model: ["All sources", "Modrinth", "CurseForge"]; currentIndex: ["all","modrinth","curseforge"].indexOf(root.releaseFilters.filters.source); onActivated: root.releaseFilters.configure({source:["all","modrinth","curseforge"][currentIndex]}) }
                     ActionButton { text: "Clear"; subtle: true; compact: true; onClicked: root.releaseFilters.clear() }
                 }

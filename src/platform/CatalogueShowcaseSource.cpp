@@ -58,6 +58,6 @@ void CatalogueShowcaseSource::load(const Project &project, const QString &game, 
     m_loading.clear();
     m_details.clear();
     m_details[generation] = std::move(callback);
-    m_client.loadProject(project, game, loader, generation);
+    m_client.loadProject(project, game, loader, generation, true);
 }
 } // namespace studio

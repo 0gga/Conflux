@@ -303,21 +303,36 @@ ApplicationWindow {
         card->setWidth(950);
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *appearance =
+            engine.singletonInstance<studio::Appearance *>(qmlTypeId("Conflux.Style", 1, 0, "Appearance"));
+        QVERIFY(appearance);
+        QVERIFY(appearance->setValue("tooltips", 1));
+        QVERIFY(appearance->setValue("tooltipDelay", 0));
+        auto metadata = card->property("project").toMap();
+        metadata["updated"] = "2026-10-15T17:51:36.063140+00:00";
+        metadata["environment"] = "client";
+        metadata["followersRaw"] = 42000;
+        metadata["followers"] = "42K";
+        card->setProperty("project", metadata);
         QTest::mouseMove(&window, QPoint(980, 220));
         const auto idle = card->property("color").value<QColor>();
         QTest::mouseMove(&window, card->mapToScene(QPointF(400, 20)).toPoint());
         QTRY_VERIFY(card->property("color").value<QColor>() != idle);
         const auto highlighted = card->property("color").value<QColor>();
-        for (const auto &name :
-             {"browsePlatformBadge", "browseLoaderBadge", "browseVersionBadge", "browseCategoryBadge",
-              "browseStatistics", "browseInstallButton", "browseMoreButton"}) {
+        for (const auto &name : {"browsePlatformBadge", "browseLoaderBadge", "browseVersionBadge",
+                                 "browseCategoryBadge", "browseEnvironmentBadge", "browseStatistics",
+                                 "browseUpdated", "browseInstallButton", "browseMoreButton"}) {
             auto *item = findItem(card.get(), name);
             QVERIFY(item);
             QTest::mouseMove(&window,
                              item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
             QTest::qWait(30);
             QCOMPARE(card->property("color").value<QColor>(), highlighted);
+            for (auto *tip : card->findChildren<QObject *>("roundedToolTip"))
+                QVERIFY2(!tip->property("visible").toBool(),
+                         qPrintable(QString("Unexpected card tooltip over %1").arg(name)));
         }
+        appearance->reset();
         QTest::mouseMove(&window, QPoint(980, 220));
         QTRY_COMPARE(card->property("color").value<QColor>(), idle);
     }
@@ -746,6 +761,69 @@ Item {
         QTRY_COMPARE(selection.count(), 1);
         const auto selected = selection.first().first().value<QJSValue>().toVariant().toStringList();
         QCOMPARE(selected, (QStringList{"release", "beta"}));
+        filter->setProperty("values", selected);
+        QCOMPARE(filter->property("text").toString(), QString("Channel: 2 selected"));
+        auto *count = findItem(window.contentItem(), "choiceFilterCount");
+        QVERIFY(count);
+        QCOMPARE(count->property("text").toString(), QString("2 selected"));
+        auto *clear = findItem(filter.get(), "choiceFilterClear");
+        QVERIFY(clear);
+        auto *popup = filter->property("popup").value<QObject *>();
+        QVERIFY(QMetaObject::invokeMethod(popup, "close"));
+        QTRY_VERIFY(!popup->property("visible").toBool());
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          clear->mapToScene(QPointF(clear->width() / 2, clear->height() / 2)).toPoint());
+        QTRY_COMPARE(selection.count(), 2);
+        QVERIFY(selection.last().first().value<QJSValue>().toVariant().toList().isEmpty());
+        QVERIFY(!popup->property("visible").toBool());
+    }
+    void versionChoiceSearchIsBoundedAndPlatformsKeepDataPacks() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(620, 440);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/components/ChoiceFilter.qml"));
+        QStringList versions;
+        for (int i = 32; i > 0; --i)
+            versions << QString("1.21.%1").arg(i);
+        std::unique_ptr<QQuickItem> filter(qobject_cast<QQuickItem *>(component.createWithInitialProperties(
+            {{"label", "Game version"}, {"choices", versions}, {"values", QStringList{"1.21.1"}}})));
+        QVERIFY2(filter, qPrintable(component.errorString()));
+        filter->setParentItem(window.contentItem());
+        filter->setPosition(QPointF(12, 12));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          filter->mapToScene(QPointF(50, 18)).toPoint());
+        QTRY_VERIFY(findItem(window.contentItem(), "choiceFilterSearch"));
+        auto *search = findItem(window.contentItem(), "choiceFilterSearch");
+        auto *options = findItem(window.contentItem(), "choiceFilterOptions");
+        QVERIFY(search && options);
+        QVERIFY(options->height() <= 280);
+        QVERIFY(options->property("contentHeight").toReal() > options->height());
+        QTest::qWait(60);
+        QVERIFY(window.grabWindow().save(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                         "/../artifacts/version-dropdown.png"));
+        for (const auto character : QByteArray("1.21.32"))
+            QTest::keyClick(&window, static_cast<Qt::Key>(character));
+        QTRY_COMPARE(options->property("count").toInt(), 1);
+        QVERIFY(findItem(window.contentItem(), "releaseFilterOption-1.21.32"));
+        auto *popup = filter->property("popup").value<QObject *>();
+        QVERIFY(QMetaObject::invokeMethod(popup, "close"));
+        filter->setProperty("loaderNames", true);
+        filter->setProperty("label", "Platform");
+        filter->setProperty("choices", QStringList{"datapack", "neoforge", "fabric", "forge", "quilt"});
+        filter->setProperty("values", QStringList{"datapack", "neoforge"});
+        QCOMPARE(filter->property("text").toString(), QString("Platform: 2 selected"));
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          filter->mapToScene(QPointF(50, 18)).toPoint());
+        QTRY_VERIFY(findItem(window.contentItem(), "releaseFilterOption-datapack"));
+        auto *data = findItem(window.contentItem(), "releaseFilterOption-datapack");
+        QCOMPARE(data->property("text").toString(), QString("Data Pack"));
+        QVERIFY(data->property("selected").toBool());
+        QTest::qWait(60);
+        QVERIFY(window.grabWindow().save(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                         "/../artifacts/platform-dropdown.png"));
     }
     void compactCardsKeepEqualArtworkInsetsAndFilteredOrderedBadges() {
         QQmlEngine engine;
@@ -808,13 +886,24 @@ Item {
         QVERIFY(card->height() < 130);
         card->setProperty("installState",
                           QVariantMap{{"canInstall", false}, {"installed", false}, {"label", "Unavailable"}});
-        QTRY_COMPARE(card->opacity(), 0.5);
-        QVERIFY(appearance->setValue("unavailableOpacity", 70));
-        QTRY_COMPARE(card->opacity(), 0.7);
+        QTRY_COMPARE(card->opacity(), 1.0);
         card->setProperty("installState",
                           QVariantMap{{"canInstall", false}, {"installed", true}, {"label", "Installed"}});
+        QTRY_COMPARE(card->opacity(), 0.5);
+        QVERIFY(appearance->setValue("installedOpacity", 70));
+        QTRY_COMPARE(card->opacity(), 0.7);
+        card->setProperty("installState",
+                          QVariantMap{{"canInstall", true}, {"installed", false}, {"label", "Install"}});
         QTRY_COMPARE(card->opacity(), 1.0);
         appearance->reset();
+        auto metadata = card->property("project").toMap();
+        for (const auto &type : {"resourcepack", "datapack"}) {
+            metadata["type"] = type;
+            metadata["loaders"] = QStringList{"datapack", "fabric"};
+            card->setProperty("project", metadata);
+            QTRY_COMPARE(card->property("supportedLoaders").value<QJSValue>().toVariant().toStringList(),
+                         (QStringList{"datapack", "fabric"}));
+        }
     }
     void browseCardInstallClickDoesNotOpenTheProject() {
         QQmlEngine engine;

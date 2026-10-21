@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import Conflux.Style
 RowLayout {
     id: root
+    property bool tooltipsEnabled: true
     property string iconName: ""
     property string brand: ""
     readonly property var brandInfo: brand.length ? Branding.info(brand) : ({})
@@ -20,5 +21,5 @@ RowLayout {
     }
     Text { objectName: "statisticText"; text: root.text; color: Theme.colors.muted; font.pixelSize: 12 * root.statisticScale; textFormat: Text.PlainText }
     HoverHandler { id: hover }
-    RoundedToolTip { showWhen: hover.hovered && root.hint.length>0; text: root.hint }
+    RoundedToolTip { showWhen: root.tooltipsEnabled && hover.hovered && root.hint.length>0; text: root.hint }
 }

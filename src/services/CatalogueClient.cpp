@@ -317,9 +317,11 @@ void CatalogueClient::facets(std::function<void(QVariantMap, QString)> callback)
         });
 }
 
-void CatalogueClient::loadProject(const Project &project, const QString &game, const QString &requestedLoader,
-                                  int generation) {
-    const auto loader = project.type == "mod"        ? requestedLoader
+void CatalogueClient::loadProject(const Project &project, const QString &requestedGame,
+                                  const QString &requestedLoader, int generation, bool allVersions) {
+    const auto game = allVersions ? QString{} : requestedGame;
+    const auto loader = allVersions                  ? QString{}
+                        : project.type == "mod"      ? requestedLoader
                         : project.type == "datapack" ? QString("datapack")
                                                      : QString{};
     struct Batch {

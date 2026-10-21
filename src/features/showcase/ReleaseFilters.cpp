@@ -68,7 +68,6 @@ QVariantMap ReleaseFilters::options() const {
     versions.removeDuplicates();
     loaders.removeDuplicates();
     loaders.removeAll("minecraft");
-    loaders.removeAll("datapack");
     return {
         {"channels", QStringList{"release", "beta", "alpha"}}, {"versions", versions}, {"loaders", loaders}};
 }

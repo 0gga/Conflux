@@ -70,6 +70,26 @@ class BrowseCatalogueTests final : public QObject {
         return fixture;
     }
   private slots:
+    void packDiscoveryIgnoresRememberedLoaderConstraints() {
+        auto api = source();
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
+        BrowseCatalogue model(api, visibility);
+        model.setContext("instance", {"1.21.1"}, {"neoforge"});
+        QTRY_VERIFY(!model.busy());
+        model.configure({{"loaders", QStringList{"fabric", "quilt"}}});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(api->calls.last().query.loaders, (QStringList{"fabric", "quilt"}));
+        for (const auto &type : {"resourcepack", "datapack", "shader"}) {
+            model.configure({{"type", type}});
+            QTRY_VERIFY(!model.busy());
+            QCOMPARE(api->calls.last().query.type, QString(type));
+            QVERIFY(api->calls.last().query.loaders.isEmpty());
+            QCOMPARE(api->calls.last().query.versions, QStringList{"1.21.1"});
+        }
+        model.configure({{"type", "mod"}});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.filters().value("loaders").toStringList(), (QStringList{"fabric", "quilt"}));
+    }
     void loaderChoicesAreEditableAndIndependentOfVersionLockAndBridgeDefaults() {
         auto api = source();
         auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());

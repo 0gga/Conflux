@@ -102,6 +102,27 @@ class ShowcaseTests : public QObject {
         QVERIFY(filters.rows().isEmpty());
         QCOMPARE(filters.filters().value("channels").toStringList(), QStringList{"release"});
     }
+    void dataPackAndLoaderPlatformsAreSelectableTogether() {
+        const auto release = [](QString id, QStringList loaders) {
+            return QVariantMap{{"id", id},
+                               {"loaders", loaders},
+                               {"gameVersions", QStringList{"1.21.1"}},
+                               {"sha1", id + "-exact-hash"}};
+        };
+        const auto zip = release("zip", {"datapack"});
+        const auto jar = release("jar", {"neoforge"});
+        const auto fabric = release("fabric", {"fabric"});
+        ReleaseFilters filters;
+        filters.setContext("instance/data", {QVariantMap{{"variants", QVariantList{zip, jar, fabric}}}},
+                           {"1.21.1"}, {});
+        QVERIFY(filters.options().value("loaders").toStringList().contains("datapack"));
+        filters.configure({{"loaders", QStringList{"datapack", "neoforge"}}});
+        QCOMPARE(filters.rows().first().toMap().value("variants").toList(), (QVariantList{zip, jar}));
+        filters.configure({{"loaders", QStringList{"datapack"}}});
+        QCOMPARE(filters.rows().first().toMap().value("variants").toList(), QVariantList{zip});
+        filters.configure({{"loaders", QStringList{}}});
+        QCOMPARE(filters.rows().first().toMap().value("variants").toList(), (QVariantList{zip, jar, fabric}));
+    }
     void releaseFilterDefaultsSeedOnceAndResetForNewContext() {
         ReleaseFilters filters;
         filters.setContext("pending", {}, {}, {});

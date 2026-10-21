@@ -170,7 +170,8 @@ CatalogueQuery BrowseCatalogue::request(const QString &provider) const {
     q.type = m_filters.value("type").toString();
     q.sort = m_filters.value("sort").toString();
     q.versions = m_filters.value("versions").toStringList();
-    q.loaders = m_filters.value("loaders").toStringList();
+    if (q.type == "mod")
+        q.loaders = m_filters.value("loaders").toStringList();
     q.tags = m_filters.value("tags").toStringList();
     if (m_filters.value("hidden").toBool())
         for (const auto &id : m_visibility->hiddenIdentities())

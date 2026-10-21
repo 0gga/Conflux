@@ -4,6 +4,7 @@ import QtQuick.Controls
 import Conflux.Style
 Button {
     id: control
+    property bool tooltipsEnabled: true
     property bool primary: false
     property bool subtle: false
     property bool selected: false
@@ -26,7 +27,7 @@ Button {
     font.pixelSize: compact ? 12 : 13; font.weight: selected || primary ? Font.DemiBold : Font.Medium
     Accessible.name: text || hint
     Accessible.description: selected ? "Selected" : ""
-    RoundedToolTip { showWhen: control.interactiveHover && control.hint.length > 0; text: control.hint }
+    RoundedToolTip { showWhen: control.tooltipsEnabled && control.interactiveHover && control.hint.length > 0; text: control.hint }
     HoverHandler { enabled: control.enabled; cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor }
     contentItem: Item {
         implicitWidth: labelRow.implicitWidth; implicitHeight: labelRow.implicitHeight

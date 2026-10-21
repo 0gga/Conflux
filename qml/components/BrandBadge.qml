@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import Conflux.Style
 Rectangle {
     id: root
+    property bool tooltipsEnabled: true
     required property string brand
     readonly property var info: Branding.info(brand)
     property string text: info.label
@@ -21,5 +22,5 @@ Rectangle {
         Text { visible: !root.iconOnly; text: root.text; color: root.framed ? (root.info.color || Theme.colors.muted) : Theme.colors.muted; font.pixelSize: 12 * root.badgeScale; textFormat: Text.PlainText }
     }
     HoverHandler { id: hover }
-    RoundedToolTip { showWhen: hover.hovered; text: root.info.label }
+    RoundedToolTip { showWhen: root.tooltipsEnabled && hover.hovered; text: root.info.label }
 }

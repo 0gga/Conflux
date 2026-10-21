@@ -13,7 +13,7 @@ QVariantList Appearance::controls() const {
     add("contentScale", "Content size", "Content cards", 75, 150, 5, 100, "%");
     add("artworkSize", "Artwork size", "Content cards", 64, 144, 4, 88, " px");
     add("cardPadding", "Card padding", "Content cards", 4, 24, 1, 10, " px");
-    add("unavailableOpacity", "Unavailable content opacity", "Content cards", 25, 100, 5, 50, "%");
+    add("installedOpacity", "Installed content opacity", "Content cards", 25, 100, 5, 50, "%");
     add("cardGap", "Space between cards", "Content cards", 4, 24, 1, 8, " px");
     add("filterScale", "Filter size", "Filters", 75, 150, 5, 100, "%");
     add("filterWidth", "Filter panel width", "Filters", 200, 360, 8, 232, " px");
@@ -57,7 +57,10 @@ Appearance::Appearance(std::shared_ptr<IAppearanceStore> store, QObject *parent)
         const auto field = item.toMap();
         const auto key = field.value("key").toString();
         bool valid;
-        const auto number = saved.value(key).toDouble(&valid);
+        // Preserve the previously configured opacity while correcting its presentation meaning.
+        const auto number =
+            saved.value(key, key == "installedOpacity" ? saved.value("unavailableOpacity") : QVariant{})
+                .toDouble(&valid);
         m_values[key] = valid && std::isfinite(number) && number >= field.value("min").toDouble() &&
                                 number <= field.value("max").toDouble() &&
                                 (field.value("kind") == "number" || std::floor(number) == number)

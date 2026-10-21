@@ -89,6 +89,27 @@ class FoundationTests : public QObject {
         candidate.published = "unknown";
         QVERIFY(!isNewerRelease(installed, candidate));
     }
+    void identicalFilePublicationIsNotAnUpdateButChangedRebuildCanBe() {
+        Release installed;
+        installed.projectId = "project";
+        installed.id = "old";
+        installed.version = "1.6.6";
+        installed.published = "2026-07-29T07:43:04Z";
+        installed.sha1 = QString(40, 'a');
+        installed.sha512 = QString(128, 'b');
+        auto candidate = installed;
+        candidate.id = "republished";
+        candidate.published = "2026-07-29T07:43:41Z";
+        QVERIFY(!isNewerRelease(installed, candidate));
+        candidate.sha1 = installed.sha1.toUpper();
+        candidate.sha512.clear();
+        QVERIFY(!isNewerRelease(installed, candidate));
+        candidate.sha1 = QString(40, 'c');
+        candidate.sha512 = installed.sha512.toUpper();
+        QVERIFY(!isNewerRelease(installed, candidate));
+        candidate.sha512 = QString(128, 'd');
+        QVERIFY(isNewerRelease(installed, candidate));
+    }
     void projectIdentityRequiresEvidence() {
         const QVector<Project> input{project("curseforge", "123"), project("modrinth", "abc")};
         QCOMPARE(mergeProjects(input).size(), 2);

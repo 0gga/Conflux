@@ -52,6 +52,108 @@ class ContentActionsTests : public QObject {
                 {"updateRelease", next.toVariant()}};
     }
   private slots:
+    void connectorUpdatesPreserveInstalledLoader_data() {
+        QTest::addColumn<QStringList>("installedLoaders");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("Barehanded-native-NeoForge") << QStringList{"neoforge"} << QString("neoforge");
+        QTest::newRow("Fabric-mod-through-Connector") << QStringList{"fabric"} << QString("fabric");
+        QTest::newRow("universal-mod-prefers-instance-loader")
+            << QStringList{"fabric", "neoforge"} << QString("neoforge");
+    }
+    void connectorUpdatesPreserveInstalledLoader() {
+        QFETCH(QStringList, installedLoaders);
+        QFETCH(QString, expected);
+        QTcpServer server;
+        QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+        const auto hash = QString(40, 'a');
+        bool newer = false;
+        QList<QJsonArray> queries;
+        const auto makeRelease = [&](QString id, QStringList loaders, QString version, QString date,
+                                     QString fileHash) {
+            return QJsonObject{
+                {"id", id},
+                {"project_id", "NnSJuVRa"},
+                {"version_number", version},
+                {"date_published", date},
+                {"version_type", "release"},
+                {"game_versions", QJsonArray{"1.21.1"}},
+                {"loaders", QJsonArray::fromStringList(loaders)},
+                {"files", QJsonArray{QJsonObject{
+                              {"filename", "barehanded-" + loaders.first() + "-" + version + ".jar"},
+                              {"primary", true},
+                              {"size", 100},
+                              {"hashes", QJsonObject{{"sha1", fileHash}}}}}}};
+        };
+        const auto installed =
+            makeRelease("VvSHjZXg", installedLoaders, "1.6.6", "2026-07-29T07:43:04.623658Z", hash);
+        connect(&server, &QTcpServer::newConnection, &server, [&] {
+            auto *socket = server.nextPendingConnection();
+            auto buffer = std::make_shared<QByteArray>();
+            connect(socket, &QTcpSocket::readyRead, socket, [&, socket, buffer] {
+                *buffer += socket->readAll();
+                const int split = buffer->indexOf("\r\n\r\n");
+                if (split < 0)
+                    return;
+                int length = 0;
+                for (const auto &line : buffer->left(split).split('\n'))
+                    if (line.toLower().startsWith("content-length:"))
+                        length = line.mid(15).trimmed().toInt();
+                if (buffer->size() < split + 4 + length)
+                    return;
+                const auto path = buffer->split(' ').value(1);
+                QJsonDocument response;
+                if (path == "/version_files")
+                    response = QJsonDocument(QJsonObject{{hash, installed}});
+                else if (path == "/version_files/update") {
+                    const auto query = QJsonDocument::fromJson(buffer->mid(split + 4, length))
+                                           .object()
+                                           .value("loaders")
+                                           .toArray();
+                    queries << query;
+                    auto candidate = installed;
+                    if (query.size() > 1)
+                        candidate = makeRelease("LUQiuCin", {"fabric"}, "1.6.6",
+                                                "2026-07-29T07:43:41.211934Z", QString(40, 'b'));
+                    else if (newer)
+                        candidate = makeRelease("genuinely-new", {expected}, "1.6.7", "2026-08-01T00:00:00Z",
+                                                QString(40, 'c'));
+                    response = QJsonDocument(QJsonObject{{hash, candidate}});
+                } else
+                    response = QJsonDocument(QJsonArray{});
+                const auto bytes = response.toJson(QJsonDocument::Compact);
+                socket->write("HTTP/1.1 200 OK\r\nContent-Length: " + QByteArray::number(bytes.size()) +
+                              "\r\nConnection: close\r\n\r\n" + bytes);
+                socket->disconnectFromHost();
+            });
+            connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+        });
+        ContentCatalogue catalogue(nullptr,
+                                   QUrl("http://127.0.0.1:" + QString::number(server.serverPort()) + "/"));
+        QVariantList indexed;
+        QString error;
+        bool done = false;
+        const QVariantList rows{
+            QVariantMap{{"category", "mods"}, {"relativePath", "mods/barehanded.jar"}, {"sha1", hash}}};
+        auto check = [&] {
+            done = false;
+            catalogue.refresh(rows, "1.21.1", "neoforge|fabric", [&](QVariantList result, QString failure) {
+                indexed = result;
+                error = failure;
+                done = true;
+            });
+        };
+        check();
+        QTRY_VERIFY_WITH_TIMEOUT(done, 10000);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(queries.last(), QJsonArray{expected});
+        QVERIFY(!indexed.first().toMap().value("updateAvailable").toBool());
+        newer = true;
+        check();
+        QTRY_VERIFY_WITH_TIMEOUT(done, 10000);
+        QVERIFY(error.isEmpty());
+        QCOMPARE(queries.last(), QJsonArray{expected});
+        QVERIFY(indexed.first().toMap().value("updateAvailable").toBool());
+    }
     void catalogueChecksEveryContentTypeWithItsOwnPlatformAndClearsStaleUpdates() {
         QTcpServer server;
         QVERIFY(server.listen(QHostAddress::LocalHost, 0));

@@ -118,6 +118,11 @@ Release modrinthRelease(const QJsonObject &row, const QString &fileSha1) {
     return r;
 }
 bool isNewerRelease(const Release &installed, const Release &candidate) {
+    const auto sameHash = [](const QString &a, const QString &b) {
+        return !a.isEmpty() && !b.isEmpty() && a.compare(b, Qt::CaseInsensitive) == 0;
+    };
+    if (sameHash(installed.sha1, candidate.sha1) || sameHash(installed.sha512, candidate.sha512))
+        return false;
     const auto oldVersion = QVersionNumber::fromString(installed.version),
                newVersion = QVersionNumber::fromString(candidate.version);
     if (!oldVersion.isNull() && !newVersion.isNull() && QVersionNumber::compare(newVersion, oldVersion) < 0)

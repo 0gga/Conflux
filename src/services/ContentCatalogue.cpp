@@ -199,8 +199,15 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
                         const auto category = row.value("category").toString();
                         QStringList loaders;
                         if (category == "mods") {
-                            loaders = loader.split('|', Qt::SkipEmptyParts);
-                            loaders.removeAll("vanilla");
+                            const auto permitted = loader.split('|', Qt::SkipEmptyParts);
+                            const auto installedLoaders = modrinthRelease(installed, hash).loaders;
+                            // Automatic updates keep the installed edition. Connector expands discovery
+                            // compatibility, but must not switch a native mod to its Fabric upload.
+                            for (const auto &candidate : permitted)
+                                if (candidate != "vanilla" && installedLoaders.contains(candidate))
+                                    loaders << candidate;
+                            if (!permitted.isEmpty() && loaders.contains(permitted.first()))
+                                loaders = {permitted.first()};
                         } else if (category == "datapacks")
                             loaders = {"datapack"};
                         else if (category == "resourcepacks")

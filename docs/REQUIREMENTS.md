@@ -112,3 +112,5 @@ The source statements and reference images distinguish these requirements from i
 - Updates include compatible newer mods, resource packs, shaders and per-instance data packs. Update all uses the known update set and skips frozen/current content; explicit Refresh performs discovery. Mixed updates retain verified downloads, backups and dependency checks.
 - Selection actions float over the list without moving it: Clear, Update, Share/copy names/files/links/Markdown, Enable, Disable and Delete. Routine operation progress/cancellation uses compact status icons; failures remain inspectable.
 - Content names, authors and version labels underline on hover. Content names open the project, version labels open Versions, and authors open all their content with both source platforms combined through verified identities.
+
+- Content already on its latest installed loader edition must not appear in Updates; Barehanded1.6.6 NeoForge versus its later-published Fabric build is the owner-reported regression.

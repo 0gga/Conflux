@@ -18,9 +18,9 @@ Item {
         anchors.fill: parent; spacing: 16
         SearchField { Layout.fillWidth: true; leadingIcon: "search"; placeholderText: "Search configs or related mods…"; onTextChanged: root.query = text }
         RowLayout {
-            ActionButton { text: "Editable (" + root.editableCount + ")"; selected: root.category === "editable"; compact: true; onClicked: root.category = "editable" }
-            ActionButton { text: "Needs review"; selected: root.category === "review"; compact: true; onClicked: root.category = "review" }
-            ActionButton { text: "All configs"; selected: root.category === "all"; compact: true; onClicked: root.category = "all" }
+            ActionButton { text: "Editable (" + root.editableCount + ")"; selected: root.category === "editable"; compact: true; subtle: true; selectionOutlineOnly: true; cornerRadius: ControlStyle.subtabRadius; onClicked: root.category = "editable" }
+            ActionButton { text: "Needs review"; selected: root.category === "review"; compact: true; subtle: true; selectionOutlineOnly: true; cornerRadius: ControlStyle.subtabRadius; onClicked: root.category = "review" }
+            ActionButton { text: "All configs"; selected: root.category === "all"; compact: true; subtle: true; selectionOutlineOnly: true; cornerRadius: ControlStyle.subtabRadius; onClicked: root.category = "all" }
         }
         Text { Layout.fillWidth: true; text: "Edit settings using toggles, fields and lists. Needs review lets you identify a file's related mod and shows unsupported formats."; color: Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.WordWrap }
         SmoothListView { boundsBehavior: Flickable.StopAtBounds;

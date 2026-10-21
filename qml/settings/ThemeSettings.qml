@@ -20,6 +20,7 @@ ColumnLayout {
         ActionButton { text: "Candy red"; compact: true; onClicked: Theme.setColor("accent","#FF005E") }
     }
     SectionTabs {
+        subtabs: true
         objectName: "themeColorTabs"; Layout.minimumWidth: 0; Layout.maximumWidth: root.width; current: root.group
         entries: [{key:"surfaces",label:"Surfaces"},{key:"text",label:"Text"},{key:"actions",label:"Actions"},{key:"status",label:"Status"}]
         onSelected: function(key) { root.group=key }

@@ -8,6 +8,7 @@ Button {
     property bool primary: false
     property bool subtle: false
     property bool selected: false
+    property bool selectionOutlineOnly: false
     property bool compact: false
     property bool alignLeft: false
     property bool pill: false
@@ -57,14 +58,14 @@ Button {
         color: control.primary ? (control.interactiveDown ? Qt.darker(Theme.colors.accent, 1.15) : control.interactiveHover ? Qt.lighter(Theme.colors.accent, 1.07) : Theme.colors.accent)
             : control.interactiveDown ? Qt.darker(Theme.colors.selection, 1.2)
             : control.selected ? (control.interactiveHover ? Qt.lighter(Theme.colors.selection, 1.15) : Theme.colors.selection)
-            : control.interactiveHover ? Theme.colors.hover : control.subtle ? "transparent" : Theme.colors.input
-        border.width: 1
+            : control.interactiveHover || (control.selectionOutlineOnly && control.visualFocus) ? Theme.colors.hover : control.subtle ? "transparent" : Theme.colors.input
+        border.width: control.selectionOutlineOnly && !control.selected ? 0 : 1
         border.color: control.primary ? Qt.lighter(Theme.colors.accent,1.15) : control.selected ? Theme.colors.accent : control.interactiveHover ? Qt.lighter(Theme.colors.border,1.5) : Theme.colors.border
         Behavior on color { ColorAnimation { duration: Appearance.values.reduceMotion ? 0 : 100 } }
         Rectangle {
             anchors.fill: parent; anchors.margins: -3; radius: parent.radius + 3
             color: "transparent"; border.width: 1; border.color: Theme.colors.accent
-            visible: control.focusIndicator && control.enabled && control.visualFocus
+            visible: control.focusIndicator && control.enabled && control.visualFocus && (!control.selectionOutlineOnly || control.selected)
         }
     }
 }

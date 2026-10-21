@@ -34,7 +34,7 @@ Item {
                 SelectBox { width: 145; implicitHeight: 36; model: ["Name (A–Z)","Name (Z–A)","Author (A–Z)","File name","Updates first"]; currentIndex: Math.max(0,["name-asc","name-desc","author","filename","updates"].indexOf(root.controller.sort)); onActivated: root.controller.sort = ["name-asc","name-desc","author","filename","updates"][currentIndex] }
                 Repeater {
                     model: [{key:"all",label:"All"},{key:"mods",label:"Mods"},{key:"resourcepacks",label:"Resource Packs"},{key:"shaderpacks",label:"Shaders"},{key:"datapacks",label:"Data Packs"}]
-                    delegate: ActionButton { required property var modelData; text: modelData.label; compact: true; pill: true; subtle: true; selected: root.controller.category === modelData.key; onClicked: root.controller.category = modelData.key }
+                    delegate: ActionButton { required property var modelData; text: modelData.label; compact: true; pill: true; subtle: true; selectionOutlineOnly: true; selected: root.controller.category === modelData.key; onClicked: root.controller.category = modelData.key }
                 }
                 ActionButton { text: "Clear"; compact: true; subtle: true; visible: !!root.controller.filters.author || !!root.controller.filters.environment || !!root.controller.filters.state || root.controller.filters.openSource || root.controller.filters.external || root.controller.filters.locked || root.controller.filters.recent; onClicked: root.controller.clearFilters() }
                 PopupButton { id: filterButton; popup: filters; text: "Filter"; iconName: "plus"; compact: true }

@@ -88,6 +88,7 @@ target_sources(conflux_desktop PRIVATE
     src/platform/ConfigOwnershipStore.h src/platform/ConfigOwnershipStore.cpp
     src/features/showcase/ProjectShowcaseSource.h
     src/features/showcase/ProjectShowcase.h src/features/showcase/ProjectShowcase.cpp
+    src/features/showcase/VersionChangelogs.h src/features/showcase/VersionChangelogs.cpp
     src/features/showcase/ReleaseFilters.h src/features/showcase/ReleaseFilters.cpp
     src/platform/InstalledModIdentity.h src/platform/InstalledModIdentity.cpp
     src/platform/CatalogueShowcaseSource.h src/platform/CatalogueShowcaseSource.cpp)
@@ -177,6 +178,11 @@ if(BUILD_TESTING)
     qt_add_executable(showcase-tests tests/ShowcaseTests.cpp)
     target_link_libraries(showcase-tests PRIVATE conflux_desktop Qt6::Test)
     add_test(NAME showcase COMMAND showcase-tests)
+    qt_add_executable(version-changelog-tests tests/VersionChangelogTests.cpp)
+    target_link_libraries(version-changelog-tests PRIVATE conflux_desktop conflux_styleplugin Qt6::Quick Qt6::QuickControls2 Qt6::Test)
+    target_compile_definitions(version-changelog-tests PRIVATE CONFLUX_QML_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")
+    add_test(NAME version-changelogs COMMAND version-changelog-tests -o "${CMAKE_CURRENT_BINARY_DIR}/version-changelog-results.txt,txt")
+    set_tests_properties(version-changelogs PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     qt_add_executable(content-actions-tests tests/ContentActionsTests.cpp)
     target_link_libraries(content-actions-tests PRIVATE conflux_desktop Qt6::Test)
     add_test(NAME content-actions COMMAND content-actions-tests)

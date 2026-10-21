@@ -1,5 +1,6 @@
 #pragma once
 #include "ProjectShowcaseSource.h"
+#include "VersionChangelogs.h"
 #include <QObject>
 #include <QVariantList>
 #include <memory>
@@ -16,6 +17,8 @@ class ProjectShowcase final : public QObject {
     Q_PROPERTY(QVariantMap changelogRelease READ changelogRelease NOTIFY changed)
     Q_PROPERTY(QString changelogNotice READ changelogNotice NOTIFY changed)
     Q_PROPERTY(bool changelogBusy READ changelogBusy NOTIFY changed)
+    Q_PROPERTY(QAbstractItemModel *changelogModel READ changelogModel CONSTANT)
+    Q_PROPERTY(int changelogIndex READ changelogIndex NOTIFY changed)
     Q_PROPERTY(QString notice READ notice NOTIFY changed)
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
     Q_PROPERTY(QString filePath READ filePath NOTIFY changed)
@@ -27,20 +30,29 @@ class ProjectShowcase final : public QObject {
     void openProject(const QVariantMap &pack, const QVariantMap &project);
     void close();
     Q_INVOKABLE void selectChangelog(const QVariantMap &release);
+    Q_INVOKABLE void requestChangelog(int index, bool retry = false) {
+        m_changelogs.request(index, retry);
+    }
+    QAbstractItemModel *changelogModel() {
+        return &m_changelogs;
+    }
+    int changelogIndex() const {
+        return m_changelogs.selectedIndex();
+    }
     QVariantList changelogVersions() const {
-        return m_changelogVersions;
+        return m_changelogs.versions();
     }
     QVariantList changelogBlocks() const {
-        return m_changelogBlocks;
+        return m_changelogs.selectedBlocks();
     }
     QVariantMap changelogRelease() const {
-        return m_changelogRelease;
+        return m_changelogs.selectedRelease();
     }
     QString changelogNotice() const {
-        return m_changelogNotice;
+        return m_changelogs.selectedNotice();
     }
     bool changelogBusy() const {
-        return m_changelogBusy;
+        return m_changelogs.selectedBusy();
     }
 
     void setCurseforgeKey(const QByteArray &key) {
@@ -78,6 +90,7 @@ class ProjectShowcase final : public QObject {
 
   private:
     std::shared_ptr<IProjectShowcaseSource> m_source;
+    VersionChangelogs m_changelogs;
     std::shared_ptr<const IInstalledModIdentity> m_identity;
     QVariantMap m_project;
     QString m_description, m_notice, m_filePath, m_requestKey;
@@ -85,12 +98,6 @@ class ProjectShowcase final : public QObject {
     QStringList m_gallery;
     QVariantList m_versions, m_descriptionBlocks;
     bool m_busy = false;
-    int m_generation = 0, m_changelogGeneration = 0;
-    QVariantList m_changelogVersions, m_changelogBlocks;
-    QVariantMap m_changelogRelease;
-    QString m_changelogNotice;
-    bool m_changelogBusy = false;
-    QHash<QString, QVariantList> m_changelogCache;
-    QHash<QString, QString> m_releaseChangelogs;
+    int m_generation = 0;
 };
 } // namespace studio

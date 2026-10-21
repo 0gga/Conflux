@@ -62,7 +62,7 @@ Item {
                 delegate: ActionButton {
                     required property string modelData
                     text: modelData === "all" ? "All sources" : modelData === "conflux" ? "Conflux" : modelData === "modrinth" ? "Modrinth" : "CurseForge"
-                    compact: true; subtle: true; selected: root.source === modelData; onClicked: root.source = modelData
+                    compact: true; subtle: true; selectionOutlineOnly: true; cornerRadius: ControlStyle.subtabRadius; selected: root.source === modelData; onClicked: root.source = modelData
                 }
             }
             Item { Layout.fillWidth: true }

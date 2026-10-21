@@ -105,7 +105,7 @@ qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     qml/pack/WorldPanel.qml
     qml/pack/VersionPicker.qml
     qml/settings/BrowseSettings.qml
-    qml/explore/BrowseFilters.qml qml/explore/PaginationBar.qml
+    qml/explore/BrowseFilters.qml qml/explore/PaginationBar.qml qml/explore/PageNavigation.qml
     qml/settings/AppearancePreview.qml qml/settings/AppearanceMetric.qml qml/settings/ThemeColorGroup.qml
     qml/settings/AppearanceField.qml qml/settings/ThemeSettings.qml
     qml/settings/AppearanceSettings.qml
@@ -139,8 +139,8 @@ set_target_properties(modpack-studio PROPERTIES WIN32_EXECUTABLE TRUE MACOSX_BUN
 include(CTest)
 if(BUILD_TESTING)
     qt_add_executable(window-frame-tests tests/WindowFrameTests.cpp)
-    target_link_libraries(window-frame-tests PRIVATE conflux_desktop Qt6::Test)
-    add_test(NAME window-frame COMMAND window-frame-tests)
+    target_link_libraries(window-frame-tests PRIVATE conflux_desktop Qt6::Test Qt6::Quick)
+    add_test(NAME window-frame COMMAND window-frame-tests -o "${CMAKE_CURRENT_BINARY_DIR}/window-frame-results.txt,txt")
     qt_add_executable(appearance-tests tests/AppearanceTests.cpp)
     target_link_libraries(appearance-tests PRIVATE conflux_style conflux_styleplugin Qt6::Test)
     add_test(NAME appearance COMMAND appearance-tests)

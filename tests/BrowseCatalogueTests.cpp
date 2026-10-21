@@ -9,6 +9,7 @@
 #include <QTemporaryDir>
 #include <QUrlQuery>
 #include <QtTest>
+#include <algorithm>
 using namespace studio;
 class MemoryBrowseSettings final : public IBrowseSettingsStore {
   public:
@@ -45,6 +46,9 @@ class SearchFixture final : public ICatalogueSearch {
                     filtered << p;
             projects = filtered;
         }
+        if (call.query.sort == "downloads")
+            std::stable_sort(projects.begin(), projects.end(),
+                             [](const Project &a, const Project &b) { return a.downloads > b.downloads; });
         call.callback({projects.mid(call.offset, call.limit), projects.size(), {}});
     }
     void facets(std::function<void(QVariantMap, QString)> callback) override {
@@ -70,6 +74,107 @@ class BrowseCatalogueTests final : public QObject {
         return fixture;
     }
   private slots:
+    void directPageEntryUsesNativeOffsetsAndKeepsEarlierPagesReachable() {
+        auto api = source(260);
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
+        BrowseCatalogue model(api, visibility);
+        model.setContext("instance", {"1.21.1"}, {"fabric"});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.pageCount(), 13);
+        const auto first = model.projects();
+        model.goToPage(10);
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.page(), 10);
+        QCOMPARE(model.projects().first().toMap().value("id").toString(), QString("180"));
+        QCOMPARE(api->calls.last().offset, 180);
+        model.goToPage(2);
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.page(), 2);
+        QCOMPARE(api->calls.last().offset, 20);
+        model.previous();
+        QCOMPARE(model.projects(), first);
+        model.goToPage(99999);
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.page(), 13);
+        QVERIFY(!model.hasNext());
+        model.goToPage(-1);
+        QCOMPARE(model.page(), 1);
+        QCOMPARE(model.pageCount(), 13);
+    }
+    void directPageEntryRebasesWhenTheProviderResultCountShrinks() {
+        auto api = source(260);
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
+        BrowseCatalogue model(api, visibility);
+        model.setContext("instance", {"1.21.1"}, {"fabric"});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.pageCount(), 13);
+        api->rows["modrinth"].resize(37);
+        model.goToPage(13);
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.page(), 2);
+        QCOMPARE(model.pageCount(), 2);
+        QCOMPARE(model.projects().size(), 17);
+        QCOMPARE(model.projects().first().toMap().value("id").toString(), QString("20"));
+        QVERIFY(!model.hasNext());
+    }
+    void mergedPageEntryPreservesUniqueProjectsAcrossTheSkippedPages() {
+        auto api = source(90);
+        for (int i = 0; i < 90; ++i)
+            api->rows["curseforge"] << project(i, "curseforge");
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
+        BrowseCatalogue model(api, visibility, {{"modrinth:3", "pair"}, {"curseforge:3", "pair"}});
+        model.setKey("fixture-key");
+        QTRY_VERIFY(!model.busy());
+        const auto first = model.projects();
+        model.goToPage(4);
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.page(), 4);
+        QCOMPARE(model.projects().size(), 20);
+        QSet<QString> ids;
+        for (const auto &row : first)
+            ids.insert(row.toMap().value("provider").toString() + ':' + row.toMap().value("id").toString());
+        for (int page = 2; page <= 4; ++page) {
+            model.goToPage(page);
+            QTRY_VERIFY(!model.busy());
+            for (const auto &row : model.projects()) {
+                const auto map = row.toMap();
+                const auto id = map.value("provider").toString() + ':' + map.value("id").toString();
+                QVERIFY(!ids.contains(id));
+                ids.insert(id);
+            }
+        }
+        QCOMPARE(ids.size(), 80);
+    }
+    void downloadSortFindsCombinedLeadersBeyondBothProviderPageBoundaries() {
+        auto api = source(90);
+        api->rows["modrinth"][50].id = "paired-mr";
+        for (int i = 0; i < 90; ++i)
+            api->rows["curseforge"] << project(i, "curseforge");
+        auto paired = project(100, "curseforge");
+        paired.id = "paired-cf";
+        api->rows["curseforge"] << paired;
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
+        BrowseCatalogue model(api, visibility,
+                              {{"modrinth:paired-mr", "pair"}, {"curseforge:paired-cf", "pair"}});
+        model.setKey("fixture-key");
+        QTRY_VERIFY(!model.busy());
+        model.configure({{"sort", "downloads"}});
+        QTRY_VERIFY(!model.busy());
+        const auto rows = model.projects();
+        QCOMPARE(rows.first().toMap().value("id").toString(), QString("paired-mr"));
+        QCOMPARE(rows.first().toMap().value("downloadsRaw").toLongLong(), qint64(1850));
+        qint64 previous = std::numeric_limits<qint64>::max();
+        for (const auto &row : rows) {
+            const auto count = row.toMap().value("downloadsRaw").toLongLong();
+            QVERIFY(count <= previous);
+            previous = count;
+        }
+        bool lookedAhead = false;
+        for (const auto &call : api->calls)
+            if (call.query.sort == "downloads" && call.offset >= 50)
+                lookedAhead = true;
+        QVERIFY(lookedAhead);
+    }
     void authorViewsKeepExactProviderIdsAndRestoreOrdinaryPages() {
         auto api = source();
         auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());

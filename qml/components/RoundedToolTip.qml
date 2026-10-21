@@ -10,15 +10,15 @@ ToolTip {
     padding: 10
     implicitWidth: Math.min(340, metrics.width + leftPadding + rightPadding)
     background: Rectangle {
-        radius: 10
-        color: Theme.colors.input
+        radius: 12
+        color: Theme.colors.selection
         border.color: Theme.colors.border
     }
     contentItem: Text {
         id: label
         text: root.text
         color: Theme.colors.text
-        font.pixelSize: 12
+        font.pixelSize: 13
         textFormat: Text.PlainText
         wrapMode: Text.WordWrap
         TextMetrics { id: metrics; text: root.text; font: label.font }

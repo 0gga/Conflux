@@ -4,6 +4,8 @@
 #include <QJsonDocument>
 #include <QPointer>
 #include <QTimer>
+#include <algorithm>
+#include <limits>
 namespace studio {
 BrowseCatalogue::BrowseCatalogue(std::shared_ptr<ICatalogueSearch> source,
                                  std::shared_ptr<IContentVisibility> visibility, QHash<QString, QString> ids,
@@ -88,6 +90,7 @@ bool BrowseCatalogue::applyDefaults() {
 }
 void BrowseCatalogue::activateView(bool sameInstance) {
     ++m_generation;
+    m_downloadLookups.clear();
     m_busy = false;
     m_notice.clear();
     if (m_contexts.contains(viewKey())) {
@@ -102,6 +105,7 @@ void BrowseCatalogue::activateView(bool sameInstance) {
         m_known = state.known;
         m_building = state.building;
         m_page = state.page;
+        m_targetPage = m_page;
         m_scroll = state.scroll;
         m_defaultLoaderSelection = state.defaultLoaders;
         m_reads = 0;
@@ -261,6 +265,8 @@ void BrowseCatalogue::reset() {
     m_seen.clear();
     m_known.clear();
     m_page = 0;
+    m_targetPage = 0;
+    m_downloadLookups.clear();
     m_scroll = 0;
     m_reads = 0;
     m_busy = true;
@@ -301,8 +307,12 @@ bool BrowseCatalogue::accepted(const Project &p) const {
 }
 bool BrowseCatalogue::before(const Project &a, const Project &b) const {
     const auto sort = m_filters.value("sort").toString();
-    if (sort == "downloads" && a.downloads != b.downloads)
-        return a.downloads > b.downloads;
+    if (sort == "downloads") {
+        const auto left = m_known.value(identity(a), a).totalDownloads();
+        const auto right = m_known.value(identity(b), b).totalDownloads();
+        if (left != right)
+            return left > right;
+    }
     if (sort == "follows" && a.followers != b.followers)
         return a.followers > b.followers;
     if (sort == "updated" && a.updated != b.updated)
@@ -315,6 +325,91 @@ bool BrowseCatalogue::before(const Project &a, const Project &b) const {
     return m_streams.value(a.provider).offset - m_streams.value(a.provider).rows.size() <=
            m_streams.value(b.provider).offset - m_streams.value(b.provider).rows.size();
 }
+void BrowseCatalogue::fetchMore(const QString &provider) {
+    const auto generation = m_generation;
+    const int offset = m_streams.value(provider).offset;
+    QPointer<BrowseCatalogue> guard(this);
+    m_source->fetch(
+        request(provider), offset, 50, [guard, generation, provider, offset](CataloguePage result) {
+            if (!guard || guard->m_generation != generation)
+                return;
+            auto &stream = guard->m_streams[provider];
+            stream.offset += result.projects.size();
+            stream.total = qMax(qint64(0), result.total);
+            stream.nextDownloadBound =
+                result.projects.isEmpty() ? 0 : qMax(qint64(0), result.projects.last().downloads);
+            if (guard->m_filters.value("sort") == "downloads")
+                for (const auto &project : result.projects) {
+                    const auto key = guard->identity(project);
+                    if (guard->m_known.contains(key))
+                        guard->m_known[key] =
+                            mergeProjects({guard->m_known[key], project}, guard->m_identities).first();
+                    else
+                        guard->m_known[key] = project;
+                }
+            stream.rows += result.projects;
+            stream.exhausted =
+                result.projects.isEmpty() || stream.offset >= result.total || !result.error.isEmpty();
+            if (!result.error.isEmpty())
+                guard->m_notice = result.error;
+            // A provider total may shrink between visits. Rebase an empty offset
+            // jump on the current last page instead of showing a phantom page.
+            if (result.error.isEmpty() && result.projects.isEmpty() && guard->m_streams.size() == 1 &&
+                offset > 0) {
+                const int size = qMax(10, guard->m_filters.value("size").toInt());
+                guard->m_page = result.total > 0 ? int((result.total - 1) / size) : 0;
+                guard->m_targetPage = guard->m_page;
+                guard->m_building.clear();
+                if (result.total > 0) {
+                    stream.offset = guard->m_page * size;
+                    stream.exhausted = false;
+                } else {
+                    guard->m_pages.clear();
+                }
+            }
+            QTimer::singleShot(0, guard, [guard] {
+                if (guard)
+                    guard->pump();
+            });
+        });
+}
+bool BrowseCatalogue::hydrateDownloads() {
+    for (const auto &stream : m_streams)
+        for (const auto &project : stream.rows) {
+            const auto key = identity(project);
+            for (auto it = m_identities.cbegin(); it != m_identities.cend(); ++it) {
+                const auto provider = it.key().section(':', 0, 0);
+                if (it.value() != key || provider == project.provider ||
+                    (provider == "curseforge" && !m_cf) || m_downloadLookups.contains(it.key()) ||
+                    m_known.value(key).sourceDownloads.contains(provider))
+                    continue;
+                m_downloadLookups.insert(it.key());
+                CatalogueQuery query;
+                query.provider = provider;
+                query.type = project.type;
+                query.projectIds = {it.key().section(':', 1)};
+                const auto generation = m_generation;
+                QPointer<BrowseCatalogue> guard(this);
+                m_source->fetch(query, 0, 1, [guard, generation, key](CataloguePage result) {
+                    if (!guard || guard->m_generation != generation)
+                        return;
+                    if (!result.projects.isEmpty())
+                        guard->m_known[key] =
+                            mergeProjects({guard->m_known.value(key), result.projects.first()},
+                                          guard->m_identities)
+                                .first();
+                    if (!result.error.isEmpty())
+                        guard->m_notice = result.error;
+                    QTimer::singleShot(0, guard, [guard] {
+                        if (guard)
+                            guard->pump();
+                    });
+                });
+                return true;
+            }
+        }
+    return false;
+}
 void BrowseCatalogue::pump() {
     if (!m_busy)
         return;
@@ -324,28 +419,51 @@ void BrowseCatalogue::pump() {
                 m_notice = "Many results are hidden. This page is partial; continue to see more.";
                 break;
             }
-            const auto provider = it.key();
-            const auto generation = m_generation;
-            const int offset = it->offset;
-            QPointer<BrowseCatalogue> guard(this);
-            m_source->fetch(request(provider), offset, 50,
-                            [guard, generation, provider](CataloguePage result) {
-                                if (!guard || guard->m_generation != generation)
-                                    return;
-                                auto &stream = guard->m_streams[provider];
-                                stream.offset += result.projects.size();
-                                stream.rows = std::move(result.projects);
-                                stream.exhausted = stream.rows.isEmpty() || stream.offset >= result.total ||
-                                                   !result.error.isEmpty();
-                                if (!result.error.isEmpty())
-                                    guard->m_notice = result.error;
-                                QTimer::singleShot(0, guard, [guard] {
-                                    if (guard)
-                                        guard->pump();
-                                });
-                            });
+            fetchMore(it.key());
             return;
         }
+    if (m_filters.value("sort") == "downloads") {
+        if (hydrateDownloads())
+            return;
+        for (auto &stream : m_streams)
+            std::stable_sort(stream.rows.begin(), stream.rows.end(),
+                             [this](const Project &a, const Project &b) {
+                                 return m_known.value(identity(a), a).totalDownloads() >
+                                        m_known.value(identity(b), b).totalDownloads();
+                             });
+        qint64 unseenBound = 0, largestSingleBound = 0;
+        QString more;
+        qint64 largestBound = -1;
+        qint64 best = -1;
+        for (auto it = m_streams.cbegin(); it != m_streams.cend(); ++it) {
+            if (!it->rows.isEmpty())
+                best =
+                    qMax(best, m_known.value(identity(it->rows.first()), it->rows.first()).totalDownloads());
+            if (!it->exhausted) {
+                largestSingleBound = qMax(largestSingleBound, it->nextDownloadBound);
+                unseenBound += qMin(it->nextDownloadBound, std::numeric_limits<qint64>::max() - unseenBound);
+                if (it->nextDownloadBound > largestBound) {
+                    largestBound = it->nextDownloadBound;
+                    more = it.key();
+                }
+            }
+        }
+        bool unseenPair = false;
+        if (m_streams.contains("modrinth") && m_streams.contains("curseforge"))
+            for (auto it = m_identities.cbegin(); it != m_identities.cend(); ++it)
+                if (!m_known.contains(it.value()) && !m_seen.contains(it.value())) {
+                    unseenPair = true;
+                    break;
+                }
+        if (!unseenPair)
+            unseenBound = largestSingleBound;
+        // A project below both provider page boundaries can still have a larger
+        // combined count. Read ahead until no unseen pair can outrank this head.
+        if (!more.isEmpty() && best < unseenBound) {
+            fetchMore(more);
+            return;
+        }
+    }
     const int size = qBound(10, m_filters.value("size").toInt(), 100);
     while (m_building.size() < size) {
         QString selected;
@@ -392,6 +510,10 @@ void BrowseCatalogue::pump() {
             return;
         }
         publish(p);
+        if (m_filters.value("sort") == "downloads" && m_building.size() < size) {
+            QTimer::singleShot(0, this, &BrowseCatalogue::pump);
+            return;
+        }
         bool needsPage = false;
         for (const auto &stream : m_streams)
             if (stream.rows.isEmpty() && !stream.exhausted)
@@ -403,9 +525,19 @@ void BrowseCatalogue::pump() {
     }
     if (m_building.isEmpty() && m_page > 0 && !hasNext())
         --m_page;
-    else
-        m_pages << m_building;
+    else {
+        if (m_pages.size() <= m_page)
+            m_pages.resize(m_page + 1);
+        m_pages[m_page] = m_building;
+    }
     m_building.clear();
+    if (m_page < m_targetPage && hasNext()) {
+        ++m_page;
+        m_reads = 0;
+        QTimer::singleShot(0, this, &BrowseCatalogue::pump);
+        return;
+    }
+    m_targetPage = m_page;
     m_busy = false;
     emit changed();
 }
@@ -443,27 +575,55 @@ bool BrowseCatalogue::hasNext() const {
     }
     return false;
 }
-void BrowseCatalogue::next() {
-    if (m_busy || !hasNext())
+int BrowseCatalogue::pageCount() const {
+    qint64 total = 0;
+    for (const auto &stream : m_streams)
+        total += qMin(stream.total, qint64(std::numeric_limits<int>::max()) - total);
+    const int size = qMax(10, m_filters.value("size").toInt());
+    if (!m_busy && !hasNext())
+        return qMax(1, m_page + 1);
+    return qMax(m_page + 1, int((total + size - 1) / size));
+}
+void BrowseCatalogue::goToPage(int pageNumber) {
+    if (m_busy)
         return;
-    ++m_page;
+    const int target = qBound(1, pageNumber, pageCount()) - 1;
+    if (target == m_page)
+        return;
     m_scroll = 0;
     emit scrollChanged();
-    if (m_page < m_pages.size()) {
+    m_targetPage = target;
+    if (target < m_pages.size() && !m_pages[target].isEmpty()) {
+        m_page = target;
         emit changed();
         return;
     }
+    // A single unfiltered provider supports a native offset jump without loading
+    // every intervening page. Filtered/merged views preserve their dedup cursor.
+    if (m_streams.size() == 1 && !m_filters.value("hidden").toBool() &&
+        !m_filters.value("hideInstalled").toBool() &&
+        !(m_filters.value("sort") == "downloads" && m_cf && !m_identities.isEmpty())) {
+        auto &stream = m_streams.first();
+        stream.rows.clear();
+        stream.offset = target * qMax(10, m_filters.value("size").toInt());
+        stream.exhausted = false;
+        m_seen.clear();
+        m_page = target;
+    } else {
+        m_page = m_pages.size();
+    }
     m_busy = true;
     m_reads = 0;
+    emit changed();
     pump();
 }
+void BrowseCatalogue::next() {
+    if (!m_busy && hasNext())
+        goToPage(m_page + 2);
+}
 void BrowseCatalogue::previous() {
-    if (m_busy || m_page == 0)
-        return;
-    --m_page;
-    m_scroll = 0;
-    emit changed();
-    emit scrollChanged();
+    if (!m_busy && m_page > 0)
+        goToPage(m_page);
 }
 void BrowseCatalogue::hide(const QVariantMap &project, bool hidden) {
     m_visibility->setHidden(project, hidden);

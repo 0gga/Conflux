@@ -14,9 +14,7 @@ WindowFrame::WindowFrame(QWindow &window) : m_window(&window) {
     m_nativeId = window.winId();
     qApp->installNativeEventFilter(this);
     const auto handle = reinterpret_cast<HWND>(m_nativeId);
-    const auto style = GetWindowLongPtrW(handle, GWL_STYLE);
-    SetWindowLongPtrW(handle, GWL_STYLE,
-                      style | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
+    const QRect requestedGeometry = window.geometry();
     // Windows 11 honors this preference; older systems keep their compositor policy.
     const DWORD corners = 2; // DWMWCP_ROUND
     DwmSetWindowAttribute(handle, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &corners, sizeof(corners));
@@ -24,6 +22,7 @@ WindowFrame::WindowFrame(QWindow &window) : m_window(&window) {
     DwmExtendFrameIntoClientArea(handle, &shadow);
     SetWindowPos(handle, nullptr, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    window.setGeometry(requestedGeometry);
 #endif
 }
 WindowFrame::~WindowFrame() {
@@ -37,11 +36,34 @@ bool WindowFrame::nativeEventFilter(const QByteArray &type, void *message, qintp
     const auto *event = static_cast<MSG *>(message);
     if (event->hwnd != reinterpret_cast<HWND>(m_nativeId))
         return false;
+    if (event->message == WM_SYSCOMMAND && (event->wParam & 0xfff0) == SC_MOVE && IsZoomed(event->hwnd)) {
+        RECT maximized{}, restored{};
+        POINT pointer{};
+        if (GetWindowRect(event->hwnd, &maximized) && GetCursorPos(&pointer)) {
+            const qreal fraction = qBound(
+                qreal(0), qreal(pointer.x - maximized.left) / qMax(LONG(1), maximized.right - maximized.left),
+                qreal(1));
+            const int titleOffset = qMax(0, int(pointer.y - maximized.top));
+            m_window->showNormal();
+            if (GetWindowRect(event->hwnd, &restored))
+                SetWindowPos(event->hwnd, nullptr,
+                             pointer.x - qRound(fraction * (restored.right - restored.left)),
+                             pointer.y - qMin(titleOffset, int(restored.bottom - restored.top) / 2), 0, 0,
+                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        // Continue the same native move with the restored window under the pointer.
+    }
     if (event->message == WM_NCCALCSIZE && event->wParam) {
-        if (IsZoomed(event->hwnd)) {
-            MONITORINFO monitor{sizeof(MONITORINFO)};
-            if (GetMonitorInfoW(MonitorFromWindow(event->hwnd, MONITOR_DEFAULTTONEAREST), &monitor))
-                reinterpret_cast<NCCALCSIZE_PARAMS *>(event->lParam)->rgrc[0] = monitor.rcWork;
+        // Keep Windows' native maximize/restore placement. Only remove the caption;
+        // never replace the proposed rectangle with absolute monitor coordinates.
+        if (IsZoomed(event->hwnd) && m_window->windowState() != Qt::WindowFullScreen) {
+            auto &rect = reinterpret_cast<NCCALCSIZE_PARAMS *>(event->lParam)->rgrc[0];
+            const UINT dpi = GetDpiForWindow(event->hwnd);
+            const int horizontal =
+                GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+            const int vertical =
+                GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+            InflateRect(&rect, -horizontal, -vertical);
         }
         *result = 0;
         return true;

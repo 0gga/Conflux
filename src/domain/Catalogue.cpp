@@ -4,6 +4,7 @@
 #include <QImage>
 #include <QVersionNumber>
 #include <algorithm>
+#include <limits>
 
 namespace studio {
 QString compactCount(qint64 n) {
@@ -25,6 +26,19 @@ static QStringList orderedSources(const QMap<QString, QString> &ids) {
         sources.prepend("modrinth");
     return sources;
 }
+qint64 Project::totalDownloads() const {
+    qint64 total = 0;
+    auto counts = sourceDownloads;
+    if (!counts.contains(provider))
+        counts[provider] = downloads;
+    for (auto it = counts.cbegin(); it != counts.cend(); ++it) {
+        if (it.key() != provider && !sourceIds.contains(it.key()))
+            continue;
+        const qint64 count = qMax(qint64(0), it.value());
+        total += qMin(count, std::numeric_limits<qint64>::max() - total);
+    }
+    return total;
+}
 QVariantMap Project::toVariant() const {
     QVariantList statistics;
     auto counts = sourceDownloads;
@@ -44,7 +58,8 @@ QVariantMap Project::toVariant() const {
             {"icon", icon},
             {"url", url},
             {"categories", categories},
-            {"downloads", compactCount(downloads)},
+            {"downloads", compactCount(totalDownloads())},
+            {"downloadsRaw", totalDownloads()},
             {"sources", orderedSources(sourceIds)},
             {"sourceIds", variantIds(sourceIds)},
             {"type", type},
@@ -200,6 +215,8 @@ QVector<Project> mergeProjects(const QVector<Project> &projects, const QHash<QSt
         auto &existing = result[positions[key]];
         auto ids = existing.sourceIds;
         auto downloads = existing.sourceDownloads;
+        for (auto it = project.sourceDownloads.cbegin(); it != project.sourceDownloads.cend(); ++it)
+            downloads.insert(it.key(), it.value());
         downloads.insert(project.provider, project.downloads);
         ids.insert(project.provider, project.id);
         if (project.provider == "modrinth")

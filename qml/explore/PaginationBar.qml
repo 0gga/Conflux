@@ -38,9 +38,7 @@ GridLayout {
             currentIndex: ["merged","modrinth","curseforge"].indexOf(root.catalogue.filters.source)
             onActivated: root.catalogue.configure({source:["merged","modrinth","curseforge"][currentIndex],tags:[]})
         }
-        ActionButton { iconName: "back"; hint: "Previous page"; compact: true; subtle: true; enabled: !root.catalogue.busy && root.catalogue.page>1; onClicked: root.catalogue.previous() }
-        Text { objectName: "browsePageNumber"; text: String(root.catalogue.page); color: Theme.colors.accent; font.pixelSize: 15; font.weight: Font.DemiBold }
-        ActionButton { objectName: "browseNextPage"; iconName: "forward"; hint: "Next page"; compact: true; subtle: true; enabled: !root.catalogue.busy && root.catalogue.hasNext; onClicked: root.catalogue.next() }
+        PageNavigation { catalogue: root.catalogue }
         ActionButton { iconName: "refresh"; hint: "Refresh catalogue"; compact: true; subtle: true; enabled: !root.catalogue.busy; onClicked: root.catalogue.refresh() }
     }
 }

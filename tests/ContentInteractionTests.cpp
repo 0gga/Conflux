@@ -105,7 +105,7 @@ Item { width:400; height:200
 import QtQuick
 import QtQuick.Controls
 import "components"
-ApplicationWindow { id:w; width:600; height:300; visible:true; flags:Qt.Window|Qt.FramelessWindowHint
+ApplicationWindow { id:w; width:600; height:300; visible:true; flags:Qt.Window|Qt.CustomizeWindowHint|Qt.WindowTitleHint|Qt.WindowMinimizeButtonHint|Qt.WindowMaximizeButtonHint|Qt.WindowCloseButtonHint
     property int closeAttempts:0
     onClosing:function(event) { closeAttempts++;event.accepted=false }
     WindowResizeEdges { objectName:"resizeEdges"; anchors.fill:parent;targetWindow:w;z:2 }
@@ -137,6 +137,66 @@ ApplicationWindow { id:w; width:600; height:300; visible:true; flags:Qt.Window|Q
         click("windowClose");
         QTRY_COMPARE(window->property("closeAttempts").toInt(), 1);
         QVERIFY(window->isVisible());
+    }
+    void discoveryPageFieldAcceptsTypingAndPageShortcutsKeepTheirGeometry() {
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData(
+            R"(
+import QtQuick
+import "explore"
+Item { id:fixture; width:600; height:80
+    property int requestedPage:1
+    QtObject { id:catalogue; property int page:1; property int pageCount:1076; property bool busy:false; property bool hasNext:true
+        function goToPage(value) { page=value; fixture.requestedPage=value }
+        function next() { goToPage(page+1) }
+        function previous() { goToPage(page-1) }
+    }
+    PageNavigation { catalogue:catalogue }
+})",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/PageNavigationFixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> root(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY(root);
+        QQuickWindow window;
+        window.resize(600, 100);
+        root->setParentItem(window.contentItem());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTest::qWait(60);
+        QVERIFY(window.grabWindow().save(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                         "/../artifacts/discovery-page-first.png"));
+        int secondPageButtons = 0;
+        QList<QQuickItem *> pending{root.get()};
+        while (!pending.isEmpty()) {
+            auto *item = pending.takeLast();
+            if (item->objectName() == "browsePageShortcut" && item->isVisible() &&
+                item->property("text").toString() == "2")
+                ++secondPageButtons;
+            pending.append(item->childItems());
+        }
+        QCOMPARE(secondPageButtons, 1);
+        auto *field = findItem(root.get(), "browsePageNumber");
+        QVERIFY(field);
+        const auto size = field->size();
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          field->mapToScene(QPointF(field->width() / 2, 18)).toPoint());
+        QTest::keyClick(&window, Qt::Key_A, Qt::ControlModifier);
+        QTest::keyClick(&window, Qt::Key_5);
+        QTest::keyClick(&window, Qt::Key_2);
+        QTest::keyClick(&window, Qt::Key_Return);
+        QTRY_COMPARE(root->property("requestedPage").toInt(), 52);
+        field = findItem(root.get(), "browsePageNumber");
+        QVERIFY(field);
+        QVERIFY(field->width() >= size.width());
+        QTest::qWait(50); // Let the layout place the newly visible previous-page button.
+        QVERIFY(window.grabWindow().save(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                         "/../artifacts/discovery-page-entered.png"));
+        auto *previous = findItem(root.get(), "browsePreviousPage");
+        QVERIFY(previous);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          previous->mapToScene(QPointF(18, 18)).toPoint());
+        QTRY_COMPARE(root->property("requestedPage").toInt(), 51);
     }
     void wheelScrollingAnimatesAccumulatesAndStaysWithinBounds() {
         QQmlEngine engine;
@@ -590,8 +650,39 @@ ApplicationWindow {
             QTest::qWait(30);
             QCOMPARE(card->property("color").value<QColor>(), highlighted);
             for (auto *tip : card->findChildren<QObject *>("roundedToolTip"))
-                QVERIFY2(!tip->property("visible").toBool(),
+                QVERIFY2(QString(name) == "browseStatistics" || QString(name) == "browseUpdated" ||
+                             !tip->property("visible").toBool(),
                          qPrintable(QString("Unexpected card tooltip over %1").arg(name)));
+        }
+        metadata["downloadsRaw"] = qint64(83396619);
+        metadata["downloads"] = "83.4M";
+        metadata["downloadStats"] =
+            QVariantList{QVariantMap{{"provider", "modrinth"}, {"raw", qint64(83389414)}},
+                         QVariantMap{{"provider", "curseforge"}, {"raw", qint64(7205)}}};
+        card->setProperty("project", metadata);
+        for (const auto &name : {"browseDownloads", "browseFollowers", "browseUpdated"}) {
+            auto *stat = findItem(card.get(), name);
+            QVERIFY(stat);
+            QTest::mouseMove(&window,
+                             stat->mapToScene(QPointF(stat->width() / 2, stat->height() / 2)).toPoint());
+            auto *tip = stat->findChild<QObject *>("roundedToolTip");
+            QVERIFY(tip);
+            QTRY_VERIFY(tip->property("visible").toBool());
+            QTest::qWait(60);
+            QVERIFY(window.grabWindow().save(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                             "/../artifacts/discovery-statistic-" + name + ".png"));
+            const auto hint = tip->property("text").toString();
+            QVERIFY(!hint.contains("T17:51"));
+            if (QString(name) == "browseDownloads") {
+                QVERIFY(hint.contains("Modrinth"));
+                QVERIFY(hint.contains("CurseForge"));
+                QVERIFY(hint.contains("total downloads"));
+            }
+            if (QString(name) == "browseFollowers")
+                QVERIFY(hint.contains("followers"));
+            if (QString(name) == "browseUpdated")
+                QVERIFY(hint.startsWith("Updated "));
+            QCOMPARE(card->property("color").value<QColor>(), highlighted);
         }
         appearance->reset();
         QTest::mouseMove(&window, QPoint(980, 220));

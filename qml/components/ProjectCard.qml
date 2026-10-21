@@ -32,6 +32,17 @@ Rectangle {
         if (!isFinite(days)) return ""
         return days===0 ? "Today" : days===1 ? "1 day ago" : days<60 ? days+" days ago" : days<730 ? Math.floor(days/30)+" months ago" : Math.floor(days/365)+" years ago"
     }
+    function exactCount(value) { return Number(value || 0).toLocaleString(Qt.locale(), 'f', 0) }
+    readonly property string downloadsHint: {
+        const rows = (project.downloadStats || []).map(function(stat) {
+            return Branding.label(stat.provider) + ": " + root.exactCount(stat.raw) + " downloads"
+        })
+        return root.exactCount(project.downloadsRaw) + " total downloads" + (rows.length ? "\n" + rows.join("\n") : "")
+    }
+    function updatedHint(value) {
+        const date = new Date(value)
+        return isNaN(date.getTime()) ? "" : "Updated " + date.toLocaleString(Qt.locale(), Locale.LongFormat)
+    }
     HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }
     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.opened() }
     ContentIcon {
@@ -118,10 +129,10 @@ Rectangle {
         RowLayout {
             id: statistics; objectName: "browseStatistics"
             Layout.alignment: Qt.AlignRight; spacing: 8 * root.contentScale
-            Repeater { model: Appearance.values.showDownloads ? (root.project.downloadStats || []) : []; delegate: ContentStatistic { tooltipsEnabled: false; required property var modelData; brand: modelData.provider; text: modelData.count; hint: Branding.label(brand) + " downloads"; statisticScale: root.contentScale } }
-            ContentStatistic { tooltipsEnabled: false; visible: !!Appearance.values.showFollowers && (root.project.followersRaw || 0)>0; iconName: "heart"; text: root.project.followers || ""; hint: "Followers"; statisticScale: root.contentScale }
+            ContentStatistic { objectName: "browseDownloads"; visible: !!Appearance.values.showDownloads; iconName: "download"; text: root.project.downloads || "0"; hint: root.downloadsHint; statisticScale: root.contentScale }
+            ContentStatistic { objectName: "browseFollowers"; visible: !!Appearance.values.showFollowers && (root.project.followersRaw || 0)>0; iconName: "heart"; text: root.project.followers || ""; hint: root.exactCount(root.project.followersRaw) + " followers"; statisticScale: root.contentScale }
         }
-        ContentStatistic { tooltipsEnabled: false; id: updated; objectName: "browseUpdated"; Layout.alignment: Qt.AlignRight; visible: !!Appearance.values.showUpdated && !!root.project.updated; iconName: "history"; text: root.updatedAge(root.project.updated || "");  statisticScale: root.contentScale }
+        ContentStatistic { id: updated; objectName: "browseUpdated"; Layout.alignment: Qt.AlignRight; visible: !!Appearance.values.showUpdated && !!root.project.updated; iconName: "history"; text: root.updatedAge(root.project.updated || ""); hint: root.updatedHint(root.project.updated || ""); statisticScale: root.contentScale }
     }
     PopupButton {
         tooltipsEnabled: false

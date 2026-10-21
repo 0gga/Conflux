@@ -14,6 +14,7 @@ class BrowseCatalogue final : public QObject {
     Q_PROPERTY(QVariantMap author READ author NOTIFY changed)
     Q_PROPERTY(QVariantMap options READ options NOTIFY changed)
     Q_PROPERTY(int page READ page NOTIFY changed)
+    Q_PROPERTY(int pageCount READ pageCount NOTIFY changed)
     Q_PROPERTY(bool hasNext READ hasNext NOTIFY changed)
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
     Q_PROPERTY(QString notice READ notice NOTIFY changed)
@@ -39,6 +40,7 @@ class BrowseCatalogue final : public QObject {
         return m_busy;
     }
     bool hasNext() const;
+    int pageCount() const;
     QString notice() const {
         return m_notice;
     }
@@ -53,6 +55,7 @@ class BrowseCatalogue final : public QObject {
     void setDefaults(const QVariantMap &);
     Q_INVOKABLE void configure(const QVariantMap &);
     Q_INVOKABLE void refresh();
+    Q_INVOKABLE void goToPage(int);
     Q_INVOKABLE void next();
     Q_INVOKABLE void previous();
     Q_INVOKABLE void hide(const QVariantMap &, bool hidden = true);
@@ -66,6 +69,7 @@ class BrowseCatalogue final : public QObject {
         QVector<Project> rows;
         int offset = 0;
         bool exhausted = false;
+        qint64 total = 0, nextDownloadBound = 0;
     };
     struct Snapshot {
         QVariantMap filters;
@@ -82,7 +86,7 @@ class BrowseCatalogue final : public QObject {
     std::shared_ptr<IContentVisibility> m_visibility;
     std::shared_ptr<IBrowseFilterPreferences> m_preferences;
     QHash<QString, QString> m_identities;
-    QSet<QString> m_installed, m_seen;
+    QSet<QString> m_installed, m_seen, m_downloadLookups;
     QHash<QString, Project> m_known;
     QVariantMap m_filters, m_options, m_defaults, m_author;
     QMap<QString, QString> m_contextTypes;
@@ -91,7 +95,7 @@ class BrowseCatalogue final : public QObject {
     QMap<QString, Snapshot> m_contexts;
     QString m_context, m_notice;
     QStringList m_defaultVersions, m_defaultLoaders;
-    int m_page = 0, m_generation = 0, m_reads = 0;
+    int m_page = 0, m_targetPage = 0, m_generation = 0, m_reads = 0;
     bool m_busy = false, m_cf = false, m_optionsLoaded = false;
     bool m_defaultLoaderSelection = true;
     qreal m_scroll = 0;
@@ -101,6 +105,8 @@ class BrowseCatalogue final : public QObject {
     bool accepted(const Project &) const;
     void reset();
     void pump();
+    void fetchMore(const QString &);
+    bool hydrateDownloads();
     void publish(Project);
     bool before(const Project &, const Project &) const;
     QString viewKey() const;

@@ -122,6 +122,30 @@ class FoundationTests : public QObject {
         QCOMPARE(merged.first().sourceIds.size(), 2);
         QCOMPARE(mergeProjects({input.at(1), input.at(0)}, identities).first().provider, "modrinth");
     }
+    void downloadTotalsKeepExactProviderBreakdownsAndDoNotDoubleCountMerges() {
+        Project mr;
+        mr.provider = "modrinth";
+        mr.id = "abc";
+        mr.downloads = 83389414;
+        Project cf;
+        cf.provider = "curseforge";
+        cf.id = "123";
+        cf.downloads = 7205;
+        const QHash<QString, QString> ids{{"modrinth:abc", "pair"}, {"curseforge:123", "pair"}};
+        auto merged = mergeProjects({mr, cf}, ids).first();
+        QCOMPARE(merged.totalDownloads(), qint64(83396619));
+        const auto variant = merged.toVariant();
+        QCOMPARE(variant.value("downloadsRaw").toLongLong(), qint64(83396619));
+        const auto stats = variant.value("downloadStats").toList();
+        QCOMPARE(stats.size(), 2);
+        QCOMPARE(stats[0].toMap().value("raw").toLongLong(), mr.downloads);
+        QCOMPARE(stats[1].toMap().value("raw").toLongLong(), cf.downloads);
+        merged = mergeProjects({merged, mr, cf, merged}, ids).first();
+        QCOMPARE(merged.totalDownloads(), qint64(83396619));
+        QCOMPARE(mr.totalDownloads(), mr.downloads);
+        merged.sourceDownloads["unverified"] = 99999999;
+        QCOMPARE(merged.totalDownloads(), qint64(83396619));
+    }
     void releaseEquivalencePreservesVariants() {
         auto cf = release("curseforge", "1"), mr = release("modrinth", "2");
         QCOMPARE(mergeReleases({cf, mr}).size(), 1);

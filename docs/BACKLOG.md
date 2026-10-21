@@ -62,7 +62,7 @@ These are ideas, not delivered features or additional owner requirements.
 | P1 | Per-instance update channels | Choose stable/beta/alpha with per-project exceptions/freezes; show a changelog and compatibility diff before Update all. |
 | P1 | Shader-engine and side checks | Detect Iris/Oculus/OptiFine and client/server requirements from verified metadata; explain prerequisites and offer reviewed alternatives. |
 | P2 | Batch install queue and saved searches | Queue projects, review the combined dependency plan and preserve named searches beyond the implemented per-instance/content-type compatibility preferences. |
-| P2 | Arbitrary page jumps and precise merged totals | Build resumable provider cursor indexes for large direct jumps; expose deduplicated totals when exact, without treating summed source listings as unique projects. |
+| P2 | Indexed merged page jumps and precise totals | Editable page entry and single-provider offset jumps are delivered. Build resumable provider cursor indexes to accelerate large merged/hidden-view jumps, which currently materialize intervening pages asynchronously. Expose exact deduplicated totals when known; provider totals currently bound merged/client-filtered page counts until exhaustion. |
 | P2 | Instance cloning and profiles | Duplicate a pack with a new Git identity; support client/server/export profiles preserving exact shared pins and explicit overrides. |
 | P2 | Reusable collections | Curate optional groups of mods with compatibility/dependency previews before adding a collection. |
 | P2 | Git-friendly change review | Show added/removed/updated content and config diffs; compare commits and restore a pack version through UI. |
@@ -70,7 +70,7 @@ These are ideas, not delivered features or additional owner requirements.
 | P2 | Global ZIP data-pack loader integration | Detect or offer a compatible global pack loader; validate pack formats and future-world activation without silently rewriting saves. Instance storage and mod-form variants are implemented. |
 | P3 | Searchable command palette | Jump to instances, worlds, content, configs and common actions with clear context and keyboard shortcuts. |
 
-- Delivered browsing: page-size/sort controls, cached page/scroll restoration, right multi-value compatibility/tag filters, persistent hide/restore menus, instance-scoped Data Packs and the Connector search preference. Precise merged totals/direct page jumps, automatic global ZIP loader provisioning and cross-type ZIP dependency graphs remain follow-up work.
+- Delivered browsing: page-size/sort controls, cached page/scroll restoration, right multi-value compatibility/tag filters, persistent hide/restore menus, instance-scoped Data Packs and the Connector search preference. Editable page entry with nearby/first/last shortcuts and native single-source offset jumps are delivered. Precise merged totals/indexed merged jumps, automatic global ZIP loader provisioning and cross-type ZIP dependency graphs remain follow-up work.
 
 - Delivered refinement: compact Explore header, aligned instance/filter widths, source selector beside pagination, editable loaders, persistent per-instance/content-type version/loader choices and retained per-type page/scroll state.
 

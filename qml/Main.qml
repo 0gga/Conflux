@@ -54,10 +54,13 @@ ApplicationWindow {
         return session.navigation.go(target)
     }
     width: 1360; height: 900
-    minimumWidth: 1080; minimumHeight: 720
+    minimumWidth: 1080; minimumHeight: 480
     visible: true
     title: "Conflux"
-    flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint | Qt.WindowCloseButtonHint
+    // Native Windows placement must own maximize, Snap and restore geometry.
+    flags: Qt.Window | (Qt.platform.os === "windows"
+           ? Qt.CustomizeWindowHint | Qt.WindowTitleHint | Qt.WindowSystemMenuHint
+           : Qt.FramelessWindowHint) | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint | Qt.WindowCloseButtonHint
     color: Theme.colors.background
     palette.text: Theme.colors.text
     palette.buttonText: Theme.colors.text

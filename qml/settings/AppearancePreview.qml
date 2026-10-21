@@ -44,7 +44,7 @@ Rectangle {
             spacing: Appearance.values.cardGap
             ProjectCard {
                 width: parent.width; minecraft: "1.21.1"; selectedLoaders: example.filters.loaders
-                project: ({title:"Example mod",author:"Example author",summary:"A preview of your content size, colors and spacing.",provider:"modrinth",sources:["modrinth","curseforge"],loaders:["neoforge","fabric","quilt"],environment:"client",categories:["optimization","utility"],downloadStats:[{provider:"modrinth",count:"12K"},{provider:"curseforge",count:"9K"}],updated:"2026-10-20",icon:"data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="'+Theme.colors.accent+'"/><path fill="'+Theme.colors.accentText+'" d="M50 16 82 34v34L50 86 18 68V34zm0 12L30 40v22l20 12 20-12V40z"/></svg>')})
+                project: ({title:"Example mod",author:"Example author",summary:"A preview of your content size, colors and spacing.",provider:"modrinth",sources:["modrinth","curseforge"],loaders:["neoforge","fabric","quilt"],environment:"client",categories:["optimization","utility"],downloads:"21K",downloadsRaw:21000,downloadStats:[{provider:"modrinth",count:"12K",raw:12000},{provider:"curseforge",count:"9K",raw:9000}],updated:"2026-10-20",icon:"data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="'+Theme.colors.accent+'"/><path fill="'+Theme.colors.accentText+'" d="M50 16 82 34v34L50 86 18 68V34zm0 12L30 40v22l20 12 20-12V40z"/></svg>')})
                 installState: ({label:"Install",canInstall:true})
             }
             ProjectCard {

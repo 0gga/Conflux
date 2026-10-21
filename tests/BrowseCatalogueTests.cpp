@@ -70,6 +70,28 @@ class BrowseCatalogueTests final : public QObject {
         return fixture;
     }
   private slots:
+    void authorViewsKeepExactProviderIdsAndRestoreOrdinaryPages() {
+        auto api = source();
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
+        BrowseCatalogue model(api, visibility);
+        model.setContext("instance", {"1.21.1"}, {"fabric"});
+        QTRY_VERIFY(!model.busy());
+        model.next();
+        QTRY_VERIFY(!model.busy());
+        model.setScrollPosition(60);
+        const QVariantMap author{{"name", "Author"},
+                                 {"ids", QVariantMap{{"modrinth", "mr-exact"}, {"curseforge", "123"}}}};
+        model.setContext("instance", {"1.21.1"}, {"fabric"}, author);
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.filters().value("type").toString(), QString("all"));
+        QVERIFY(api->calls.last().query.versions.isEmpty());
+        QCOMPARE(api->calls.last().query.authorIds.value("modrinth"), QString("mr-exact"));
+        QCOMPARE(api->calls.last().query.authorIds.value("curseforge"), QString("123"));
+        model.setContext("instance", {"1.21.1"}, {"fabric"});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.page(), 2);
+        QCOMPARE(model.scrollPosition(), 60.0);
+    }
     void packDiscoveryIgnoresRememberedLoaderConstraints() {
         auto api = source();
         auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());

@@ -9,6 +9,7 @@ class NativeContentStore final : public IContentFileStore {
                                 QString backupRoot = {});
     QVariantList snapshot(const QVariantMap &, const QVariantList &) const override;
     ContentWriteResult setEnabled(const QVariantMap &, const QVariantMap &, bool) const override;
+    ContentWriteResult setEnabledBatch(const QVariantMap &, const QVariantList &, bool) const override;
     ContentWriteResult remove(const QVariantMap &, const QVariantList &) const override;
     ContentWriteResult importFiles(const QVariantMap &, const QList<QUrl> &, const QString &) const override;
     // Used by the external install adapter after verified dependency staging.

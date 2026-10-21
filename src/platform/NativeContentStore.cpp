@@ -224,17 +224,23 @@ ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, const QLis
 }
 ContentWriteResult NativeContentStore::setEnabled(const QVariantMap &pack, const QVariantMap &row,
                                                   bool enabled) const {
-    const auto path = row.value("relativePath").toString();
-    if (row.value("directory").toBool())
-        return {false, "Folder packs cannot be toggled as files."};
-    auto target = path;
-    if (enabled && target.endsWith(".disabled"))
-        target.chop(9);
-    else if (!enabled && !target.endsWith(".disabled"))
-        target += ".disabled";
-    if (target == path)
-        return {true, {}, {}};
-    return apply(pack, {{path, target, {}, row.value("sha1").toString()}});
+    return setEnabledBatch(pack, {row}, enabled);
+}
+ContentWriteResult NativeContentStore::setEnabledBatch(const QVariantMap &pack, const QVariantList &rows,
+                                                       bool enabled) const {
+    QList<Edit> edits;
+    for (const auto &value : rows) {
+        const auto row = value.toMap();
+        const auto path = row.value("relativePath").toString();
+        if (row.value("directory").toBool() || row.value("sha1").toString().isEmpty())
+            return {false, "Only verified content files can be enabled or disabled."};
+        const bool currentlyEnabled = !path.endsWith(".disabled");
+        if (currentlyEnabled == enabled)
+            continue;
+        const auto target = enabled ? path.chopped(9) : path + ".disabled";
+        edits << Edit{path, target, {}, row.value("sha1").toString()};
+    }
+    return apply(pack, edits);
 }
 ContentWriteResult NativeContentStore::remove(const QVariantMap &pack, const QVariantList &rows) const {
     QList<Edit> edits;

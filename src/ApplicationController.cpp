@@ -28,7 +28,8 @@ ApplicationController::ApplicationController(QObject *parent, QString packsRootO
         emit stateChanged();
     });
     connect(&m_installer, &ModInstaller::finished, this, [this](const RepositoryResult &result) {
-        m_notice = result.error;
+        m_notice = m_installCancelRequested && !result.ok ? QString{} : result.error;
+        m_installCancelRequested = false;
         if (result.ok) {
             m_activePack = result.manifest.toVariantMap();
             m_activePack.insert("path", result.path);
@@ -324,10 +325,14 @@ void ApplicationController::pinRelease(int index) {
     const auto release = m_releaseData.at(index);
     const auto path = m_activePack.value("path").toString();
     m_notice.clear();
+    m_installCancelRequested = false;
     m_installer.start(path, release, m_selectedProject.value("title").toString(),
                       QJsonObject::fromVariantMap(m_selectedProject.value("sourceIds").toMap()));
 }
 void ApplicationController::cancelInstallation() {
+    if (!m_installer.cancellable())
+        return;
+    m_installCancelRequested = true;
     m_installer.cancel();
 }
 void ApplicationController::removeMod(const QString &provider, const QString &projectId) {

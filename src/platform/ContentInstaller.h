@@ -8,10 +8,12 @@ namespace studio {
 class ContentInstaller final : public QObject, public IContentInstaller {
     Q_OBJECT
   public:
-    explicit ContentInstaller(std::shared_ptr<const NativeContentStore> files, QObject *parent = nullptr);
+    explicit ContentInstaller(std::shared_ptr<const NativeContentStore> files, QObject *parent = nullptr,
+                              bool allowLocalTestServer = false);
     void install(const QVariantMap &, const QVariantList &, const QVector<ContentInstallRequest> &,
                  Callback) override;
     void cancel() override {
+        m_cancelled = true;
         if (m_assets.cancellable()) {
             m_assets.cancel();
             return;
@@ -37,6 +39,12 @@ class ContentInstaller final : public QObject, public IContentInstaller {
     Callback m_callback;
     bool m_preparing = false;
     bool m_cancelled = false;
+    QList<QVector<ContentInstallRequest>> m_batches;
+    bool m_anyChanged = false;
+    QStringList m_warnings;
+    void startNextBatch();
+    void installBatch(const QVector<ContentInstallRequest> &);
+    void finishBatch(ContentWriteResult);
     void finish(ContentWriteResult);
 };
 } // namespace studio

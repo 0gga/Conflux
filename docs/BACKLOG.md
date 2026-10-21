@@ -41,7 +41,7 @@ Requests are prioritized here; listing an idea does not mean it is implemented. 
 ## Content follow-ups
 
 - Complete approved CurseForge downloads/updates and live API validation. Current provider-only showcases require an approved key; Modrinth-backed files use Modrinth first.
-- Add safe folder-pack identity/mutations and cross-type asset dependency/update planning. Individual verified Modrinth ZIP install/version selection is implemented; this does not imply a universal shader-settings adapter.
+- Add safe folder-pack identity/mutations and cross-type required asset dependency planning and cross-batch rollback. Mixed known stable ZIP/mod updates are serialized with partial-completion refresh; individual verified Modrinth ZIP install/version selection is implemented; this does not imply a universal shader-settings adapter.
 - Add shared Git freeze-policy files, richer update channels and backup restore/retention UI. Current freeze preferences are local.
 - Add full NBT world names/metadata and game-process observation; handing a URL to a launcher is not proof of a successful game launch.
 
@@ -78,7 +78,10 @@ These are ideas, not delivered features or additional owner requirements.
 
 - Delivered refinement: channel/game-version/loader release filters and Clear, discovery active-filter chips with instance version locks, second-click menu dismissal, and removal of routine coverage/compatibility prose. Follow-up: a virtualized multi-column release table with real per-release provider download statistics when represented by the provider model.
 
-- Delivered harmony pass: reserved scrollbar gutters and rounded clipped list corners, baseline-aligned authors, icon-led provider/follower/update statistics, configurable unavailable opacity with live preview, source description image/text/table blocks, enlarged gallery navigation/zoom and stable chip/icon hover geometry. Search fields have contained clear actions; instance tools group Hidden/Updates/Update all with right-aligned Refresh.
+- Delivered harmony pass: reserved scrollbar gutters and rounded clipped list corners, baseline-aligned authors, icon-led provider/follower/update statistics, configurable installed opacity with live preview, source description image/text/table blocks, enlarged gallery navigation/zoom and stable chip/icon hover geometry. Search fields have contained clear actions; instance tools group Hidden/Updates/Update all with right-aligned Refresh.
 - Future source rendering: native animation support for GIF/WebP, richer image captions, safe lazy media/resource budgets and additional structured HTML layouts. Acceptance: preserve source order and theme, bound resource usage, maintain safe links, and verify real source fixtures without executing scripts or arbitrary CSS.
 
 - Delivered settings organization: searchable Interface/Content/Filters/Colors tabs, four palette-group tabs, collapsible real-component live previews, per-field/section resets, navigation/density/scrollbar/tooltip/motion/card metadata preferences and persisted browsing defaults with explicit current-view application. Follow-up: named appearance profiles and versioned import/export; acceptance requires schema validation, preview before application, preservation of unrelated settings and round-trip tests.
+
+- Delivered: type-aware stable updates for all four instance content categories, known-update-only Update all/selected, floating selection with local Share/copy and backed-up bulk enable/disable, compact activity/cancel/error details, underline content/version/author links and scoped author discovery.
+- Author identity linking UI: provide reviewed cross-platform author profile association and explicit corrections, with provenance; never infer identity from names. Current author-identities.json exact mappings support merged source queries, while unlinked creators remain separate and CurseForge requires its approved key.

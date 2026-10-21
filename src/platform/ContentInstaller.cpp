@@ -9,17 +9,18 @@
 #include <QtConcurrent>
 #include <filesystem>
 namespace studio {
-ContentInstaller::ContentInstaller(std::shared_ptr<const NativeContentStore> files, QObject *parent)
-    : QObject(parent), m_installer(this), m_assets(files, this), m_files(std::move(files)) {
+ContentInstaller::ContentInstaller(std::shared_ptr<const NativeContentStore> files, QObject *parent,
+                                   bool local)
+    : QObject(parent), m_installer(this), m_assets(files, this, local), m_files(std::move(files)) {
     connect(&m_installer, &ModInstaller::progress, this, &ContentInstaller::progress);
     connect(&m_assets, &AssetInstaller::progress, this, &ContentInstaller::progress);
     connect(&m_installer, &ModInstaller::finished, this, [this](const RepositoryResult &result) {
         if (!result.ok) {
-            finish({false, result.error});
+            finishBatch({false, result.error});
             return;
         }
         if (!m_stage) {
-            finish({true, result.error});
+            finishBatch({true, result.error});
             return;
         }
         emit progress("Applying the backed-up content transaction…");
@@ -31,7 +32,7 @@ ContentInstaller::ContentInstaller(std::shared_ptr<const NativeContentStore> fil
         connect(watcher, &QFutureWatcher<ContentWriteResult>::finished, this, [this, watcher] {
             const auto result = watcher->result();
             watcher->deleteLater();
-            finish(result);
+            finishBatch(result);
         });
         watcher->setFuture(QtConcurrent::run([pack, rows, stage, files, result] {
             QSet<QString> disabledProjects, disabledVersions;
@@ -88,9 +89,45 @@ void ContentInstaller::finish(ContentWriteResult result) {
     m_stage.reset();
     m_rows.clear();
     m_pack.clear();
+    m_batches.clear();
     m_preparing = false;
+    result.changed = result.changed || m_anyChanged;
+    if (!result.ok && m_anyChanged)
+        result.error = "Earlier updates completed. " + result.error;
     if (callback)
         callback(std::move(result));
+}
+void ContentInstaller::finishBatch(ContentWriteResult result) {
+    m_stage.reset();
+    m_preparing = false;
+    m_anyChanged = m_anyChanged || result.ok || result.changed;
+    if (!result.ok) {
+        finish(std::move(result));
+        return;
+    }
+    if (!result.error.isEmpty())
+        m_warnings << result.error;
+    if (m_pack.value("managed").toBool()) {
+        const auto current = PackRepository::inspect(m_pack.value("path").toString());
+        if (!current.ok) {
+            finish({false, current.error});
+            return;
+        }
+        m_pack["assets"] = current.manifest.value("assets").toArray().toVariantList();
+    }
+    startNextBatch();
+}
+void ContentInstaller::startNextBatch() {
+    if (m_cancelled) {
+        finish({false, "Installation cancelled."});
+        return;
+    }
+    if (m_batches.isEmpty()) {
+        finish({true, m_warnings.join('\n')});
+        return;
+    }
+    const auto requests = m_batches.takeFirst();
+    installBatch(requests);
 }
 void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows,
                                const QVector<ContentInstallRequest> &requests, Callback callback) {
@@ -102,16 +139,28 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
     m_rows = rows;
     m_callback = std::move(callback);
     m_cancelled = false;
+    m_anyChanged = false;
+    m_warnings.clear();
+    m_batches.clear();
+    QVector<ContentInstallRequest> mods;
+    for (const auto &request : requests) {
+        if (request.contentType == "mod")
+            mods << request;
+        else
+            m_batches << QVector<ContentInstallRequest>{request};
+    }
+    if (!mods.isEmpty())
+        m_batches << mods;
+    startNextBatch();
+}
+void ContentInstaller::installBatch(const QVector<ContentInstallRequest> &requests) {
+    const auto pack = m_pack;
+    const auto rows = m_rows;
     if (requests.size() == 1 && requests.first().contentType != "mod") {
         m_assets.install(pack, rows, requests.first(),
-                         [this](ContentWriteResult result) { finish(std::move(result)); });
+                         [this](ContentWriteResult result) { finishBatch(std::move(result)); });
         return;
     }
-    for (const auto &request : requests)
-        if (request.contentType != "mod") {
-            finish({false, "Install different content types separately."});
-            return;
-        }
     const bool bridge = hasFabricBridge(pack.value("loader").toString(), rows);
     bool untracked = false;
     for (const auto &value : rows) {
@@ -131,7 +180,7 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
     }
     m_stage = std::make_shared<QTemporaryDir>();
     if (!m_stage->isValid()) {
-        finish({false, "Could not create a temporary install workspace."});
+        finishBatch({false, "Could not create a temporary install workspace."});
         return;
     }
     m_preparing = true;
@@ -143,11 +192,11 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
         watcher->deleteLater();
         m_preparing = false;
         if (m_cancelled) {
-            finish({false, "Installation cancelled before changing installed files."});
+            finishBatch({false, "Installation cancelled before changing installed files."});
             return;
         }
         if (!result.ok) {
-            finish({false, result.error});
+            finishBatch({false, result.error});
             return;
         }
         m_installer.startBatch(result.path, requests, bridge);

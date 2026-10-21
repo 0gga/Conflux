@@ -10,6 +10,9 @@
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QtTest>
 using namespace studio;
@@ -49,6 +52,171 @@ class ContentActionsTests : public QObject {
                 {"updateRelease", next.toVariant()}};
     }
   private slots:
+    void catalogueChecksEveryContentTypeWithItsOwnPlatformAndClearsStaleUpdates() {
+        QTcpServer server;
+        QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+        bool newer = true;
+        QList<QJsonObject> updateQueries;
+        const auto version = [](QString id, QString project, QString loader, QString extension,
+                                QString date) {
+            return QJsonObject{
+                {"id", id},
+                {"project_id", project},
+                {"version_number", id},
+                {"date_published", date},
+                {"version_type", "release"},
+                {"game_versions", QJsonArray{"1.21.1"}},
+                {"loaders", QJsonArray{loader}},
+                {"files", QJsonArray{QJsonObject{{"filename", project + extension},
+                                                 {"primary", true},
+                                                 {"size", 100},
+                                                 {"url", "https://example.invalid/file"},
+                                                 {"hashes", QJsonObject{{"sha1", QString(40, 'a')}}}}}}};
+        };
+        const QMap<QString, QString> loaders{{"mods", "fabric"},
+                                             {"resourcepacks", "minecraft"},
+                                             {"shaderpacks", "iris"},
+                                             {"datapacks", "datapack"}};
+        connect(&server, &QTcpServer::newConnection, &server, [&] {
+            auto *socket = server.nextPendingConnection();
+            auto buffer = std::make_shared<QByteArray>();
+            connect(socket, &QTcpSocket::readyRead, socket, [&, socket, buffer] {
+                *buffer += socket->readAll();
+                const int split = buffer->indexOf("\r\n\r\n");
+                if (split < 0)
+                    return;
+                int length = 0;
+                for (const auto &line : buffer->left(split).split('\n'))
+                    if (line.toLower().startsWith("content-length:"))
+                        length = line.mid(15).trimmed().toInt();
+                if (buffer->size() < split + 4 + length)
+                    return;
+                const auto path = buffer->split(' ').value(1);
+                const auto request = QJsonDocument::fromJson(buffer->mid(split + 4, length)).object();
+                QJsonDocument response;
+                QJsonObject values;
+                if (path == "/version_files") {
+                    for (auto it = loaders.cbegin(); it != loaders.cend(); ++it)
+                        values[it.key()] =
+                            version("1", it.key(), it.value(), it.key() == "mods" ? ".jar" : ".zip",
+                                    "2026-01-01T00:00:00Z");
+                    response = QJsonDocument(values);
+                } else if (path == "/version_files/update") {
+                    updateQueries << request;
+                    for (const auto &hash : request.value("hashes").toArray()) {
+                        const auto key = hash.toString();
+                        values[key] = version(newer ? "2" : "1", key, loaders.value(key),
+                                              key == "mods" ? ".jar" : ".zip",
+                                              newer ? "2026-02-01T00:00:00Z" : "2026-01-01T00:00:00Z");
+                    }
+                    response = QJsonDocument(values);
+                } else
+                    response = QJsonDocument(QJsonArray{});
+                const auto bytes = response.toJson(QJsonDocument::Compact);
+                socket->write("HTTP/1.1 200 OK\r\nContent-Length: " + QByteArray::number(bytes.size()) +
+                              "\r\nConnection: close\r\n\r\n" + bytes);
+                socket->disconnectFromHost();
+            });
+            connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+        });
+        ContentCatalogue catalogue(nullptr,
+                                   QUrl("http://127.0.0.1:" + QString::number(server.serverPort()) + "/"));
+        QVariantList rows;
+        for (auto it = loaders.cbegin(); it != loaders.cend(); ++it)
+            rows << QVariantMap{
+                {"sha1", it.key()}, {"category", it.key()}, {"relativePath", it.key() + "/old.zip"}};
+        bool done = false;
+        QVariantList indexed;
+        QString error;
+        catalogue.refresh(rows, "1.21.1", "fabric", [&](QVariantList value, QString failure) {
+            indexed = value;
+            error = failure;
+            done = true;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(done, 10000);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(updateQueries.size(), 4);
+        for (const auto &value : indexed)
+            QVERIFY(value.toMap().value("updateAvailable").toBool());
+        for (const auto &query : updateQueries) {
+            const auto key = query.value("hashes").toArray().first().toString();
+            QCOMPARE(query.value("loaders").toArray(), QJsonArray{loaders.value(key)});
+        }
+        newer = false;
+        done = false;
+        catalogue.refresh(indexed, "1.21.1", "fabric", [&](QVariantList value, QString failure) {
+            indexed = value;
+            error = failure;
+            done = true;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(done, 10000);
+        QVERIFY(error.isEmpty());
+        for (const auto &value : indexed)
+            QVERIFY(!value.toMap().value("updateAvailable").toBool());
+    }
+    void updateAllUsesOnlyKnownNewerUnfrozenContentAndPreservesTypes() {
+        QTemporaryDir temp;
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        auto catalogue = std::make_shared<ContentCatalogueFixture>();
+        auto prefs = std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini");
+        ContentActions content(std::make_shared<ContentFileFixture>(), catalogue, installer, prefs);
+        QVariantList rows;
+        for (const auto &category : {"mods", "resourcepacks", "shaderpacks", "datapacks"}) {
+            auto item = row(category, "Author");
+            item["category"] = category;
+            item["relativePath"] = QString(category) + "/old.zip";
+            rows << item;
+        }
+        auto unchanged = row("unchanged", "Author");
+        unchanged["updateAvailable"] = false;
+        rows << unchanged;
+        content.setContext({{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "fabric"}}, rows);
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(content.updateCount(), 4);
+        const int checks = catalogue->refreshCount;
+        content.freeze("shaderpacks/old.zip", true);
+        content.updateAll();
+        QCOMPARE(catalogue->refreshCount, checks);
+        QCOMPARE(installer->requested.size(), 3);
+        QCOMPARE(installer->requested[0].contentType, QString("mod"));
+        QCOMPARE(installer->requested[1].contentType, QString("resourcepack"));
+        QCOMPARE(installer->requested[2].contentType, QString("datapack"));
+        content.cancel();
+        QVERIFY(!content.busy());
+        QVERIFY(content.notice().isEmpty());
+        QCOMPARE(content.activity(), QString("cancelled"));
+        content.setCategory("datapacks");
+        QCOMPARE(content.rows().size(), 1);
+        content.select("datapacks/old.zip", true);
+        QSignalSpy copied(&content, &ContentActions::copyRequested);
+        content.copySelected("files");
+        QCOMPARE(copied.count(), 1);
+        content.updateSelected();
+        QCOMPARE(installer->requested.size(), 1);
+        QCOMPARE(installer->requested.first().contentType, QString("datapack"));
+        installer->completion({true, {}});
+        QVERIFY(content.notice().isEmpty());
+    }
+    void implicitRefreshIndexesOnlyChangedFilesAcrossAllTypes() {
+        QTemporaryDir temp;
+        auto catalogue = std::make_shared<ContentCatalogueFixture>();
+        ContentActions content(std::make_shared<ContentFileFixture>(), catalogue,
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        const QVariantMap pack{{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "fabric"}};
+        const auto original = row("unchanged", "Author");
+        content.setContext(pack, {original});
+        QTRY_VERIFY(!content.busy());
+        auto asset = row("new", "Author");
+        asset["category"] = "resourcepacks";
+        asset["relativePath"] = "resourcepacks/new.zip";
+        content.setContext(pack, {original, asset});
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(catalogue->refreshed.size(), 1);
+        QCOMPARE(catalogue->refreshed.first().toMap().value("relativePath").toString(),
+                 QString("resourcepacks/new.zip"));
+        QCOMPARE(content.rows().size(), 2);
+    }
     void filtersSelectionsAndFrozenBatchUpdates() {
         QTemporaryDir temp;
         auto installer = std::make_shared<ContentInstallerFixture>();

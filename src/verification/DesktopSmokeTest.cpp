@@ -481,8 +481,9 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
             }
             case 23: {
                 auto *panel = findVisualItem(window->contentItem(), "contentPanel");
-                if (!panel || !QMetaObject::invokeMethod(panel, "showcaseRequested",
-                                                         Q_ARG(QString, state->selectedMod))) {
+                if (!panel ||
+                    !QMetaObject::invokeMethod(panel, "showcaseRequested", Q_ARG(QString, state->selectedMod),
+                                               Q_ARG(QString, QString("description")))) {
                     fail("Installed content showcase signal is unavailable");
                     return;
                 }
@@ -1125,13 +1126,65 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                 }
                 session.browsePreferences()->resetDefaults();
                 break;
-            case 76: {
+            case 76:
+                session.navigation()->go(
+                    {{"page", "discover"},
+                     {"author",
+                      QVariantMap{{"name", "modmuss50"}, {"ids", QVariantMap{{"modrinth", "modmuss50"}}}}}});
+                break;
+            case 77: {
+                if (session.catalogue()->busy())
+                    return;
+                if (session.catalogue()->projects().isEmpty() ||
+                    session.catalogue()->filters().value("type") != "all" || !capture("author-content")) {
+                    fail("Author content retrieval failed");
+                    return;
+                }
+                auto *name = findVisualItem(window->contentItem(), "browseTitle");
+                if (!name || !QMetaObject::invokeMethod(name, "clicked")) {
+                    fail("Author project name link missing");
+                    return;
+                }
+                break;
+            }
+            case 78: {
+                if (session.showcase()->busy())
+                    return;
+                if (session.navigation()->route().value("page") != "showcase" ||
+                    session.showcase()->project().isEmpty()) {
+                    fail("Author project navigation failed");
+                    return;
+                }
+                auto route = session.navigation()->route();
+                route["showcaseTab"] = "versions";
+                session.navigation()->go(route);
+                break;
+            }
+            case 79:
+                if (!capture("author-project-versions")) {
+                    fail("Author project version render failed");
+                    return;
+                }
+                session.navigation()->back();
+                break;
+            case 80:
+                if (session.catalogue()->busy())
+                    return;
+                if (session.navigation()->route().value("author").toMap().value("name") != "modmuss50" ||
+                    session.catalogue()->projects().isEmpty()) {
+                    fail("Author context restoration failed");
+                    return;
+                }
+                break;
+            case 81: {
                 if (smokeRuntimeError) {
                     fail("QML runtime warning in Explore content");
                     return;
                 }
                 qInfo().noquote()
-                    << "PASS: 83% gallery fit baseline and viewer controls; tabbed/searchable settings, "
+                    << "PASS: authored project retrieval/name links/version tab/history; all-type "
+                       "update/selection UI integration; 83% gallery fit baseline and viewer controls; "
+                       "tabbed/searchable settings, "
                        "presentation controls, browse defaults and "
                        "compact150% UI; "
                        "contiguous table hover/top/bottom clipping and aligned statistics; "

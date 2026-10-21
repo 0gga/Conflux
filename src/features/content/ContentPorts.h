@@ -6,12 +6,19 @@ namespace studio {
 struct ContentWriteResult {
     bool ok = false;
     QString error, backupPath;
+    bool changed = false;
 };
 class IContentFileStore {
   public:
     virtual ~IContentFileStore() = default;
     virtual QVariantList snapshot(const QVariantMap &pack, const QVariantList &files) const = 0;
     virtual ContentWriteResult setEnabled(const QVariantMap &, const QVariantMap &, bool) const = 0;
+    virtual ContentWriteResult setEnabledBatch(const QVariantMap &pack, const QVariantList &rows,
+                                               bool enabled) const {
+        if (rows.size() == 1)
+            return setEnabled(pack, rows.first().toMap(), enabled);
+        return {false, "Bulk enable/disable is not supported by this file store."};
+    }
     virtual ContentWriteResult remove(const QVariantMap &, const QVariantList &) const = 0;
     virtual ContentWriteResult importFiles(const QVariantMap &, const QList<QUrl> &,
                                            const QString &category) const = 0;

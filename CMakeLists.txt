@@ -17,6 +17,7 @@ target_include_directories(miniz PUBLIC third_party)
 
 qt_add_library(pack_foundation STATIC
     src/domain/Catalogue.h src/domain/Catalogue.cpp src/domain/CatalogueSearch.h
+    src/platform/ReviewedAuthorIdentities.h src/platform/ReviewedAuthorIdentities.cpp
     src/platform/ReviewedProjectIdentities.h src/platform/ReviewedProjectIdentities.cpp
     src/services/CatalogueClient.h src/services/CatalogueClient.cpp
     src/services/GalleryImages.h src/services/GalleryImages.cpp
@@ -117,6 +118,7 @@ qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     qml/components/SectionTabs.qml
     qml/components/NavigationButton.qml
     qml/components/SelectionBox.qml
+    qml/pack/ContentSelectionBar.qml qml/pack/ContentActivity.qml qml/components/ContentLink.qml
     qml/components/ContentFilter.qml
     qml/components/ActionButton.qml qml/components/SourceBadge.qml qml/components/EmptyState.qml qml/components/LibraryRow.qml
     qml/pages/LibraryPage.qml qml/pages/DiscoverPage.qml qml/pages/PackPage.qml qml/pages/SettingsPage.qml)

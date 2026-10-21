@@ -16,6 +16,8 @@ Rectangle {
     readonly property var supportedLoaders: (project.loaders || []).filter(function(loader) {
         return loader !== "minecraft" && ((root.project.type || "mod") !== "mod" || !root.selectedLoaders.length || root.selectedLoaders.indexOf(loader) !== -1)
     })
+    signal versionsRequested
+    signal authorRequested(var author)
     signal opened
     signal visibilityRequested(bool hidden)
     signal tagRequested(string tag)
@@ -47,8 +49,8 @@ Rectangle {
         spacing: 4 * root.contentScale
         Row {
             width: parent.width; spacing: 7 * root.contentScale
-            Text { id: title; objectName: "browseTitle"; text: root.project.title; width: Math.min(implicitWidth,parent.width*0.68); color: Theme.colors.text; font.pixelSize: 18 * root.contentScale; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
-            Text { visible: !!Appearance.values.showAuthor; objectName: "browseAuthor"; anchors.baseline: title.baseline; width: Math.max(0,parent.width-title.width-parent.spacing); text: "by " + (root.project.author || "Unknown author"); color: Theme.colors.muted; font.pixelSize: 12 * root.contentScale; elide: Text.ElideRight; textFormat: Text.PlainText }
+            ContentLink { onClicked: root.opened(); id: title; objectName: "browseTitle"; text: root.project.title; width: Math.min(implicitWidth,parent.width*0.68); color: Theme.colors.text; font.pixelSize: 18 * root.contentScale; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
+            ContentLink { enabled: !!root.project.authorIds && Object.keys(root.project.authorIds).length > 0; onClicked: root.authorRequested({name:root.project.author,ids:root.project.authorIds || {}}); visible: !!Appearance.values.showAuthor; objectName: "browseAuthor"; anchors.baseline: title.baseline; width: Math.max(0,parent.width-title.width-parent.spacing); text: "by " + (root.project.author || "Unknown author"); color: Theme.colors.muted; font.pixelSize: 12 * root.contentScale; elide: Text.ElideRight; textFormat: Text.PlainText }
         }
         Text { objectName: "browseSummary"; visible: !!Appearance.values.showSummary; width: parent.width; text: root.project.summary || ""; color: Theme.colors.muted; font.pixelSize: 12 * root.contentScale; elide: Text.ElideRight; textFormat: Text.PlainText }
     }
@@ -72,7 +74,7 @@ Rectangle {
                 objectName: "browseVersionBadge"
                 visible: root.minecraft.length > 0
                 width: versionText.implicitWidth + 16 * root.contentScale; height: tags.height; radius: height/2; color: Theme.colors.input
-                Text { id: versionText; anchors.centerIn: parent; text: root.minecraft; color: Theme.colors.muted; font.pixelSize: 11 * root.contentScale }
+                ContentLink { onClicked: root.versionsRequested(); id: versionText; anchors.centerIn: parent; text: root.minecraft; color: Theme.colors.muted; font.pixelSize: 11 * root.contentScale }
                 Accessible.name: "Minecraft " + root.minecraft
             }
             Item { width: 3 * root.contentScale; height: 1 }

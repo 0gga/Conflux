@@ -5,6 +5,7 @@ namespace studio {
 struct CatalogueQuery {
     QString text, provider = "modrinth", type = "mod", sort = "relevance";
     QStringList versions, loaders, tags, projectIds;
+    QMap<QString, QString> authorIds;
 };
 struct CataloguePage {
     QVector<Project> projects;

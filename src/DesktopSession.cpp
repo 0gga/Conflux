@@ -49,12 +49,14 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
             !loaders.contains("fabric"))
             loaders << "fabric";
         const auto target = m_navigation.route().value("packPath").toString();
-        m_catalogue.setContext(target.isEmpty() ? QString("global") : target, versions, loaders);
+        m_catalogue.setContext(target.isEmpty() ? QString("global") : target, versions, loaders,
+                               m_navigation.route().value("author").toMap());
         if (m_browse.ready() && !m_browse.busy())
             m_catalogue.setInstalled(m_content.inventory());
     };
     connect(&m_browse, &BrowseInstalls::changed, this, updateBrowseContext);
     connect(&m_browsePreferences, &BrowsePreferences::changed, this, updateBrowseContext);
+    connect(&m_navigation, &NavigationHistory::changed, this, updateBrowseContext);
     auto updateReleaseFilters = [this] {
         const auto pack = m_browse.pack();
         // Wait for resolved project type before seeding loader defaults.
@@ -128,8 +130,11 @@ void DesktopSession::activateRoute() {
     pack["catalogueLoader"] = m_browse.versionLoaders();
     const auto section = route.value("section").toString();
     if (route.value("page") == "showcase") {
-        if (route.value("packPath").toString() != pack.value("path").toString() || m_workspace.busy())
+        const auto target = route.value("packPath").toString();
+        if (!target.isEmpty() && (target != pack.value("path").toString() || m_workspace.busy()))
             return;
+        if (target.isEmpty())
+            pack.clear();
         const auto project = route.value("project").toMap();
         if (!project.isEmpty()) {
             const auto key = project.value("provider").toString() + ':' + project.value("id").toString();
@@ -140,7 +145,7 @@ void DesktopSession::activateRoute() {
         if (!path.isEmpty() && m_showcase.filePath() != path) {
             for (const auto &item : m_workspace.files()) {
                 const auto file = item.toMap();
-                if (file.value("relativePath") == path && file.value("category") == "mods") {
+                if (file.value("relativePath") == path && file.value("category") != "configs") {
                     m_showcase.open(pack, file);
                     break;
                 }

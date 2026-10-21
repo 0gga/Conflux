@@ -20,6 +20,8 @@ bool NavigationHistory::request(const QVariantMap &target, int historyIndex) {
         if (QStringList{"workspace", "discover", "showcase"}.contains(page) &&
             current.value("packPath").toString() != target.value("packPath").toString())
             return false;
+        if (target.value("page") == "discover" && current.value("author") != target.value("author"))
+            return false;
         if (target.value("page") == "showcase")
             return current.value("modPath") == target.value("modPath") &&
                    current.value("project") == target.value("project");

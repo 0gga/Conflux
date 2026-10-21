@@ -14,12 +14,14 @@ Item {
     readonly property bool moving: view.moving
     readonly property real viewportWidth: view.width
     readonly property ListView viewport: view
+    property real bottomInset: 0
     property real cornerRadius: 14
     property color outsideColor: Theme.colors.background
     signal movementEnded()
     ListView {
         id: view; objectName: "contentListViewport"
         anchors.fill: parent; anchors.rightMargin: 16
+        footer: Item { width: 1; height: root.bottomInset }
         clip: true; boundsBehavior: Flickable.StopAtBounds
         onMovementEnded: root.movementEnded()
         ScrollBar.vertical: ContentScrollBar { parent: root; anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom }

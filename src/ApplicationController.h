@@ -149,6 +149,7 @@ class ApplicationController : public QObject {
   private:
     CatalogueClient m_client;
     ModInstaller m_installer;
+    bool m_installCancelRequested = false;
     std::unique_ptr<QSettings> m_settings;
     QString m_packsRootOverride;
     QVariantList m_installations, m_packs, m_projects, m_releases, m_activeMods;

@@ -40,6 +40,7 @@ QVariantMap Project::toVariant() const {
             {"title", title},
             {"summary", summary},
             {"author", author},
+            {"authorIds", variantIds(authorIds)},
             {"icon", icon},
             {"url", url},
             {"categories", categories},

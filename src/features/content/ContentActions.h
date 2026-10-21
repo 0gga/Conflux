@@ -17,6 +17,9 @@ class ContentActions final : public QObject {
     Q_PROPERTY(bool cancellable READ cancellable NOTIFY changed)
     Q_PROPERTY(int updateCount READ updateCount NOTIFY changed)
     Q_PROPERTY(QString notice READ notice NOTIFY changed)
+    Q_PROPERTY(QString activity READ activity NOTIFY changed)
+    Q_PROPERTY(QString activityText READ activityText NOTIFY changed)
+    Q_PROPERTY(QVariantList selection READ selection NOTIFY changed)
     Q_PROPERTY(QVariantList versions READ versions NOTIFY changed)
     Q_PROPERTY(QVariantList versionGroups READ versionGroups NOTIFY changed)
     Q_PROPERTY(QVariantMap versionTarget READ versionTarget NOTIFY changed)
@@ -60,6 +63,13 @@ class ContentActions final : public QObject {
     QString notice() const {
         return m_notice;
     }
+    QString activity() const {
+        return m_activity;
+    }
+    QString activityText() const {
+        return m_activityText;
+    }
+    QVariantList selection() const;
     QVariantList versions() const {
         return m_versions;
     }
@@ -98,6 +108,9 @@ class ContentActions final : public QObject {
     Q_INVOKABLE void freeze(const QString &, bool);
     Q_INVOKABLE void update(const QString &);
     Q_INVOKABLE void updateAll();
+    Q_INVOKABLE void updateSelected();
+    Q_INVOKABLE void setSelectedEnabled(bool enabled);
+    Q_INVOKABLE void copySelected(const QString &format);
     Q_INVOKABLE void openVersions(const QString &);
     Q_INVOKABLE void installVersion(int index);
     Q_INVOKABLE void installRelease(const QVariantMap &release, const QVariantMap &project);
@@ -105,7 +118,7 @@ class ContentActions final : public QObject {
     Q_INVOKABLE void copyLink(const QString &);
     Q_INVOKABLE void cancel();
     void setProgress(const QString &message) {
-        m_notice = message;
+        m_activityText = message;
         emit changed();
     }
   signals:
@@ -114,6 +127,7 @@ class ContentActions final : public QObject {
     void copyRequested(QString text);
 
   private:
+    ContentInstallRequest updateRequest(const QVariantMap &) const;
     QVariantMap find(const QString &) const;
     QString preferenceIdentity(const QVariantMap &) const;
     void applyPreferences();
@@ -129,6 +143,8 @@ class ContentActions final : public QObject {
     QVariantList m_inventory, m_rows, m_versions;
     QStringList m_selected;
     QString m_query, m_category = "all", m_sort = "name-asc", m_notice, m_versionError;
+    QString m_activity = "idle", m_activityText;
+    bool m_cancelRequested = false;
     bool m_busy = false, m_mutating = false, m_dirty = false, m_versionsBusy = false;
     int m_generation = 0, m_versionGeneration = 0;
 };

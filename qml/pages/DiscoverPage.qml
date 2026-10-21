@@ -18,7 +18,8 @@ Item {
     readonly property var instances: app.libraryPacks.filter(function(pack) { return !pack.hidden })
     signal createRequested()
     signal workspaceRequested()
-    signal showcaseRequested(var project)
+    signal showcaseRequested(var project, string tab)
+    signal authorRequested(var author)
     signal instanceRequested(string path)
     function focusSearch() { query.forceActiveFocus() }
     function restoreScroll() {
@@ -41,13 +42,13 @@ Item {
                 Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.fillHeight: true; spacing: 12
                 SectionTabs {
                     objectName: "browseContentTypes"
-                    entries: [{key:"mod",label:"Mods",icon:"mod"},{key:"resourcepack",label:"Resource Packs",icon:"resource"},{key:"datapack",label:"Data Packs",icon:"world"},{key:"shader",label:"Shaders",icon:"shader"}]
+                    entries: (root.catalogue.author.name ? [{key:"all",label:"All content",icon:"content"}] : []).concat([{key:"mod",label:"Mods",icon:"mod"},{key:"resourcepack",label:"Resource Packs",icon:"resource"},{key:"datapack",label:"Data Packs",icon:"world"},{key:"shader",label:"Shaders",icon:"shader"}])
                     current: root.contentType
                     onSelected: function(key) { root.catalogue.configure({type:key}) }
                 }
                 SearchField {
                     id: query; objectName: "modSearchInput"; Layout.fillWidth: true; implicitHeight: 44; leadingIcon: "search"
-                    text: root.catalogue.filters.query || ""; placeholderText: "Search " + Branding.label(root.contentType).toLowerCase() + "..."
+                    text: root.catalogue.filters.query || ""; placeholderText: root.contentType === "all" ? "Search this author’s content..." : "Search " + Branding.label(root.contentType).toLowerCase() + "..."
                     onTextEdited: debounce.restart(); onAccepted: { debounce.stop();root.catalogue.configure({query:text}) }
                 }
                 PaginationBar { Layout.fillWidth: true; catalogue: root.catalogue; contextBusy: root.browse.busy }
@@ -75,7 +76,9 @@ Item {
                             selectedLoaders: root.catalogue.filters.loaders || []
                             hiddenMode: !!root.catalogue.filters.hidden
                             installState: { const ready=root.browse.ready; const busy=root.browse.busy; const state=root.browse.state(modelData); state.canInstall = state.canInstall && !root.app.repositoryBusy; return state }
-                            onOpened: { root.catalogue.scrollPosition=results.contentY;root.showcaseRequested(modelData) }
+                            onOpened: { root.catalogue.scrollPosition=results.contentY;root.showcaseRequested(modelData,"description") }
+                            onVersionsRequested: { root.catalogue.scrollPosition=results.contentY;root.showcaseRequested(modelData,"versions") }
+                            onAuthorRequested: function(author) { root.authorRequested(author) }
                             onInstallRequested: root.browse.install(modelData)
                             onVisibilityRequested: function(hidden) { root.catalogue.hide(modelData,hidden) }
                             onTagRequested: function(tag) { root.catalogue.configure({tags:[(modelData.provider==="modrinth"?"mr:":"cf:")+tag]}) }

@@ -1053,7 +1053,7 @@ Item {
         panel->setHeight(700);
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
-        QSignalSpy showcase(panel, SIGNAL(showcaseRequested(QString)));
+        QSignalSpy showcase(panel, SIGNAL(showcaseRequested(QString, QString)));
         auto *hidden = findItem(window.contentItem(), "contentHiddenFilter");
         auto *updates = findItem(window.contentItem(), "contentUpdatesFilter");
         auto *all = findItem(window.contentItem(), "contentUpdateAll");
@@ -1072,13 +1072,32 @@ Item {
                           row->mapToScene(QPointF(150, 24)).toPoint());
         QTRY_COMPARE(showcase.count(), 1);
         QCOMPARE(showcase.first().first().toString(), QString("mods/example.jar"));
+        const auto tableOrigin = table->mapToScene(QPointF{});
+        const auto listSize = findItem(panel, "instanceContentList")->size();
+        auto *nameLink = findItem(window.contentItem(), "contentNameLink");
+        auto *versionLink = findItem(window.contentItem(), "contentVersionLink");
+        QVERIFY(nameLink && versionLink);
+        QTest::mouseMove(&window, nameLink->mapToScene(QPointF(20, 8)).toPoint());
+        QTRY_VERIFY(nameLink->property("font").value<QFont>().underline());
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          versionLink->mapToScene(QPointF(20, 8)).toPoint());
+        QTRY_COMPARE(showcase.count(), 2);
+        QCOMPARE(showcase.last().at(1).toString(), QString("versions"));
+        showcase.clear();
         auto *selection = findItem(window.contentItem(), "contentSelection");
         QVERIFY(selection);
         QTest::mouseClick(
             &window, Qt::LeftButton, Qt::NoModifier,
             selection->mapToScene(QPointF(selection->width() / 2, selection->height() / 2)).toPoint());
         QTRY_COMPARE(model.selected().size(), 1);
-        QCOMPARE(showcase.count(), 1);
+        QCOMPARE(table->mapToScene(QPointF{}), tableOrigin);
+        QCOMPARE(findItem(panel, "instanceContentList")->size(), listSize);
+        QVERIFY(findItem(panel, "contentSelectionBar"));
+        QVERIFY(findItem(panel, "instanceContentList")->property("bottomInset").toReal() > 48);
+        QTest::qWait(50);
+        QVERIFY(window.grabWindow().save(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                         "/../artifacts/floating-content-selection.png"));
+        QCOMPARE(showcase.count(), 0);
         auto *more = findItem(window.contentItem(), "contentMore");
         QVERIFY(more);
         QTRY_VERIFY(more->mapToScene(QPointF(more->width(), 0)).x() <= window.width());
@@ -1101,7 +1120,7 @@ Item {
                           copy->mapToScene(QPointF(copy->width() / 2, copy->height() / 2)).toPoint());
         QTRY_COMPARE(copied.count(), 1);
         QCOMPARE(copied.first().first().toString(), QString("https://modrinth.com/mod/project"));
-        QCOMPARE(showcase.count(), 1);
+        QCOMPARE(showcase.count(), 0);
     }
 };
 QTEST_MAIN(ContentInteractionTests)

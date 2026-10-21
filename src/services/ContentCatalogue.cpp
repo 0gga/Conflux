@@ -1,4 +1,5 @@
 #include "ContentCatalogue.h"
+#include "domain/ContentCompatibility.h"
 #include "domain/ContentTypes.h"
 #include "domain/LicensePolicy.h"
 #include <QJsonArray>
@@ -76,6 +77,8 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
                 const auto finish = [batch, callback](const QJsonObject &teams) {
                     for (int index = 0; index < batch->rows.size(); ++index) {
                         auto row = batch->rows.at(index).toMap();
+                        row["updateAvailable"] = false;
+                        row.remove("updateRelease");
                         const auto hash = row.value("sha1").toString();
                         const auto installed = batch->installed.value(hash).toObject();
                         if (!installed.isEmpty()) {
@@ -125,14 +128,16 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
                                 if (!owner.isEmpty()) {
                                     row["author"] = owner.value("username");
                                     row["authorIcon"] = owner.value("avatar_url");
+                                    row["authorIds"] =
+                                        QVariantMap{{"modrinth", owner.value("id").toString()}};
                                 }
                             }
-                            const auto latest = batch->latest.value(hash).toObject();
+                            const auto latest =
+                                batch->latest.value(hash + '|' + row.value("category").toString()).toObject();
                             if (!latest.isEmpty() &&
                                 latest.value("project_id") == installed.value("project_id")) {
                                 row["updateRelease"] = modrinthRelease(latest).toVariant();
                                 row["updateAvailable"] =
-                                    row.value("category") == "mods" &&
                                     isNewerRelease(modrinthRelease(installed, hash), modrinthRelease(latest));
                             }
                         }
@@ -182,22 +187,65 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
                                         });
                             });
                 };
-                if (game.isEmpty() || loader.isEmpty() || loader == "vanilla") {
+                QMap<QString, QJsonArray> groups;
+                QMap<QString, QStringList> permitted;
+                if (!game.isEmpty())
+                    for (const auto &value : batch->rows) {
+                        const auto row = value.toMap();
+                        const auto hash = row.value("sha1").toString();
+                        const auto installed = batch->installed.value(hash).toObject();
+                        if (installed.isEmpty() || row.value("directory").toBool())
+                            continue;
+                        const auto category = row.value("category").toString();
+                        QStringList loaders;
+                        if (category == "mods") {
+                            loaders = loader.split('|', Qt::SkipEmptyParts);
+                            loaders.removeAll("vanilla");
+                        } else if (category == "datapacks")
+                            loaders = {"datapack"};
+                        else if (category == "resourcepacks")
+                            loaders = {"minecraft"};
+                        else if (category == "shaderpacks")
+                            loaders = modrinthRelease(installed, hash).loaders;
+                        if (loaders.isEmpty())
+                            continue;
+                        loaders.sort();
+                        const auto key = category + '|' + loaders.join('|');
+                        if (!groups[key].contains(hash))
+                            groups[key] << hash;
+                        permitted[key] = loaders;
+                    }
+                if (groups.isEmpty()) {
                     loadMetadata();
                     return;
                 }
-                QJsonObject updates{{"hashes", hashes},
-                                    {"algorithm", "sha1"},
-                                    {"game_versions", QJsonArray{game}},
-                                    {"loaders", QJsonArray{loader}},
-                                    {"version_types", QJsonArray{"release"}}};
-                request("version_files/update", &updates,
-                        [batch, loadMetadata](const QJsonDocument &updates, const QString &error) {
-                            if (!error.isEmpty())
-                                batch->errors << "Update check: " + error;
-                            batch->latest = updates.object();
-                            loadMetadata();
-                        });
+                auto pending = std::make_shared<int>(groups.size());
+                for (auto it = groups.cbegin(); it != groups.cend(); ++it) {
+                    const auto category = it.key().section('|', 0, 0);
+                    const auto loaders = permitted.value(it.key());
+                    QJsonObject updates{{"hashes", it.value()},
+                                        {"algorithm", "sha1"},
+                                        {"game_versions", QJsonArray{game}},
+                                        {"loaders", QJsonArray::fromStringList(loaders)},
+                                        {"version_types", QJsonArray{"release"}}};
+                    request("version_files/update", &updates,
+                            [batch, loadMetadata, pending, category, loaders, game](const QJsonDocument &doc,
+                                                                                    const QString &error) {
+                                if (!error.isEmpty())
+                                    batch->errors << "Update check: " + error;
+                                const auto values = doc.object();
+                                for (auto it = values.begin(); it != values.end(); ++it) {
+                                    const auto release = modrinthRelease(it.value().toObject());
+                                    const auto extension = category == "mods" ? ".jar" : ".zip";
+                                    if (release.channel == "release" && release.gameVersions.contains(game) &&
+                                        sharesLoader(release.loaders, loaders) &&
+                                        release.filename.endsWith(extension, Qt::CaseInsensitive))
+                                        batch->latest[it.key() + '|' + category] = it.value();
+                                }
+                                if (--*pending == 0)
+                                    loadMetadata();
+                            });
+                }
             });
 }
 void ContentCatalogue::versions(const QVariantMap &row, const QString &game, const QString &loader,

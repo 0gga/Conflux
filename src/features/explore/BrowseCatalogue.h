@@ -11,6 +11,7 @@ class BrowseCatalogue final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantList projects READ projects NOTIFY changed)
     Q_PROPERTY(QVariantMap filters READ filters NOTIFY changed)
+    Q_PROPERTY(QVariantMap author READ author NOTIFY changed)
     Q_PROPERTY(QVariantMap options READ options NOTIFY changed)
     Q_PROPERTY(int page READ page NOTIFY changed)
     Q_PROPERTY(bool hasNext READ hasNext NOTIFY changed)
@@ -24,6 +25,9 @@ class BrowseCatalogue final : public QObject {
     QVariantList projects() const;
     QVariantMap filters() const {
         return m_filters;
+    }
+    QVariantMap author() const {
+        return m_author;
     }
     QVariantMap options() const {
         return m_options;
@@ -42,7 +46,8 @@ class BrowseCatalogue final : public QObject {
         return m_scroll;
     }
     void setScrollPosition(qreal);
-    void setContext(const QString &, const QStringList &versions, const QStringList &loaders);
+    void setContext(const QString &, const QStringList &versions, const QStringList &loaders,
+                    const QVariantMap &author = {});
     void setInstalled(const QVariantList &inventory);
     void setKey(const QByteArray &);
     void setDefaults(const QVariantMap &);
@@ -79,7 +84,8 @@ class BrowseCatalogue final : public QObject {
     QHash<QString, QString> m_identities;
     QSet<QString> m_installed, m_seen;
     QHash<QString, Project> m_known;
-    QVariantMap m_filters, m_options, m_defaults;
+    QVariantMap m_filters, m_options, m_defaults, m_author;
+    QMap<QString, QString> m_contextTypes;
     QMap<QString, Stream> m_streams;
     QVector<QVariantList> m_pages;
     QMap<QString, Snapshot> m_contexts;

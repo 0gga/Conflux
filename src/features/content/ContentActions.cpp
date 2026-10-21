@@ -55,7 +55,9 @@ void ContentActions::refresh(bool checkUpdates) {
     const auto files = m_files;
     const auto previous = m_rows;
     m_busy = true;
-    m_notice = checkUpdates ? "Checking compatible updates…" : "Reading content changes…";
+    m_notice.clear();
+    m_activity = "checking";
+    m_activityText = checkUpdates ? "Checking updates" : "Reading changes";
     emit changed();
     auto *watcher = new QFutureWatcher<QVariantList>(this);
     const QPointer<ContentActions> guard(this);
@@ -67,16 +69,18 @@ void ContentActions::refresh(bool checkUpdates) {
             if (generation != m_generation)
                 return;
             auto result = rows;
-            bool newFiles = false;
+            QVariantList unidentified;
             const QStringList metadata{"sourceIds",        "external",      "provider",        "projectId",
                                        "installedRelease", "updateRelease", "updateAvailable", "projectUrl",
-                                       "author",           "authorIcon",    "environment",     "openSource"};
+                                       "author",           "authorIcon",    "environment",     "openSource",
+                                       "authorIds"};
             for (int i = 0; i < result.size(); ++i) {
                 auto row = result.at(i).toMap();
                 bool found = false;
                 for (const auto &value : previous) {
                     const auto old = value.toMap();
-                    if (!row.value("sha1").toString().isEmpty() && old.value("sha1") == row.value("sha1")) {
+                    if (!row.value("sha1").toString().isEmpty() && old.value("sha1") == row.value("sha1") &&
+                        old.value("category") == row.value("category")) {
                         for (const auto &key : metadata)
                             if (old.contains(key))
                                 row[key] = old.value(key);
@@ -84,8 +88,8 @@ void ContentActions::refresh(bool checkUpdates) {
                         break;
                     }
                 }
-                if (!found && row.value("category") == "mods")
-                    newFiles = true;
+                if (!found)
+                    unidentified << row;
                 result[i] = row;
             }
             const auto done = [guard, generation](QVariantList rows, QString error) {
@@ -94,6 +98,7 @@ void ContentActions::refresh(bool checkUpdates) {
                 guard->m_rows = rows;
                 guard->m_busy = false;
                 guard->m_notice = error;
+                guard->m_activity = error.isEmpty() ? "idle" : "error";
                 guard->applyPreferences();
                 QStringList retained;
                 for (const auto &path : guard->m_selected)
@@ -105,10 +110,30 @@ void ContentActions::refresh(bool checkUpdates) {
             m_rows = result;
             applyPreferences();
             emit changed();
-            if (checkUpdates || newFiles)
-                m_catalogue->refresh(result, m_pack.value("minecraft").toString(),
-                                     m_pack.value("loader").toString(), done);
-            else
+            if (checkUpdates || !unidentified.isEmpty()) {
+                const auto lookup = checkUpdates ? result : unidentified;
+                m_catalogue->refresh(
+                    lookup, m_pack.value("minecraft").toString(),
+                    compatibleLoaders(m_pack.value("loader").toString(), result).join('|'),
+                    [done, result, checkUpdates](QVariantList indexed, QString error) mutable {
+                        if (checkUpdates) {
+                            done(indexed, error);
+                            return;
+                        }
+                        for (auto &value : result) {
+                            const auto row = value.toMap();
+                            for (const auto &entry : indexed) {
+                                const auto item = entry.toMap();
+                                if (item.value("relativePath") == row.value("relativePath") &&
+                                    item.value("sha1") == row.value("sha1")) {
+                                    value = item;
+                                    break;
+                                }
+                            }
+                        }
+                        done(result, error);
+                    });
+            } else
                 done(result, {});
         });
     watcher->setFuture(
@@ -218,7 +243,8 @@ void ContentActions::setQuery(const QString &value) {
     }
 }
 void ContentActions::setCategory(const QString &value) {
-    if (QStringList{"all", "mods", "resourcepacks", "shaderpacks"}.contains(value) && value != m_category) {
+    if (QStringList{"all", "mods", "resourcepacks", "shaderpacks", "datapacks"}.contains(value) &&
+        value != m_category) {
         m_category = value;
         emit changed();
     }
@@ -287,7 +313,10 @@ void ContentActions::runWrite(std::function<ContentWriteResult()> work) {
         return;
     m_busy = true;
     m_mutating = true;
-    m_notice = "Applying content change…";
+    m_notice.clear();
+    m_activity = "applying";
+    m_activityText = "Applying changes";
+    m_cancelRequested = false;
     emit changed();
     auto *watcher = new QFutureWatcher<ContentWriteResult>(this);
     connect(watcher, &QFutureWatcher<ContentWriteResult>::finished, this, [this, watcher] {
@@ -300,14 +329,16 @@ void ContentActions::runWrite(std::function<ContentWriteResult()> work) {
 void ContentActions::finishWrite(ContentWriteResult result) {
     m_busy = false;
     m_mutating = false;
-    m_dirty = result.ok;
-    m_notice = result.ok ? (result.backupPath.isEmpty() ? "Content updated."
-                                                        : "Content updated. Originals were backed up.")
-                         : result.error;
-    if (result.ok && !result.error.isEmpty())
-        m_notice += '\n' + result.error;
+    m_dirty = result.ok || result.changed;
+    m_activity = m_cancelRequested && !result.ok ? "cancelled"
+                 : !result.error.isEmpty()       ? "error"
+                 : result.ok                     ? "success"
+                                                 : "error";
+    m_notice = m_cancelRequested && !result.ok ? QString{} : result.error;
+    m_activityText.clear();
+    m_cancelRequested = false;
     emit changed();
-    if (result.ok)
+    if (result.ok || result.changed)
         emit contentChanged();
 }
 void ContentActions::setEnabled(const QString &path, bool value) {
@@ -344,7 +375,10 @@ void ContentActions::install(const QVector<ContentInstallRequest> &requests) {
         return;
     m_busy = true;
     m_mutating = true;
-    m_notice = "Resolving updates and required dependencies…";
+    m_notice.clear();
+    m_activity = "installing";
+    m_activityText = "Preparing updates";
+    m_cancelRequested = false;
     emit changed();
     const QPointer<ContentActions> guard(this);
     m_installer->install(m_pack, m_rows, requests, [guard](ContentWriteResult result) {
@@ -352,23 +386,71 @@ void ContentActions::install(const QVector<ContentInstallRequest> &requests) {
             guard->finishWrite(std::move(result));
     });
 }
+ContentInstallRequest ContentActions::updateRequest(const QVariantMap &row) const {
+    return {releaseFromVariant(row.value("updateRelease").toMap()), row.value("title").toString(),
+            QJsonObject::fromVariantMap(row.value("sourceIds").toMap()),
+            categoryType(row.value("category").toString())};
+}
 void ContentActions::update(const QString &path) {
     const auto row = find(path);
     if (!row.value("updateAvailable").toBool() || row.value("frozen").toBool())
         return;
-    install({{releaseFromVariant(row.value("updateRelease").toMap()), row.value("title").toString(),
-              QJsonObject::fromVariantMap(row.value("sourceIds").toMap())}});
+    install({updateRequest(row)});
 }
 void ContentActions::updateAll() {
     QVector<ContentInstallRequest> requests;
     for (const auto &value : m_rows) {
         const auto row = value.toMap();
         if (row.value("updateAvailable").toBool() && !row.value("frozen").toBool())
-            requests << ContentInstallRequest{releaseFromVariant(row.value("updateRelease").toMap()),
-                                              row.value("title").toString(),
-                                              QJsonObject::fromVariantMap(row.value("sourceIds").toMap())};
+            requests << updateRequest(row);
     }
     install(requests);
+}
+QVariantList ContentActions::selection() const {
+    QVariantList rows;
+    for (const auto &path : m_selected) {
+        const auto row = find(path);
+        if (!row.isEmpty())
+            rows << row;
+    }
+    return rows;
+}
+void ContentActions::updateSelected() {
+    QVector<ContentInstallRequest> requests;
+    for (const auto &value : selection()) {
+        const auto row = value.toMap();
+        if (row.value("updateAvailable").toBool() && !row.value("frozen").toBool())
+            requests << updateRequest(row);
+    }
+    install(requests);
+}
+void ContentActions::setSelectedEnabled(bool enabled) {
+    const auto rows = selection();
+    const auto files = m_files;
+    const auto pack = m_pack;
+    if (!rows.isEmpty())
+        runWrite([files, pack, rows, enabled] { return files->setEnabledBatch(pack, rows, enabled); });
+}
+void ContentActions::copySelected(const QString &format) {
+    QStringList text;
+    for (const auto &value : selection()) {
+        const auto row = value.toMap();
+        const auto title = row.value("title").toString();
+        const auto link = row.value("projectUrl").toString();
+        if (format == "names")
+            text << title;
+        else if (format == "files")
+            text << row.value("fileName").toString();
+        else if (!link.isEmpty() && format == "links")
+            text << link;
+        else if (!link.isEmpty() && format == "markdown") {
+            auto escaped = title;
+            escaped.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]");
+            text << '[' + escaped + "](" + link + ')';
+        }
+    }
+    if (!text.isEmpty())
+        emit copyRequested(text.join('\n'));
 }
 void ContentActions::openVersions(const QString &path) {
     m_versionTarget = find(path);
@@ -431,12 +513,15 @@ void ContentActions::cancel() {
     if (!cancellable())
         return;
     if (m_mutating) {
+        m_cancelRequested = true;
         m_installer->cancel();
         return;
     }
     ++m_generation;
     m_busy = false;
-    m_notice = "Refresh cancelled.";
+    m_notice.clear();
+    m_activity = "cancelled";
+    m_activityText.clear();
     emit changed();
 }
 } // namespace studio

@@ -13,6 +13,7 @@ struct Project {
     qint64 downloads = 0;
     QMap<QString, QString> sourceIds;
     QMap<QString, QString> sourceUrls;
+    QMap<QString, QString> authorIds;
     QString type = "mod", environment, updated, created;
     QStringList loaders;
     QMap<QString, qint64> sourceDownloads;

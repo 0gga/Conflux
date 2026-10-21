@@ -26,7 +26,7 @@ ApplicationWindow {
     readonly property real interfaceScale: Appearance.values.uiScale / 100
     readonly property bool compactNavigation: Appearance.values.navigationMode === 1 || width / interfaceScale < (Appearance.values.navigationMode === 2 ? 820 : 1000)
     readonly property string pageTitle: page === "discover"
-        ? (session.navigation.route.packPath ? browseInstanceName + ' - Exploring Content' : "Explore content")
+        ? (session.navigation.route.author ? session.navigation.route.author.name + " - Content" : session.navigation.route.packPath ? browseInstanceName + ' - Exploring Content' : "Explore content")
         : page === "showcase" ? (session.showcase.project.title || "Mod showcase")
         : page === "workspace" ? (app.activePack.name || "Modpack") : page === "settings" ? "Settings" : "Library"
     function syncRoutePack() {
@@ -152,7 +152,7 @@ ApplicationWindow {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 currentIndex: ["library", "discover", "workspace", "settings", "showcase"].indexOf(window.page)
                 LibraryPage { app: window.app; onCreateRequested: newPack.open(); onDiscoverRequested: window.navigate("discover"); onPackRequested: function(path, explore) { window.session.navigation.go({page:explore ? "discover" : "workspace",packPath:path}) } }
-                DiscoverPage { id: discovery; app: window.app; content: window.session.content; browse: window.session.browse; catalogue: window.session.catalogue; worlds: window.session.worlds; targetPath: window.session.navigation.route.packPath || ""; onInstanceRequested: function(path) { window.session.navigation.go({page:"discover",packPath:path}) } onCreateRequested: newPack.open(); onWorkspaceRequested: window.navigate("workspace"); onShowcaseRequested: function(project) { window.session.navigation.go({page:"showcase",packPath:window.session.navigation.route.packPath || "",project:project}) } }
+                DiscoverPage { id: discovery; app: window.app; content: window.session.content; browse: window.session.browse; catalogue: window.session.catalogue; worlds: window.session.worlds; targetPath: window.session.navigation.route.packPath || ""; onInstanceRequested: function(path) { window.session.navigation.go({page:"discover",packPath:path}) } onCreateRequested: newPack.open(); onWorkspaceRequested: window.navigate("workspace"); onShowcaseRequested: function(project, tab) { window.session.navigation.go({page:"showcase",packPath:window.session.navigation.route.packPath || "",author:window.session.navigation.route.author,project:project,showcaseTab:tab || "description"}) } onAuthorRequested: function(author) { window.session.navigation.go({page:"discover",packPath:window.session.navigation.route.packPath || "",author:author}) } }
                 PackPage {
                     app: window.app; session: window.session; onCreateRequested: newPack.open(); onDiscoverRequested: window.navigate("discover")
                     onSectionRequested: function(key) { window.packRoute(key) }
@@ -160,7 +160,8 @@ ApplicationWindow {
                     onFolderRequested: function(path) { window.packRoute("files",{folder:path}) }
                     onLogRequested: function(path) { window.packRoute("logs",{logPath:path}) }
                     onWarningSettingsRequested: window.session.navigation.go({page:"settings",settingsTab:"warnings"})
-                    onShowcaseRequested: function(path) { window.session.navigation.go({page:"showcase",packPath:window.app.activePack.path,modPath:path}) }
+                    onShowcaseRequested: function(path, tab) { window.session.navigation.go({page:"showcase",packPath:window.app.activePack.path,modPath:path,showcaseTab:tab || "description"}) }
+                    onAuthorRequested: function(author) { window.session.navigation.go({page:"discover",packPath:window.app.activePack.path,author:author}) }
                 }
                 SettingsPage { app: window.app; catalogue: window.session.catalogue; warnings: window.session.warnings; browsePreferences: window.session.browsePreferences; tab: window.session.navigation.route.settingsTab || "appearance"; onTabRequested: function(key) { window.session.navigation.go({page:"settings",settingsTab:key}) } }
                 ShowcasePage { app: window.app; browse: window.session.browse; showcase: window.session.showcase; releaseFilters: window.session.releaseFilters; contentController: window.session.content; tab: window.session.navigation.route.showcaseTab || "description"; onTabRequested: function(key) { const route = Object.assign({},window.session.navigation.route); route.showcaseTab = key; window.session.navigation.go(route) } }

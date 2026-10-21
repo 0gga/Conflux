@@ -1,5 +1,6 @@
 #include "CatalogueClient.h"
 #include "domain/ContentCompatibility.h"
+#include "platform/ReviewedAuthorIdentities.h"
 #include <QJsonArray>
 #include <QNetworkReply>
 #include <QUrlQuery>
@@ -54,8 +55,10 @@ QUrl CatalogueClient::searchUrl(const CatalogueQuery &query, int offset, int lim
     QUrl url(cf ? "https://api.curseforge.com/v1/mods/search" : "https://api.modrinth.com/v2/search");
     QUrlQuery params;
     if (!cf) {
-        QJsonArray filters{
-            QJsonArray{(query.type == "datapack" ? "all_project_types:" : "project_type:") + query.type}};
+        QJsonArray filters;
+        if (query.type != "all")
+            filters << QJsonArray{(query.type == "datapack" ? "all_project_types:" : "project_type:") +
+                                  query.type};
         auto group = [&filters](const QString &key, const QStringList &values) {
             QJsonArray options;
             for (const auto &value : values)
@@ -80,7 +83,10 @@ QUrl CatalogueClient::searchUrl(const CatalogueQuery &query, int offset, int lim
         params.addQueryItem("limit", QString::number(qBound(1, limit, 100)));
     } else {
         params.addQueryItem("gameId", "432");
-        params.addQueryItem("classId", QString::number(classId));
+        if (query.type != "all")
+            params.addQueryItem("classId", QString::number(classId));
+        if (query.authorIds.contains("curseforge"))
+            params.addQueryItem("authorId", query.authorIds.value("curseforge"));
         params.addQueryItem("searchFilter", query.text);
         params.addQueryItem("index", QString::number(qMax(0, offset)));
         params.addQueryItem("pageSize", QString::number(qBound(1, limit, 50)));
@@ -116,6 +122,49 @@ void CatalogueClient::fetch(const CatalogueQuery &query, int offset, int limit, 
         callback({{}, 0, "CurseForge needs an approved API key."});
         return;
     }
+    if (!query.authorIds.isEmpty()) {
+        const auto authors = ReviewedAuthorIdentities::expand(query.authorIds);
+        const auto author = authors.value(query.provider);
+        if (author.isEmpty()) {
+            callback({{}, 0, {}});
+            return;
+        }
+        if (cf && query.authorIds.value("curseforge") != author) {
+            auto scoped = query;
+            scoped.authorIds = authors;
+            fetch(scoped, offset, limit, callback);
+            return;
+        }
+        if (!cf) {
+            get(QUrl("https://api.modrinth.com/v2/user/" +
+                     QString::fromLatin1(QUrl::toPercentEncoding(author)) + "/projects"),
+                false,
+                [this, query, offset, limit, callback](const QJsonDocument &doc, const QString &error) {
+                    if (!error.isEmpty()) {
+                        callback({{}, 0, error});
+                        return;
+                    }
+                    auto scoped = query;
+                    scoped.authorIds.clear();
+                    scoped.projectIds.clear();
+                    for (const auto &value : doc.array()) {
+                        const auto id = value.toObject().value("id").toString();
+                        if (!id.isEmpty())
+                            scoped.projectIds << id;
+                    }
+                    if (scoped.projectIds.isEmpty()) {
+                        callback({{}, 0, {}});
+                        return;
+                    }
+                    if (scoped.projectIds.size() > 1000) {
+                        callback({{}, 0, "This author has more than1000 projects; narrow the content type."});
+                        return;
+                    }
+                    fetch(scoped, offset, limit, callback);
+                });
+            return;
+        }
+    }
     // Each provider uses its own taxonomy. Selections across providers form a union.
     bool ownTag = false;
     for (const auto &tag : query.tags)
@@ -143,7 +192,12 @@ void CatalogueClient::fetch(const CatalogueQuery &query, int offset, int limit, 
                         const auto row = value.toObject();
                         Project p;
                         p.provider = query.provider;
-                        p.type = query.type;
+                        p.type =
+                            query.type == "all"
+                                ? (cf ? QMap<int, QString>{{6, "mod"}, {12, "resourcepack"}, {6552, "shader"}}
+                                            .value(row.value("classId").toInt(), "datapack")
+                                      : row.value("project_type").toString("mod"))
+                                : query.type;
                         p.id = cf ? QString::number(row.value("id").toInteger())
                                   : row.value("project_id").toString();
                         p.title = row.value(cf ? "name" : "title").toString();
@@ -155,7 +209,7 @@ void CatalogueClient::fetch(const CatalogueQuery &query, int offset, int limit, 
                         p.icon = cf ? row.value("logo").toObject().value("url").toString()
                                     : row.value("icon_url").toString();
                         p.url = cf ? row.value("links").toObject().value("websiteUrl").toString()
-                                   : "https://modrinth.com/" + query.type + "/" + p.id;
+                                   : "https://modrinth.com/" + p.type + "/" + p.id;
                         p.author = cf ? (row.value("authors").toArray().isEmpty() ? QString{}
                                                                                   : row.value("authors")
                                                                                         .toArray()
@@ -164,6 +218,11 @@ void CatalogueClient::fetch(const CatalogueQuery &query, int offset, int limit, 
                                                                                         .value("name")
                                                                                         .toString())
                                       : row.value("author").toString();
+                        if (cf && !row.value("authors").toArray().isEmpty())
+                            p.authorIds["curseforge"] = QString::number(
+                                row.value("authors").toArray().first().toObject().value("id").toInteger());
+                        else if (!cf && !p.author.isEmpty())
+                            p.authorIds["modrinth"] = p.author;
                         p.sourceIds[p.provider] = p.id;
                         p.sourceDownloads[p.provider] = p.downloads;
                         if (cf) {

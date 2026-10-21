@@ -28,7 +28,8 @@ void PackChangeMonitor::rebuild() {
     if (root.isEmpty())
         return;
     paths << root;
-    for (const auto &category : QStringList{"mods", "resourcepacks", "shaderpacks", "config", "saves"}) {
+    for (const auto &category :
+         QStringList{"mods", "resourcepacks", "shaderpacks", "datapacks", "config", "saves"}) {
         const auto dir = NativePackFileStore::resolve(root, category);
         if (dir.isEmpty())
             continue;

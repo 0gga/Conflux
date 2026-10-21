@@ -54,6 +54,19 @@ class ShowcaseTests : public QObject {
         QCOMPARE(file.write(data), data.size());
     }
   private slots:
+    void installedAssetShowcaseRetainsItsDestinationType() {
+        auto source = std::make_shared<ShowcaseFixture>();
+        ProjectShowcase showcase(source, std::make_shared<IdentityFixture>());
+        showcase.open({{"minecraft", "1.21.1"}, {"loader", "fabric"}},
+                      {{"relativePath", "datapacks/example.zip"}, {"category", "datapacks"}});
+        QTRY_COMPARE(source->pending.size(), 1);
+        Project project;
+        project.id = "project";
+        project.provider = "modrinth";
+        project.type = "mod";
+        source->pending.first()(project, {});
+        QCOMPARE(showcase.project().value("type").toString(), QString("datapack"));
+    }
     void modShowcasesLoadAllCompatibilityOptions() {
         auto source = std::make_shared<ShowcaseFixture>();
         ProjectShowcase showcase(source, std::make_shared<IdentityFixture>());

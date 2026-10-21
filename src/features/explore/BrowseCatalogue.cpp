@@ -1,6 +1,7 @@
 #include "BrowseCatalogue.h"
 #include "domain/ContentTypes.h"
 #include <QDateTime>
+#include <QJsonDocument>
 #include <QPointer>
 #include <QTimer>
 namespace studio {
@@ -118,9 +119,15 @@ void BrowseCatalogue::activateView(bool sameInstance) {
     for (const auto &key : {"sort", "size", "source", "hideInstalled"})
         if (m_defaults.contains(key))
             m_filters[key] = m_defaults.value(key);
+    if (!m_author.isEmpty()) {
+        m_filters["query"] = "";
+        m_filters["source"] = "merged";
+        m_filters["hidden"] = false;
+        m_filters["hideInstalled"] = false;
+    }
     m_filters["versions"] = m_defaultVersions;
     m_filters["loaders"] = m_defaultLoaders;
-    m_filters["unlocked"] = false;
+    m_filters["unlocked"] = !m_author.isEmpty();
     m_filters["tags"] = QStringList{};
     m_defaultLoaderSelection = true;
     if (m_preferences)
@@ -133,16 +140,29 @@ void BrowseCatalogue::activateView(bool sameInstance) {
         }
     reset();
 }
-void BrowseCatalogue::setContext(const QString &key, const QStringList &versions,
-                                 const QStringList &loaders) {
-    m_defaultVersions = versions;
-    m_defaultLoaders = loaders;
+void BrowseCatalogue::setContext(const QString &baseKey, const QStringList &versions,
+                                 const QStringList &loaders, const QVariantMap &author) {
+    const auto key =
+        author.isEmpty()
+            ? baseKey
+            : baseKey + "|author:" +
+                  QString::fromUtf8(
+                      QJsonDocument::fromVariant(author.value("ids")).toJson(QJsonDocument::Compact));
+    m_defaultVersions = author.isEmpty() ? versions : QStringList{};
+    m_defaultLoaders = author.isEmpty() ? loaders : QStringList{};
     if (m_context == key) {
         if (applyDefaults())
             reset();
         return;
     }
     saveSnapshot();
+    m_contextTypes[m_context] = m_filters.value("type").toString();
+    const auto previousAuthor = m_author;
+    m_author = author;
+    m_filters["type"] =
+        m_contextTypes.value(key, !author.isEmpty()           ? "all"
+                                  : !previousAuthor.isEmpty() ? "mod"
+                                                              : m_filters.value("type").toString());
     m_context = key;
     m_installed.clear();
     activateView();
@@ -173,6 +193,9 @@ CatalogueQuery BrowseCatalogue::request(const QString &provider) const {
     if (q.type == "mod")
         q.loaders = m_filters.value("loaders").toStringList();
     q.tags = m_filters.value("tags").toStringList();
+    const auto authors = m_author.value("ids").toMap();
+    for (auto it = authors.cbegin(); it != authors.cend(); ++it)
+        q.authorIds[it.key()] = it.value().toString();
     if (m_filters.value("hidden").toBool())
         for (const auto &id : m_visibility->hiddenIdentities())
             if (id.startsWith(provider + ':'))
@@ -183,7 +206,7 @@ void BrowseCatalogue::configure(const QVariantMap &requested) {
     auto changes = requested;
     const auto type = changes.take("type").toString();
     if (!type.isEmpty() && type != m_filters.value("type").toString() &&
-        QStringList{"mod", "resourcepack", "shader", "datapack"}.contains(type)) {
+        QStringList{"all", "mod", "resourcepack", "shader", "datapack"}.contains(type)) {
         saveSnapshot();
         m_filters["type"] = type;
         activateView(true);
@@ -213,7 +236,7 @@ void BrowseCatalogue::configure(const QVariantMap &requested) {
             !QStringList{"merged", "modrinth", "curseforge"}.contains(value.toString()))
             continue;
         if (it.key() == "type" &&
-            !QStringList{"mod", "resourcepack", "shader", "datapack"}.contains(value.toString()))
+            !QStringList{"all", "mod", "resourcepack", "shader", "datapack"}.contains(value.toString()))
             continue;
         if (m_filters.value(it.key()) != value) {
             m_filters[it.key()] = value;
@@ -270,8 +293,7 @@ bool BrowseCatalogue::accepted(const Project &p) const {
         return false;
     if (m_filters.value("hideInstalled").toBool())
         for (auto it = p.sourceIds.cbegin(); it != p.sourceIds.cend(); ++it)
-            if (m_installed.contains(it.key() + ':' + it.value() + '|' +
-                                     contentCategory(m_filters.value("type").toString())) ||
+            if (m_installed.contains(it.key() + ':' + it.value() + '|' + contentCategory(p.type)) ||
                 (m_filters.value("type") == "datapack" &&
                  m_installed.contains(it.key() + ':' + it.value() + "|mods")))
                 return false;

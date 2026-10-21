@@ -9,6 +9,9 @@ class ContentFileFixture final : public IContentFileStore {
     ContentWriteResult setEnabled(const QVariantMap &, const QVariantMap &, bool) const override {
         return {true, {}, {}};
     }
+    ContentWriteResult setEnabledBatch(const QVariantMap &, const QVariantList &, bool) const override {
+        return {true, {}};
+    }
     ContentWriteResult remove(const QVariantMap &, const QVariantList &) const override {
         return {true, {}, {}};
     }
@@ -18,8 +21,12 @@ class ContentFileFixture final : public IContentFileStore {
 };
 class ContentCatalogueFixture final : public IContentCatalogue {
   public:
+    int refreshCount = 0;
+    QVariantList refreshed;
     void refresh(const QVariantList &rows, const QString &, const QString &,
                  IndexCallback callback) override {
+        ++refreshCount;
+        refreshed = rows;
         callback(rows, {});
     }
     void versions(const QVariantMap &, const QString &, const QString &, VersionsCallback callback) override {

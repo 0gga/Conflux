@@ -1,4 +1,5 @@
 #include "domain/Catalogue.h"
+#include "platform/ReviewedAuthorIdentities.h"
 #include "services/CatalogueClient.h"
 #include "services/InstallationDiscovery.h"
 #include "services/PackRepository.h"
@@ -53,6 +54,20 @@ class FoundationTests : public QObject {
         return file.open(QIODevice::WriteOnly) && file.write(data) == data.size();
     }
   private slots:
+    void authorIdentityLinksRejectAmbiguousNamesAndPreserveExactProviderIds() {
+        QTemporaryDir temp;
+        const auto path = temp.path() + "/authors.json";
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(
+            R"({"modrinth:mr123":"owner","curseforge:456":"owner","modrinth:other":"ambiguous","modrinth:another":"ambiguous","curseforge:789":"ambiguous"})");
+        file.close();
+        const auto linked = ReviewedAuthorIdentities::expand({{"modrinth", "mr123"}}, path);
+        QCOMPARE(linked.value("curseforge"), QString("456"));
+        const auto separate = ReviewedAuthorIdentities::expand({{"modrinth", "same-display-name"}}, path);
+        QVERIFY(!separate.contains("curseforge"));
+        QCOMPARE(ReviewedAuthorIdentities::expand({{"modrinth", "other"}}, path).size(), 1);
+    }
     void updatesDoNotDowngradeOrChangeProjectIdentity() {
         Release installed;
         installed.projectId = "project";

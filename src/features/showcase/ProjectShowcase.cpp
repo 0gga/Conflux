@@ -1,5 +1,6 @@
 #include "ProjectShowcase.h"
 #include "DescriptionRenderer.h"
+#include "domain/ContentTypes.h"
 #include <QFutureWatcher>
 #include <QPointer>
 #include <QtConcurrent>
@@ -25,7 +26,9 @@ void ProjectShowcase::open(const QVariantMap &pack, const QVariantMap &file) {
     close();
     m_filePath = file.value("relativePath").toString();
     m_requestKey = m_filePath;
-    m_project = {{"title", file.value("title")}, {"icon", file.value("icon")}};
+    m_project = {{"title", file.value("title")},
+                 {"icon", file.value("icon")},
+                 {"type", categoryType(file.value("category").toString())}};
     m_busy = true;
     const int generation = m_generation;
     emit changed();

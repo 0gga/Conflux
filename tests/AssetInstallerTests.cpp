@@ -1,5 +1,6 @@
 #include "miniz.h"
 #include "platform/AssetInstaller.h"
+#include "platform/ContentInstaller.h"
 #include "services/PackRepository.h"
 #include <QCryptographicHash>
 #include <QDir>
@@ -89,6 +90,67 @@ class AssetInstallerTests : public QObject {
         return r;
     }
   private slots:
+    void mixedZipQueuePreservesManagedAssetPins_data() {
+        QTest::addColumn<bool>("failLast");
+        QTest::newRow("complete") << false;
+        QTest::newRow("partial-failure") << true;
+    }
+    void mixedZipQueuePreservesManagedAssetPins() {
+        QFETCH(bool, failLast);
+        QTemporaryDir temp;
+        const auto bytes = zip(temp.path() + "/fixture.zip");
+        QVERIFY(!bytes.isEmpty());
+        const auto created = PackRepository::create(temp.path(), "Assets", "1.21.1", "fabric");
+        QVERIFY(created.ok);
+        QTcpServer server;
+        QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+        connect(&server, &QTcpServer::newConnection, &server, [&] {
+            auto *socket = server.nextPendingConnection();
+            connect(socket, &QTcpSocket::readyRead, socket, [socket, bytes] {
+                socket->readAll();
+                socket->write("HTTP/1.1 200 OK\r\nContent-Length: " + QByteArray::number(bytes.size()) +
+                              "\r\nConnection: close\r\n\r\n" + bytes);
+                socket->disconnectFromHost();
+            });
+            connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+        });
+        QVector<ContentInstallRequest> requests;
+        for (const auto &type : QStringList{"resourcepack", "datapack"}) {
+            Release r;
+            r.provider = "modrinth";
+            r.projectId = type;
+            r.id = type + "-2";
+            r.filename = type + ".zip";
+            r.gameVersions = {"1.21.1"};
+            r.url = "http://127.0.0.1:" + QString::number(server.serverPort()) + "/file.zip";
+            r.fileSize = bytes.size();
+            r.sha1 = QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha1).toHex());
+            requests << ContentInstallRequest{r, type, QJsonObject{{"modrinth", type}}, type};
+        }
+        if (failLast) {
+            auto bad = requests.first();
+            bad.release.projectId = "bad";
+            bad.release.sha1 = QString(40, '0');
+            requests << bad;
+        }
+        auto files = std::make_shared<NativeContentStore>(nullptr, temp.path() + "/backups");
+        ContentInstaller installer(files, nullptr, true);
+        auto pack = created.manifest.toVariantMap();
+        pack["path"] = created.path;
+        pack["managed"] = true;
+        ContentWriteResult result;
+        bool done = false;
+        installer.install(pack, {}, requests, [&](ContentWriteResult value) {
+            result = value;
+            done = true;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(done, 10000);
+        QCOMPARE(result.ok, !failLast);
+        QVERIFY(result.changed);
+        QCOMPARE(read(created.path + "/resourcepacks/resourcepack.zip"), bytes);
+        QCOMPARE(read(created.path + "/datapacks/datapack.zip"), bytes);
+        QCOMPARE(PackRepository::inspect(created.path).manifest.value("assets").toArray().size(), 2);
+    }
     void verifiedZipInstallsWithExactManagedPinsAndGitExclusions() {
         QTemporaryDir temp;
         const auto created = PackRepository::create(temp.path(), "Pack", "1.21.1", "fabric");

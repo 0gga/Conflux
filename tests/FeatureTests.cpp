@@ -20,6 +20,36 @@ class FeatureTests : public QObject {
         QCOMPARE(file.write(bytes), bytes.size());
     }
   private slots:
+    void globalProjectLinksOpenEvenWhenAnotherInstanceIsLoaded() {
+        QTemporaryDir temp;
+        DesktopSession session(nullptr, temp.path() + "/settings.ini", temp.path() + "/backups");
+        session.setPack({{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "fabric"}});
+        QTRY_VERIFY(!session.workspace()->busy());
+        QVERIFY(session.navigation()->go(
+            {{"page", "showcase"},
+             {"project", QVariantMap{{"provider", "modrinth"}, {"id", "example"}, {"type", "mod"}}}}));
+        QCOMPARE(session.showcase()->requestKey(), QString("modrinth:example"));
+    }
+    void authorNavigationIsDistinctButShowcaseTabChangesStayWithinThePage() {
+        NavigationHistory history;
+        const QVariantMap browse{{"page", "discover"}, {"packPath", "instance"}};
+        QVERIFY(history.go(browse));
+        const QVariantMap author{{"page", "discover"},
+                                 {"packPath", "instance"},
+                                 {"author", QVariantMap{{"ids", QVariantMap{{"modrinth", "exact"}}}}}};
+        QVERIFY(history.go(author));
+        history.back();
+        QVERIFY(!history.route().contains("author"));
+        history.forward();
+        QVERIFY(history.route().contains("author"));
+        QVariantMap project{
+            {"page", "showcase"}, {"packPath", "instance"}, {"modPath", "resourcepacks/a.zip"}};
+        QVERIFY(history.go(project));
+        project["showcaseTab"] = "versions";
+        QVERIFY(history.go(project));
+        history.back();
+        QVERIFY(history.route().contains("author"));
+    }
     void historyAndUnsavedGuard() {
         NavigationHistory history;
         QVERIFY(!history.canBack());

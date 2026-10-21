@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QSaveFile>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
@@ -52,6 +53,75 @@ class ContentActionsTests : public QObject {
                 {"updateRelease", next.toVariant()}};
     }
   private slots:
+    void refreshMetadataUsesExactCategoryAndHashIncludingRenames() {
+        QTemporaryDir temp;
+        auto catalogue = std::make_shared<ContentCatalogueFixture>();
+        ContentActions content(std::make_shared<ContentFileFixture>(), catalogue,
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        const QVariantMap pack{{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "fabric"}};
+        auto original = row("original", "Verified author");
+        content.setContext(pack, {original});
+        QTRY_VERIFY(!content.busy());
+        const int checks = catalogue->refreshCount;
+        auto renamed = original;
+        renamed["relativePath"] = "mods/renamed.jar";
+        renamed.remove("author");
+        auto asset = renamed;
+        asset["category"] = "resourcepacks";
+        asset["relativePath"] = "resourcepacks/same-hash.zip";
+        asset["author"] = "Asset author";
+        content.select("mods/original.jar", true);
+        content.setContext(pack, {renamed, asset});
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(catalogue->refreshCount, checks + 1);
+        QCOMPARE(catalogue->refreshed.size(), 1);
+        QCOMPARE(catalogue->refreshed.first().toMap().value("category").toString(), QString("resourcepacks"));
+        QCOMPARE(content.inventory().at(0).toMap().value("author").toString(), QString("Verified author"));
+        QCOMPARE(content.inventory().at(1).toMap().value("author").toString(), QString("Asset author"));
+        QVERIFY(content.selected().isEmpty());
+        content.setContext(pack, {renamed, asset}, true);
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(catalogue->refreshCount, checks + 1);
+    }
+    void forcedContextRefreshDetectsChangesWithIdenticalInventory() {
+        class Files final : public IContentFileStore {
+          public:
+            mutable int reads = 0;
+            QVariantList snapshot(const QVariantMap &, const QVariantList &input) const override {
+                ++reads;
+                auto changed = input.first().toMap();
+                changed["sha1"] = QString::number(reads);
+                return {changed};
+            }
+            ContentWriteResult setEnabled(const QVariantMap &, const QVariantMap &, bool) const override {
+                return {};
+            }
+            ContentWriteResult remove(const QVariantMap &, const QVariantList &) const override {
+                return {};
+            }
+            ContentWriteResult importFiles(const QVariantMap &, const QList<QUrl> &,
+                                           const QString &) const override {
+                return {};
+            }
+        };
+        QTemporaryDir temp;
+        auto files = std::make_shared<Files>();
+        auto catalogue = std::make_shared<ContentCatalogueFixture>();
+        ContentActions content(files, catalogue, std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        const QVariantMap pack{{"path", temp.path()}};
+        const QVariantList inventory{row("same", "Author")};
+        content.setContext(pack, inventory);
+        QTRY_VERIFY(!content.busy());
+        content.setContext(pack, inventory);
+        QCOMPARE(files->reads, 1);
+        content.setContext(pack, inventory, true);
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(files->reads, 2);
+        QCOMPARE(content.inventory().first().toMap().value("sha1").toString(), QString("2"));
+        QCOMPARE(catalogue->refreshCount, 2);
+    }
     void connectorUpdatesPreserveInstalledLoader_data() {
         QTest::addColumn<QStringList>("installedLoaders");
         QTest::addColumn<QString>("expected");
@@ -468,6 +538,35 @@ class ContentActionsTests : public QObject {
         QCOMPARE(pin.value("installPath").toString(), "mods/" + hash("new") + ".jar.disabled");
         QCOMPARE(read(pack.path + '/' + pin.value("installPath").toString()), QByteArray("new"));
         QVERIFY(!QFileInfo::exists(pack.path + "/mods/human-name.jar"));
+    }
+    void filesystemWatchesSurviveRebuildAndAtomicReplacement() {
+        QTemporaryDir temp;
+        const auto path = temp.path() + "/mods/one.jar";
+        write(path, "original");
+        PackChangeMonitor monitor;
+        monitor.setRoot(temp.path());
+        QSignalSpy changed(&monitor, &PackChangeMonitor::changed);
+        for (int i = 0; i < 5; ++i)
+            monitor.rebuild();
+        write(path, "in-place");
+        QTRY_VERIFY_WITH_TIMEOUT(changed.count() > 0, 3000);
+        changed.clear();
+        QSaveFile replacement(path);
+        QVERIFY(replacement.open(QIODevice::WriteOnly));
+        QCOMPARE(replacement.write("replacement"), 11);
+        QVERIFY(replacement.commit());
+        QTRY_VERIFY_WITH_TIMEOUT(changed.count() > 0, 3000);
+        changed.clear();
+        write(path, "after replacement");
+        QTRY_VERIFY_WITH_TIMEOUT(changed.count() > 0, 3000);
+        // A root switch must drop both watches and a queued debounce from the old root.
+        write(path, "queued old-root event");
+        QTest::qWait(100);
+        monitor.setRoot({});
+        changed.clear();
+        write(path, "unwatched");
+        QTest::qWait(650);
+        QCOMPARE(changed.count(), 0);
     }
     void filesystemEventsAreDebounced() {
         QTemporaryDir temp;

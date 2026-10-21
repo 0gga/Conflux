@@ -1,5 +1,6 @@
 #include "ApplicationController.h"
 #include "Theme.h"
+#include "features/workspace/PackWorkspace.h"
 #include "miniz.h"
 #include "services/PackContent.h"
 #include <QBuffer>
@@ -13,10 +14,12 @@
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QSemaphore>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
+#include <atomic>
 Q_IMPORT_QML_PLUGIN(Conflux_StylePlugin)
 using namespace studio;
 class WorkspaceTests : public QObject {
@@ -37,6 +40,70 @@ class WorkspaceTests : public QObject {
         QVERIFY(mz_zip_writer_end(&zip));
     }
   private slots:
+    void refreshBurstsAreSerializedAndKeepPublishedContent() {
+        class Inspector final : public IPackContentInspector {
+          public:
+            mutable QSemaphore entered, proceed;
+            mutable std::atomic<int> calls{0}, active{0}, peak{0};
+            PackContentResult inspect(const QVariantMap &pack) const override {
+                const int call = ++calls;
+                const int running = ++active;
+                peak.store(qMax(peak.load(), running));
+                entered.release();
+                proceed.tryAcquire(1, 5000);
+                --active;
+                return {{{QVariantMap{{"relativePath", pack.value("path")}, {"scan", call}}}}, {}, {}, {}};
+            }
+        };
+        auto inspector = std::make_shared<Inspector>();
+        PackWorkspace workspace(inspector);
+        const QVariantMap first{{"path", "first"}}, second{{"path", "second"}};
+        inspector->proceed.release();
+        workspace.setPack(first);
+        QTRY_VERIFY(!workspace.busy());
+        QCOMPARE(workspace.files().first().toMap().value("scan").toInt(), 1);
+        inspector->entered.acquire();
+        workspace.refresh();
+        QTRY_VERIFY(inspector->entered.available() == 1);
+        inspector->entered.acquire();
+        for (int i = 0; i < 20; ++i)
+            workspace.refresh();
+        QCOMPARE(inspector->calls.load(), 2);
+        QCOMPARE(workspace.files().first().toMap().value("scan").toInt(), 1);
+        inspector->proceed.release();
+        QTRY_VERIFY(inspector->entered.available() == 1);
+        inspector->entered.acquire();
+        QVERIFY(workspace.busy());
+        QCOMPARE(workspace.files().first().toMap().value("scan").toInt(), 1);
+        inspector->proceed.release();
+        QTRY_VERIFY(!workspace.busy());
+        QCOMPARE(inspector->calls.load(), 3);
+        QCOMPARE(inspector->peak.load(), 1);
+        QCOMPARE(workspace.files().first().toMap().value("scan").toInt(), 3);
+        workspace.refresh();
+        QTRY_VERIFY(inspector->entered.available() == 1);
+        inspector->entered.acquire();
+        workspace.setPack(second);
+        QVERIFY(workspace.files().isEmpty());
+        inspector->proceed.release();
+        QTRY_VERIFY(inspector->entered.available() == 1);
+        inspector->entered.acquire();
+        QVERIFY(workspace.files().isEmpty());
+        inspector->proceed.release();
+        QTRY_VERIFY(!workspace.busy());
+        QCOMPARE(workspace.files().first().toMap().value("relativePath").toString(), QString("second"));
+        QCOMPARE(inspector->peak.load(), 1);
+        workspace.refresh();
+        QTRY_VERIFY(inspector->entered.available() == 1);
+        inspector->entered.acquire();
+        workspace.setPack({});
+        inspector->proceed.release();
+        QTRY_COMPARE(inspector->active.load(), 0);
+        QTest::qWait(20);
+        QVERIFY(!workspace.busy());
+        QVERIFY(workspace.files().isEmpty());
+        QCOMPARE(inspector->calls.load(), 6);
+    }
     void forgeIdentityIsPreservedWithAuthorMetadata() {
         const auto path = storage.path() + "/forge-authors";
         QDir().mkpath(path + "/mods");

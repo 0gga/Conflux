@@ -35,7 +35,8 @@ class PackWorkspace final : public QObject {
     std::shared_ptr<const IPackContentInspector> m_inspector;
     QVariantMap m_pack;
     PackContentResult m_content;
-    bool m_busy = false;
+    bool m_busy = false, m_scanRunning = false;
+    void startScan();
     int m_generation = 0;
 };
 } // namespace studio

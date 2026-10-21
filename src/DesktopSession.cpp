@@ -85,7 +85,7 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
     connect(&m_workspace, &PackWorkspace::changed, this, [this] {
         if (!m_workspace.busy()) {
             m_configs.setContext(m_workspace.pack(), m_workspace.files());
-            m_content.setContext(m_workspace.pack(), m_workspace.files());
+            m_content.setContext(m_workspace.pack(), m_workspace.files(), true);
             m_changes.rebuild();
         }
         activateRoute();
@@ -98,14 +98,13 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
             return;
         }
         m_workspace.refresh();
-        m_content.refresh(false);
         m_worlds.refresh();
     });
     connect(&m_content, &ContentActions::changed, this, [this] {
         if (m_pendingScan && !m_content.busy() && !m_workspace.busy()) {
             m_pendingScan = false;
             m_workspace.refresh();
-            m_content.refresh(false);
+            m_worlds.refresh();
         }
     });
 }

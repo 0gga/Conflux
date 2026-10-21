@@ -2,6 +2,7 @@
 #include "domain/ContentCompatibility.h"
 #include "domain/ContentTypes.h"
 #include <QFutureWatcher>
+#include <QHash>
 #include <QPointer>
 #include <QSet>
 #include <QtConcurrent>
@@ -15,10 +16,10 @@ ContentActions::ContentActions(std::shared_ptr<const IContentFileStore> files,
       m_installer(std::move(installer)), m_preferences(std::move(preferences)) {
     clearFilters();
 }
-void ContentActions::setContext(const QVariantMap &pack, const QVariantList &files) {
+void ContentActions::setContext(const QVariantMap &pack, const QVariantList &files, bool forceRefresh) {
     if (m_mutating)
         return;
-    if (pack == m_pack && files == m_inventory && !m_dirty)
+    if (pack == m_pack && files == m_inventory && !m_dirty && !forceRefresh)
         return;
     const bool changedPack = pack.value("path") != m_pack.value("path");
     m_pack = pack;
@@ -61,81 +62,92 @@ void ContentActions::refresh(bool checkUpdates) {
     emit changed();
     auto *watcher = new QFutureWatcher<QVariantList>(this);
     const QPointer<ContentActions> guard(this);
-    connect(
-        watcher, &QFutureWatcher<QVariantList>::finished, this,
-        [this, guard, watcher, generation, checkUpdates, previous] {
-            const auto rows = watcher->result();
-            watcher->deleteLater();
-            if (generation != m_generation)
-                return;
-            auto result = rows;
-            QVariantList unidentified;
-            const QStringList metadata{"sourceIds",        "external",      "provider",        "projectId",
-                                       "installedRelease", "updateRelease", "updateAvailable", "projectUrl",
-                                       "author",           "authorIcon",    "environment",     "openSource",
-                                       "authorIds"};
-            for (int i = 0; i < result.size(); ++i) {
-                auto row = result.at(i).toMap();
-                bool found = false;
-                for (const auto &value : previous) {
-                    const auto old = value.toMap();
-                    if (!row.value("sha1").toString().isEmpty() && old.value("sha1") == row.value("sha1") &&
-                        old.value("category") == row.value("category")) {
-                        for (const auto &key : metadata)
-                            if (old.contains(key))
-                                row[key] = old.value(key);
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found)
-                    unidentified << row;
-                result[i] = row;
-            }
-            const auto done = [guard, generation](QVariantList rows, QString error) {
-                if (!guard || generation != guard->m_generation)
+    connect(watcher, &QFutureWatcher<QVariantList>::finished, this,
+            [this, guard, watcher, generation, checkUpdates, previous] {
+                const auto rows = watcher->result();
+                watcher->deleteLater();
+                if (generation != m_generation)
                     return;
-                guard->m_rows = rows;
-                guard->m_busy = false;
-                guard->m_notice = error;
-                guard->m_activity = error.isEmpty() ? "idle" : "error";
-                guard->applyPreferences();
-                QStringList retained;
-                for (const auto &path : guard->m_selected)
-                    if (!guard->find(path).isEmpty())
-                        retained << path;
-                guard->m_selected = retained;
-                emit guard->changed();
-            };
-            m_rows = result;
-            applyPreferences();
-            emit changed();
-            if (checkUpdates || !unidentified.isEmpty()) {
-                const auto lookup = checkUpdates ? result : unidentified;
-                m_catalogue->refresh(
-                    lookup, m_pack.value("minecraft").toString(),
-                    compatibleLoaders(m_pack.value("loader").toString(), result).join('|'),
-                    [done, result, checkUpdates](QVariantList indexed, QString error) mutable {
-                        if (checkUpdates) {
-                            done(indexed, error);
-                            return;
-                        }
-                        for (auto &value : result) {
-                            const auto row = value.toMap();
-                            for (const auto &entry : indexed) {
-                                const auto item = entry.toMap();
-                                if (item.value("relativePath") == row.value("relativePath") &&
-                                    item.value("sha1") == row.value("sha1")) {
-                                    value = item;
-                                    break;
-                                }
+                auto result = rows;
+                QVariantList unidentified;
+                const QStringList metadata{
+                    "sourceIds",     "external",        "provider",   "projectId", "installedRelease",
+                    "updateRelease", "updateAvailable", "projectUrl", "author",    "authorIcon",
+                    "environment",   "openSource",      "authorIds"};
+                // Category and binary hash are the identity; names and paths can change.
+                QHash<QPair<QString, QString>, QVariantMap> previousByHash;
+                previousByHash.reserve(previous.size());
+                for (const auto &value : previous) {
+                    const auto row = value.toMap();
+                    const auto hash = row.value("sha1").toString();
+                    const auto key = qMakePair(row.value("category").toString(), hash);
+                    if (!hash.isEmpty() && !previousByHash.contains(key))
+                        previousByHash.insert(key, row);
+                }
+                for (int i = 0; i < result.size(); ++i) {
+                    auto row = result.at(i).toMap();
+                    const auto old = previousByHash.constFind(
+                        qMakePair(row.value("category").toString(), row.value("sha1").toString()));
+                    if (old != previousByHash.cend())
+                        for (const auto &key : metadata)
+                            if (old->contains(key))
+                                row[key] = old->value(key);
+                    if (old == previousByHash.cend())
+                        unidentified << row;
+                    result[i] = row;
+                }
+                const auto done = [guard, generation](QVariantList rows, QString error) {
+                    if (!guard || generation != guard->m_generation)
+                        return;
+                    guard->m_rows = rows;
+                    guard->m_busy = false;
+                    guard->m_notice = error;
+                    guard->m_activity = error.isEmpty() ? "idle" : "error";
+                    guard->applyPreferences();
+                    QSet<QString> available;
+                    for (const auto &value : rows)
+                        available.insert(value.toMap().value("relativePath").toString());
+                    QStringList retained;
+                    for (const auto &path : guard->m_selected)
+                        if (available.contains(path))
+                            retained << path;
+                    guard->m_selected = retained;
+                    emit guard->changed();
+                };
+                m_rows = result;
+                applyPreferences();
+                emit changed();
+                if (checkUpdates || !unidentified.isEmpty()) {
+                    const auto lookup = checkUpdates ? result : unidentified;
+                    m_catalogue->refresh(
+                        lookup, m_pack.value("minecraft").toString(),
+                        compatibleLoaders(m_pack.value("loader").toString(), result).join('|'),
+                        [done, result, checkUpdates](QVariantList indexed, QString error) mutable {
+                            if (checkUpdates) {
+                                done(indexed, error);
+                                return;
                             }
-                        }
-                        done(result, error);
-                    });
-            } else
-                done(result, {});
-        });
+                            QHash<QPair<QString, QString>, QVariantMap> indexedByPath;
+                            indexedByPath.reserve(indexed.size());
+                            for (const auto &entry : indexed) {
+                                const auto row = entry.toMap();
+                                const auto key = qMakePair(row.value("relativePath").toString(),
+                                                           row.value("sha1").toString());
+                                if (!indexedByPath.contains(key))
+                                    indexedByPath.insert(key, row);
+                            }
+                            for (auto &value : result) {
+                                const auto row = value.toMap();
+                                const auto item = indexedByPath.constFind(qMakePair(
+                                    row.value("relativePath").toString(), row.value("sha1").toString()));
+                                if (item != indexedByPath.cend())
+                                    value = *item;
+                            }
+                            done(result, error);
+                        });
+                } else
+                    done(result, {});
+            });
     watcher->setFuture(
         QtConcurrent::run([files, pack, inventory] { return files->snapshot(pack, inventory); }));
 }

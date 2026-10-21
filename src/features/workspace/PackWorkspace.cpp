@@ -7,25 +7,41 @@ PackWorkspace::PackWorkspace(std::shared_ptr<const IPackContentInspector> inspec
 void PackWorkspace::setPack(const QVariantMap &pack) {
     if (pack == m_pack)
         return;
+    const bool wasBusy = m_busy;
     m_pack = pack;
+    m_content = {};
     refresh();
+    if (wasBusy && m_busy)
+        emit changed();
 }
 void PackWorkspace::refresh() {
-    const int generation = ++m_generation;
-    m_content = {};
+    ++m_generation;
     if (m_pack.isEmpty()) {
+        m_content = {};
         m_busy = false;
         emit changed();
         return;
     }
+    const bool wasBusy = m_busy;
     m_busy = true;
-    emit changed();
+    if (!wasBusy)
+        emit changed();
+    if (!m_scanRunning)
+        startScan();
+}
+void PackWorkspace::startScan() {
+    m_scanRunning = true;
+    const int generation = m_generation;
     auto *watcher = new QFutureWatcher<PackContentResult>(this);
     connect(watcher, &QFutureWatcher<PackContentResult>::finished, this, [this, watcher, generation] {
         const auto result = watcher->result();
         watcher->deleteLater();
-        if (generation != m_generation)
+        m_scanRunning = false;
+        if (generation != m_generation) {
+            if (!m_pack.isEmpty())
+                startScan();
             return;
+        }
         m_content = result;
         m_busy = false;
         emit changed();

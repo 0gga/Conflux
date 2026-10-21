@@ -29,7 +29,7 @@ class ContentActions final : public QObject {
     ContentActions(std::shared_ptr<const IContentFileStore>, std::shared_ptr<IContentCatalogue>,
                    std::shared_ptr<IContentInstaller>, std::shared_ptr<IContentPreferences>,
                    QObject *parent = nullptr);
-    void setContext(const QVariantMap &, const QVariantList &);
+    void setContext(const QVariantMap &, const QVariantList &, bool forceRefresh = false);
     void setCurseforgeKey(const QByteArray &key) {
         m_catalogue->setCurseforgeKey(key);
     }

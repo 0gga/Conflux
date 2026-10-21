@@ -97,6 +97,7 @@ qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     qml/settings/BrowseSettings.qml
     qml/explore/BrowseFilters.qml qml/explore/PaginationBar.qml
     qml/settings/AppearancePreview.qml qml/settings/AppearanceMetric.qml qml/settings/ThemeColorGroup.qml
+    qml/settings/AppearanceField.qml qml/settings/ThemeSettings.qml
     qml/settings/AppearanceSettings.qml
     qml/settings/ConnectionSettings.qml
     qml/settings/WarningSettings.qml

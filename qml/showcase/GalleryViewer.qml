@@ -17,24 +17,35 @@ FocusPopup {
     parent: Overlay.overlay
     width: parent ? parent.width / (Appearance.values.uiScale/100) : 1000
     height: parent ? parent.height / (Appearance.values.uiScale/100) : 700
-    padding: 18; modal: true; dim: true
+    padding: 0; modal: true; dim: true
     closePolicy: Popup.CloseOnEscape
     Overlay.modal: Rectangle { color: Theme.colors.background; opacity: 0.9 }
     background: Rectangle { radius: 16; color: "transparent" }
     contentItem: FocusScope {
+        id: viewerContent
         focus: true
         Keys.onLeftPressed: root.next(-1)
         Keys.onRightPressed: root.next(1)
         Keys.onEscapePressed: root.close()
+        MouseArea {
+            id: backdrop; objectName: "galleryBackdrop"; anchors.fill: parent; z: 2
+            acceptedButtons: Qt.LeftButton
+            onPressed: function(mouse) {
+                const point=Qt.point(mouse.x,mouse.y)
+                const onImage=pan.contains(pan.mapFromItem(backdrop,point)) && picture.contains(picture.mapFromItem(backdrop,point))
+                mouse.accepted=!onImage && !toolbar.contains(toolbar.mapFromItem(backdrop,point))
+            }
+            onClicked: root.close()
+        }
         ColumnLayout {
-            anchors.fill: parent; spacing: 12
+            anchors.fill: parent; anchors.margins: 18; spacing: 12
             Flickable {
                 id: pan; objectName: "galleryEnlargedViewport"; Layout.fillWidth: true; Layout.fillHeight: true
                 clip: true; boundsBehavior: Flickable.StopAtBounds
                 contentWidth: Math.max(width,picture.width); contentHeight: Math.max(height,picture.height)
                 ContentIcon {
                     id: picture; objectName: "galleryEnlargedImage"
-                    readonly property real fit: naturalSize.width>0 ? Math.min(pan.width/naturalSize.width,pan.height/naturalSize.height) : 1
+                    readonly property real fit: naturalSize.width>0 ? Math.min(pan.width/naturalSize.width,pan.height/naturalSize.height) * Appearance.values.galleryFitPercent/100 : 1
                     width: naturalSize.width>0 ? naturalSize.width*fit*root.zoom : pan.width
                     height: naturalSize.height>0 ? naturalSize.height*fit*root.zoom : pan.height
                     x: Math.max(0,(pan.width-width)/2); y: Math.max(0,(pan.height-height)/2)
@@ -43,6 +54,7 @@ FocusPopup {
                 WheelHandler { onWheel: function(event) { root.magnify(event.angleDelta.y>0 ? 1.2 : 1/1.2);event.accepted=true } }
             }
             Rectangle {
+                id: toolbar; objectName: "galleryToolbar"
                 Layout.alignment: Qt.AlignHCenter
                 implicitWidth: controls.implicitWidth+16; implicitHeight: controls.implicitHeight+12; radius: 18
                 color: Theme.colors.input

@@ -1,7 +1,9 @@
 #include "ContentFixtures.h"
 #include "features/config/ConfigLibrary.h"
 #include "features/content/ContentActions.h"
+#include "features/preferences/BrowsePreferences.h"
 #include "features/preferences/ContentPreferences.h"
+#include "platform/BrowseSettingsStore.h"
 #include "platform/ConfigOwnershipStore.h"
 #include "theme/Appearance.h"
 #include <QBuffer>
@@ -190,8 +192,134 @@ class ContentInteractionTests : public QObject {
         QCOMPARE(viewer->property("zoom").toReal(), 1);
         QTest::keyClick(&window, Qt::Key_Left);
         QTRY_COMPARE(viewer->property("currentIndex").toInt(), 0);
+        auto *picture = findItem(window.contentItem(), "galleryEnlargedImage");
+        auto *pan = findItem(window.contentItem(), "galleryEnlargedViewport");
+        QVERIFY(picture && pan);
+        QTRY_COMPARE(picture->property("status").toInt(), 1);
+        QVERIFY(qAbs(qMax(picture->width() / pan->width(), picture->height() / pan->height()) - 0.83) < 0.01);
+        click(picture);
+        QTRY_VERIFY(viewer->property("visible").toBool());
+        // Letterboxed space inside the viewport dismisses; the image and toolbar do not.
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          pan->mapToScene(QPointF(2, pan->height() / 2)).toPoint());
+        QTRY_VERIFY(!viewer->property("visible").toBool());
+        QVERIFY(QMetaObject::invokeMethod(viewer.get(), "open"));
+        QTRY_VERIFY(viewer->property("visible").toBool());
+        click(findItem(window.contentItem(), "galleryZoomIn"));
+        QTRY_VERIFY(viewer->property("visible").toBool());
+        viewer->setProperty("zoom", 2.0);
+        const auto start = pan->mapToScene(QPointF(pan->width() / 2, pan->height() / 2)).toPoint();
+        QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, start);
+        QTest::mouseMove(&window, start - QPoint(40, 0), 30);
+        QTest::mouseMove(&window, start - QPoint(90, 0), 30);
+        QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, start - QPoint(90, 0));
+        QTRY_VERIFY(viewer->property("visible").toBool());
+        QTRY_VERIFY(pan->property("contentX").toReal() > 0);
+        // Even after panning, the outer padding is backdrop rather than clipped image geometry.
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, QPoint(5, 5));
+        QTRY_VERIFY(!viewer->property("visible").toBool());
+        QVERIFY(QMetaObject::invokeMethod(viewer.get(), "open"));
+        QTRY_VERIFY(viewer->property("visible").toBool());
         QTest::keyClick(&window, Qt::Key_Escape);
         QTRY_VERIFY(!viewer->property("visible").toBool());
+    }
+    void galleryBackdropWorksInScaledApplicationWindow_data() {
+        QTest::addColumn<int>("scale");
+        QTest::newRow("normal") << 100;
+        QTest::newRow("scaled") << 150;
+    }
+    void galleryBackdropWorksInScaledApplicationWindow() {
+        QFETCH(int, scale);
+        QTemporaryDir dir;
+        QImage image(300, 180, QImage::Format_ARGB32);
+        image.fill(Qt::blue);
+        QVERIFY(image.save(dir.path() + "/image.png"));
+        QQmlEngine engine;
+        auto *appearance =
+            engine.singletonInstance<studio::Appearance *>(qmlTypeId("Conflux.Style", 1, 0, "Appearance"));
+        QVERIFY(appearance);
+        QVERIFY(appearance->setValue("uiScale", scale));
+        QQmlComponent component(&engine);
+        component.setData(
+            R"(
+import QtQuick
+import QtQuick.Controls
+import Conflux.Style
+import "showcase"
+ApplicationWindow {
+    id: fixture; width: 900; height: 600; visible: true
+    required property string sampleImage
+    property int backgroundClicks: 0
+    Overlay.overlay.transform: Scale { xScale: Appearance.values.uiScale/100; yScale: xScale }
+    MouseArea { anchors.fill: parent; onClicked: ++fixture.backgroundClicks }
+    Item { width: fixture.width/(Appearance.values.uiScale/100); height: fixture.height/(Appearance.values.uiScale/100); scale: Appearance.values.uiScale/100; transformOrigin: Item.TopLeft; GalleryViewer { images: [fixture.sampleImage] } }
+})",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/GalleryWindowFixture.qml"));
+        std::unique_ptr<QQuickWindow> window(
+            qobject_cast<QQuickWindow *>(component.createWithInitialProperties(
+                {{"sampleImage", QUrl::fromLocalFile(dir.path() + "/image.png").toString()}})));
+        QVERIFY2(window, qPrintable(component.errorString()));
+        QVERIFY(QTest::qWaitForWindowExposed(window.get()));
+        auto *viewer = window->findChild<QObject *>("galleryViewer");
+        QVERIFY(viewer);
+        QVERIFY(QMetaObject::invokeMethod(viewer, "open"));
+        QTRY_VERIFY(viewer->property("activeFocus").toBool());
+        auto *picture = findItem(window->contentItem(), "galleryEnlargedImage");
+        QVERIFY(picture);
+        QTRY_COMPARE(picture->property("status").toInt(), 1);
+        QTest::mouseClick(
+            window.get(), Qt::LeftButton, Qt::NoModifier,
+            picture->mapToScene(QPointF(picture->width() / 2, picture->height() / 2)).toPoint());
+        QTRY_VERIFY(viewer->property("visible").toBool());
+        auto *backdrop = findItem(window->contentItem(), "galleryBackdrop");
+        QVERIFY(backdrop);
+        QTest::mouseClick(window.get(), Qt::LeftButton, Qt::NoModifier,
+                          backdrop->mapToScene(QPointF(5, 5)).toPoint());
+        QTRY_VERIFY(!viewer->property("visible").toBool());
+        QCOMPARE(window->property("backgroundClicks").toInt(), 0);
+        appearance->reset();
+    }
+    void cardHoverRemainsActiveAcrossDescendantTagsAndStatistics() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(1000, 240);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/components/ProjectCard.qml"));
+        std::unique_ptr<QQuickItem> card(qobject_cast<QQuickItem *>(component.createWithInitialProperties(
+            {{"project", QVariantMap{{"title", "Example"},
+                                     {"author", "Author"},
+                                     {"summary", "Summary"},
+                                     {"provider", "modrinth"},
+                                     {"sources", QStringList{"modrinth"}},
+                                     {"loaders", QStringList{"neoforge"}},
+                                     {"categories", QStringList{"optimization"}},
+                                     {"downloadStats", QVariantList{QVariantMap{{"provider", "modrinth"},
+                                                                                {"count", "123K"}}}}}},
+             {"minecraft", "1.21.1"},
+             {"installState", QVariantMap{{"canInstall", true}, {"label", "Install"}}}})));
+        QVERIFY2(card, qPrintable(component.errorString()));
+        card->setParentItem(window.contentItem());
+        card->setPosition(QPointF(10, 10));
+        card->setWidth(950);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTest::mouseMove(&window, QPoint(980, 220));
+        const auto idle = card->property("color").value<QColor>();
+        QTest::mouseMove(&window, card->mapToScene(QPointF(400, 20)).toPoint());
+        QTRY_VERIFY(card->property("color").value<QColor>() != idle);
+        const auto highlighted = card->property("color").value<QColor>();
+        for (const auto &name :
+             {"browsePlatformBadge", "browseLoaderBadge", "browseVersionBadge", "browseCategoryBadge",
+              "browseStatistics", "browseInstallButton", "browseMoreButton"}) {
+            auto *item = findItem(card.get(), name);
+            QVERIFY(item);
+            QTest::mouseMove(&window,
+                             item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+            QTest::qWait(30);
+            QCOMPARE(card->property("color").value<QColor>(), highlighted);
+        }
+        QTest::mouseMove(&window, QPoint(980, 220));
+        QTRY_COMPARE(card->property("color").value<QColor>(), idle);
     }
     void scrollingCardsReserveScrollbarSpaceAndKeepClippedCornersRounded() {
         QQmlEngine engine;
@@ -240,15 +368,17 @@ ContentListView {
         for (int index = 0; index < 20; ++index)
             rows.append(QVariantMap{{"title", QString("Example %1").arg(index, 2, 10, QChar('0'))},
                                     {"relativePath", QString("mods/example%1.jar").arg(index)},
-                                    {"fileName", "example.jar"}, {"category", "mods"},
-                                    {"sha1", "hash"}, {"enabled", true}});
+                                    {"fileName", "example.jar"},
+                                    {"category", "mods"},
+                                    {"sha1", "hash"},
+                                    {"enabled", true}});
         model.setContext({{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "fabric"}}, rows);
         QTRY_VERIFY(!model.busy());
         QQmlEngine engine;
         QQuickWindow window;
         window.resize(1124, 524);
-        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
-                                                             "/pack/ContentPanel.qml"));
+        QQmlComponent component(
+            &engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/pack/ContentPanel.qml"));
         std::unique_ptr<QQuickItem> panel(qobject_cast<QQuickItem *>(
             component.createWithInitialProperties({{"controller", QVariant::fromValue(&model)}})));
         QVERIFY2(panel, qPrintable(component.errorString()));
@@ -315,18 +445,23 @@ ContentListView {
         QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
                                                              "/components/ProjectCard.qml"));
         std::unique_ptr<QQuickItem> card(qobject_cast<QQuickItem *>(component.createWithInitialProperties(
-            {{"project", QVariantMap{{"title", "Example"}, {"author", "Author"},
-                                     {"summary", "Summary"}, {"updated", "2026-10-15"},
-                                     {"followersRaw", 42000}, {"followers", "42.0K"},
+            {{"project", QVariantMap{{"title", "Example"},
+                                     {"author", "Author"},
+                                     {"summary", "Summary"},
+                                     {"updated", "2026-10-15"},
+                                     {"followersRaw", 42000},
+                                     {"followers", "42.0K"},
                                      {"downloadStats", QVariantList{QVariantMap{{"provider", "modrinth"},
                                                                                 {"count", "249.9M"}}}}}},
-             {"installState", QVariantMap{{"installed", true}, {"canInstall", false}, {"label", "Installed"}}}})));
+             {"installState",
+              QVariantMap{{"installed", true}, {"canInstall", false}, {"label", "Installed"}}}})));
         QVERIFY2(card, qPrintable(component.errorString()));
         card->setParentItem(window.contentItem());
         card->setWidth(950);
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
-        auto *appearance = engine.singletonInstance<studio::Appearance *>(qmlTypeId("Conflux.Style", 1, 0, "Appearance"));
+        auto *appearance =
+            engine.singletonInstance<studio::Appearance *>(qmlTypeId("Conflux.Style", 1, 0, "Appearance"));
         QVERIFY(appearance);
         for (const int scale : {75, 100, 125}) {
             QVERIFY(appearance->setValue("contentScale", scale));
@@ -336,12 +471,16 @@ ContentListView {
             auto *updated = findItem(card.get(), "browseUpdated");
             auto *more = findItem(card.get(), "browseMoreButton");
             QVERIFY(install && statistics && updated && more);
-            const auto right = [](QQuickItem *item) { return item->mapToScene(QPointF(item->width(), 0)).x(); };
+            const auto right = [](QQuickItem *item) {
+                return item->mapToScene(QPointF(item->width(), 0)).x();
+            };
             QVERIFY(qAbs(right(install) - right(statistics)) < 1);
             QVERIFY(qAbs(right(install) - right(updated)) < 1);
             QVERIFY(right(install) + 4 * scale / 100.0 <= more->mapToScene(QPointF{}).x());
-            QVERIFY(statistics->mapToScene(QPointF{}).y() >= install->mapToScene(QPointF(0, install->height())).y());
-            QVERIFY(updated->mapToScene(QPointF{}).y() >= statistics->mapToScene(QPointF(0, statistics->height())).y());
+            QVERIFY(statistics->mapToScene(QPointF{}).y() >=
+                    install->mapToScene(QPointF(0, install->height())).y());
+            QVERIFY(updated->mapToScene(QPointF{}).y() >=
+                    statistics->mapToScene(QPointF(0, statistics->height())).y());
             qreal center = -1;
             int count = 0;
             for (auto *statistic : statistics->childItems()) {
@@ -359,6 +498,125 @@ ContentListView {
             }
             QCOMPARE(count, 2);
         }
+        appearance->reset();
+    }
+    void appearanceTabsSearchAndTogglesUpdateTheRealPreview() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(740, 740);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/settings/AppearanceSettings.qml"));
+        std::unique_ptr<QQuickItem> settings(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY2(settings, qPrintable(component.errorString()));
+        settings->setParentItem(window.contentItem());
+        settings->setSize(QSizeF(720, 720));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *appearance =
+            engine.singletonInstance<studio::Appearance *>(qmlTypeId("Conflux.Style", 1, 0, "Appearance"));
+        QVERIFY(appearance);
+        const auto click = [&window](QQuickItem *item) {
+            QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                              item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+        };
+        auto *tabs = findItem(settings.get(), "appearanceTabs");
+        QVERIFY(tabs);
+        click(findItem(tabs, "sectionTab_content"));
+        QTRY_COMPARE(settings->property("section").toString(), QString("content"));
+        auto *search = findItem(settings.get(), "appearanceSearch");
+        QVERIFY(search);
+        search->setProperty("text", "description");
+        QTRY_VERIFY(findItem(settings.get(), "appearanceToggle_showSummary"));
+        QVERIFY(!findItem(settings.get(), "appearanceField_artworkSize"));
+        click(findItem(settings.get(), "appearanceToggle_showSummary"));
+        QTRY_COMPARE(appearance->values().value("showSummary").toInt(), 0);
+        QVERIFY(!findItem(settings.get(), "browseSummary"));
+        click(findItem(settings.get(), "resetAppearanceSection"));
+        QTRY_COMPARE(appearance->values().value("showSummary").toInt(), 1);
+        QTRY_VERIFY(findItem(settings.get(), "browseSummary"));
+        click(findItem(tabs, "sectionTab_colors"));
+        QTRY_VERIFY(findItem(settings.get(), "themeColorsHeading"));
+        QVERIFY(!findItem(settings.get(), "appearanceSearch"));
+        auto *colorTabs = findItem(settings.get(), "themeColorTabs");
+        QVERIFY(colorTabs);
+        click(findItem(colorTabs, "sectionTab_status"));
+        QTRY_COMPARE(colorTabs->property("current").toString(), QString("status"));
+        click(findItem(settings.get(), "toggleAppearancePreview"));
+        QTRY_VERIFY(!findItem(settings.get(), "appearanceLivePreview"));
+        // The compact logical viewport retains accessible tabs without horizontal overflow.
+        settings->setSize(QSizeF(450, 450));
+        QCoreApplication::processEvents();
+        QTRY_VERIFY2(tabs->width() <= settings->width(),
+                     qPrintable(QString("tabs=%1 settings=%2").arg(tabs->width()).arg(settings->width())));
+        appearance->reset();
+    }
+    void browsingSettingsApplyDefaultsAndKeepCompatibilitySeparate() {
+        QTemporaryDir temp;
+        BrowsePreferences preferences(
+            std::make_shared<studio::BrowseSettingsStore>(temp.path() + "/browse.ini"));
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(660, 800);
+        QQmlComponent component(&engine);
+        component.setData(
+            R"(
+import QtQuick
+import "settings"
+BrowseSettings {
+    property alias applied: sample.received
+    catalogue: QtObject { id: sample; property var received: ({}); function configure(values) { received=values } }
+})",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/BrowseSettingsFixture.qml"));
+        std::unique_ptr<QQuickItem> settings(qobject_cast<QQuickItem *>(
+            component.createWithInitialProperties({{"preferences", QVariant::fromValue(&preferences)}})));
+        QVERIFY2(settings, qPrintable(component.errorString()));
+        settings->setParentItem(window.contentItem());
+        settings->setWidth(640);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        const auto click = [&window](QQuickItem *item) {
+            QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                              item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+        };
+        QVERIFY(findItem(settings.get(), "browseDefault_size"));
+        auto *hide = findItem(settings.get(), "browseDefault_hideInstalled");
+        QVERIFY(hide);
+        click(hide);
+        QTRY_VERIFY(preferences.defaults().value("hideInstalled").toBool());
+        click(findItem(settings.get(), "applyBrowseDefaults"));
+        QTRY_COMPARE(settings->property("applied").toMap().value("hideInstalled").toBool(), true);
+        auto *tabs = findItem(settings.get(), "browseSettingsTabs");
+        QVERIFY(tabs);
+        click(findItem(tabs, "sectionTab_compatibility"));
+        QTRY_VERIFY(findItem(settings.get(), "browseConnectorFabric"));
+        click(findItem(settings.get(), "browseConnectorFabric"));
+        QTRY_VERIFY(!preferences.connectorFabric());
+        QVERIFY(preferences.defaults().value("hideInstalled").toBool());
+    }
+    void tooltipVisibilityAndDelayFollowSharedPreferences() {
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(400, 200);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/components/ActionButton.qml"));
+        std::unique_ptr<QQuickItem> button(qobject_cast<QQuickItem *>(
+            component.createWithInitialProperties({{"text", "Example"}, {"hint", "Example tooltip"}})));
+        QVERIFY2(button, qPrintable(component.errorString()));
+        button->setParentItem(window.contentItem());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *appearance =
+            engine.singletonInstance<studio::Appearance *>(qmlTypeId("Conflux.Style", 1, 0, "Appearance"));
+        QVERIFY(appearance);
+        QVERIFY(appearance->setValue("tooltipDelay", 0));
+        QTest::mouseMove(&window, QPoint(10, 10));
+        auto *tip = button->findChild<QObject *>("roundedToolTip");
+        QVERIFY(tip);
+        QTRY_VERIFY(tip->property("visible").toBool());
+        QVERIFY(appearance->setValue("tooltips", 0));
+        QTRY_VERIFY(!tip->property("visible").toBool());
+        QVERIFY(appearance->setValue("tooltips", 1));
+        QTRY_VERIFY(tip->property("visible").toBool());
         appearance->reset();
     }
     void focusedPopupBlocksBackgroundScrollAndTyping() {

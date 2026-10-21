@@ -4,7 +4,9 @@ import Conflux.Style
 ToolTip {
     id: root
     objectName: "roundedToolTip"
-    delay: 600
+    property bool showWhen: false
+    visible: !!Appearance.values.tooltips && showWhen
+    delay: Appearance.values.tooltipDelay
     padding: 10
     implicitWidth: Math.min(340, metrics.width + leftPadding + rightPadding)
     background: Rectangle {

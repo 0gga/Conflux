@@ -35,6 +35,9 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
     m_content.setVisibility(m_visibility);
     connect(m_visibility.get(), &ContentVisibility::changed, &m_content, &ContentActions::visibilityChanged);
     connect(m_visibility.get(), &ContentVisibility::changed, &m_catalogue, &BrowseCatalogue::refresh);
+    m_catalogue.setDefaults(m_browsePreferences.defaults());
+    connect(&m_browsePreferences, &BrowsePreferences::defaultsChanged, this,
+            [this] { m_catalogue.setDefaults(m_browsePreferences.defaults()); });
     auto updateBrowseContext = [this] {
         const auto pack = m_browse.pack();
         QStringList versions, loaders;

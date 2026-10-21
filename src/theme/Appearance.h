@@ -18,6 +18,8 @@ class Appearance final : public QObject {
     QVariantList controls() const;
     Q_INVOKABLE bool setValue(const QString &, double);
     Q_INVOKABLE void reset();
+    Q_INVOKABLE void resetValue(const QString &key);
+    Q_INVOKABLE void resetGroup(const QString &group);
     Q_INVOKABLE qreal filterWidthFor(qreal available) const {
         return qMin(m_values.value("filterWidth").toDouble(), qMax(144.0, available * 0.4));
     }

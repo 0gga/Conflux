@@ -13,7 +13,7 @@ TextField {
         radius: 11; color: Theme.colors.input
         border.color: control.activeFocus ? Theme.colors.accent : control.hovered ? Qt.lighter(Theme.colors.border, 1.5) : Theme.colors.border
         border.width: 1
-        Behavior on border.color { ColorAnimation { duration: 100 } }
+        Behavior on border.color { ColorAnimation { duration: Appearance.values.reduceMotion ? 0 : 100 } }
     }
     ActionButton {
         objectName: "clearSearchButton"; anchors.right: parent.right; anchors.rightMargin: 5; anchors.verticalCenter: parent.verticalCenter

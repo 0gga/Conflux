@@ -5,6 +5,7 @@
 namespace studio {
 class BrowsePreferences final : public QObject {
     Q_OBJECT
+    Q_PROPERTY(QVariantMap defaults READ defaults NOTIFY defaultsChanged)
     Q_PROPERTY(bool connectorFabric READ connectorFabric WRITE setConnectorFabric NOTIFY changed)
   public:
     explicit BrowsePreferences(std::shared_ptr<IBrowseSettingsStore> store, QObject *parent = nullptr);
@@ -12,11 +13,18 @@ class BrowsePreferences final : public QObject {
         return m_bridge;
     }
     void setConnectorFabric(bool);
+    QVariantMap defaults() const {
+        return m_defaults;
+    }
+    Q_INVOKABLE bool setDefault(const QString &key, const QVariant &value);
+    Q_INVOKABLE void resetDefaults();
   signals:
     void changed();
+    void defaultsChanged();
 
   private:
     std::shared_ptr<IBrowseSettingsStore> m_store;
     bool m_bridge = true;
+    QVariantMap m_defaults;
 };
 } // namespace studio

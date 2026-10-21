@@ -15,11 +15,11 @@ Rectangle {
     signal activated()
     signal exploreRequested()
     signal hideRequested()
-    implicitHeight: 96
+    implicitHeight: Appearance.values.libraryRowHeight
     radius: 16
     color: hover.hovered ? Theme.colors.panel : Theme.colors.card
     border.color: hover.hovered ? Qt.lighter(Theme.colors.border, 1.5) : Theme.colors.border
-    Behavior on border.color { ColorAnimation { duration: 100 } }
+    Behavior on border.color { ColorAnimation { duration: Appearance.values.reduceMotion ? 0 : 100 } }
     HoverHandler { id: hover }
     MouseArea { anchors.fill: parent; enabled: row.entireRowInteractive; cursorShape: Qt.PointingHandCursor; onClicked: row.activated() }
     ContentIcon {

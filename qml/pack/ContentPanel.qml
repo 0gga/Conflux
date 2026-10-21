@@ -89,7 +89,7 @@ Item {
                             required property var modelData
                             required property int index
                             readonly property bool selected: root.controller.selected.indexOf(modelData.relativePath) !== -1
-                            width: list.viewportWidth; height: 82
+                            width: list.viewportWidth; height: Appearance.values.contentRowHeight
                             color: selected ? Theme.colors.input : hover.hovered ? Theme.colors.card : "transparent"
                             HoverHandler { id: hover }
                             MouseArea { anchors.fill: parent; enabled: entry.modelData.category === "mods"; cursorShape: Qt.PointingHandCursor; onClicked: root.showcaseRequested(entry.modelData.relativePath) }
@@ -97,7 +97,7 @@ Item {
                             RowLayout {
                                 anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 16; spacing: 12
                                 SelectionBox { objectName: "contentSelection"; checked: entry.selected; Accessible.name: "Select " + entry.modelData.title; onToggled: root.controller.select(entry.modelData.relativePath,checked) }
-                                ContentIcon { size: 44; source: entry.modelData.icon || ""; kind: entry.modelData.category === "mods" ? "mod" : entry.modelData.category === "shaderpacks" ? "shader" : "resource" }
+                                ContentIcon { size: Math.min(44,entry.height-24); source: entry.modelData.icon || ""; kind: entry.modelData.category === "mods" ? "mod" : entry.modelData.category === "shaderpacks" ? "shader" : "resource" }
                                 ColumnLayout {
                                     Layout.fillWidth: true; Layout.minimumWidth: 40; spacing: 7
                                     Text { Layout.fillWidth: true; text: entry.modelData.title; color: Theme.colors.text; font.pixelSize: 13; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }

@@ -12,6 +12,6 @@ Switch {
         implicitWidth: 44; implicitHeight: 24; radius: 12
         color: control.checked ? Theme.colors.accent : Theme.colors.input
         border.color: control.visualFocus ? Theme.colors.text : control.checked ? "transparent" : Theme.colors.border
-        Rectangle { x: control.checked ? 23 : 3; y: 3; width: 18; height: 18; radius: 9; color: control.checked ? Theme.colors.accentText : Theme.colors.muted; Behavior on x { NumberAnimation { duration: 100 } } }
+        Rectangle { x: control.checked ? 23 : 3; y: 3; width: 18; height: 18; radius: 9; color: control.checked ? Theme.colors.accentText : Theme.colors.muted; Behavior on x { NumberAnimation { duration: Appearance.values.reduceMotion ? 0 : 100 } } }
     }
 }

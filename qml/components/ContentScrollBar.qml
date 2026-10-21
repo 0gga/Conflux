@@ -3,10 +3,10 @@ import QtQuick.Controls
 import Conflux.Style
 ScrollBar {
     id: root; objectName: "contentScrollBar"
-    implicitWidth: 8; implicitHeight: 8
+    implicitWidth: Appearance.values.scrollbarWidth; implicitHeight: Appearance.values.scrollbarWidth
     padding: 1; policy: ScrollBar.AsNeeded
     contentItem: Rectangle {
-        implicitWidth: 6; implicitHeight: 6; radius: 3
+        implicitWidth: root.implicitWidth-2; implicitHeight: root.implicitHeight-2; radius: width/2
         color: root.pressed ? Theme.colors.accent : Theme.colors.muted
         opacity: root.active || root.hovered ? 0.75 : 0.35
     }

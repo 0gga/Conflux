@@ -289,6 +289,56 @@ class BrowseCatalogueTests final : public QObject {
         QTRY_VERIFY(!model.busy());
         QVERIFY(model.filters().value("versions").toStringList().isEmpty());
     }
+    void browsingDefaultsPersistWithoutOverwritingVisitedViewsOrCompatibility() {
+        QTemporaryDir temp;
+        const auto file = temp.path() + "/defaults.ini";
+        BrowsePreferences preferences(std::make_shared<BrowseSettingsStore>(file));
+        QVERIFY(preferences.setDefault("size", 50));
+        QVERIFY(preferences.setDefault("sort", "downloads"));
+        QVERIFY(preferences.setDefault("source", "modrinth"));
+        QVERIFY(preferences.setDefault("hideInstalled", true));
+        const auto good = preferences.defaults();
+        QVERIFY(!preferences.setDefault("size", 20.5));
+        QVERIFY(!preferences.setDefault("sort", "invalid"));
+        QVERIFY(!preferences.setDefault("source", "invalid"));
+        QVERIFY(!preferences.setDefault("hideInstalled", "false"));
+        QCOMPARE(preferences.defaults(), good);
+        BrowsePreferences reloaded(std::make_shared<BrowseSettingsStore>(file));
+        QCOMPARE(reloaded.defaults(), good);
+        auto store = std::make_shared<MemoryBrowseSettings>();
+        auto visibility = std::make_shared<ContentVisibility>(store);
+        BrowseCatalogue model(source(), visibility);
+        model.setDefaults(reloaded.defaults());
+        model.setContext("first", {"1.21.1"}, {"neoforge"});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 50);
+        QCOMPARE(model.filters().value("sort").toString(), QString("downloads"));
+        model.configure({{"size", 10}, {"loaders", QStringList{"fabric"}}});
+        QVERIFY(preferences.setDefault("size", 20));
+        model.setDefaults(preferences.defaults());
+        model.setContext("second", {"1.20.1"}, {"forge"});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 20);
+        model.setContext("first", {"1.21.1"}, {"neoforge"});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.filters().value("size").toInt(), 10);
+        QCOMPARE(model.filters().value("loaders").toStringList(), QStringList{"fabric"});
+        preferences.resetDefaults();
+        QVERIFY(preferences.connectorFabric());
+        QCOMPARE(preferences.defaults().value("size").toInt(), 20);
+        QCOMPARE(preferences.defaults().value("hideInstalled").toBool(), false);
+    }
+    void invalidSavedBrowsingDefaultsFallBackWithoutWrites() {
+        auto store = std::make_shared<MemoryBrowseSettings>();
+        store->data["browse/defaults"] =
+            QVariantMap{{"size", 3}, {"sort", "invalid"}, {"source", "invalid"}, {"hideInstalled", "false"}};
+        const auto before = store->data;
+        BrowsePreferences preferences(store);
+        QCOMPARE(preferences.defaults().value("size").toInt(), 20);
+        QCOMPARE(preferences.defaults().value("source").toString(), QString("merged"));
+        QCOMPARE(preferences.defaults().value("hideInstalled").toBool(), false);
+        QCOMPARE(store->data, before);
+    }
     void preferencesPersistAndHidingDoesNotChangeInstalledFiles() {
         QTemporaryDir temp;
         const auto file = temp.path() + "/browse.ini";

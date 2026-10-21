@@ -20,5 +20,5 @@ RowLayout {
     }
     Text { objectName: "statisticText"; text: root.text; color: Theme.colors.muted; font.pixelSize: 12 * root.statisticScale; textFormat: Text.PlainText }
     HoverHandler { id: hover }
-    RoundedToolTip { visible: hover.hovered && root.hint.length>0; text: root.hint }
+    RoundedToolTip { showWhen: hover.hovered && root.hint.length>0; text: root.hint }
 }

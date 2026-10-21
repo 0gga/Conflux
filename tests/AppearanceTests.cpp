@@ -57,6 +57,39 @@ class AppearanceTests final : public QObject {
         object.remove("status");
         QVERIFY(!ThemePalette::decode(QJsonDocument(object).toJson()));
     }
+    void presentationControlsPersistAndResetOnlyTheirOwnScope() {
+        QTemporaryDir dir;
+        Appearance appearance(nullptr, dir.path());
+        QVERIFY(appearance.setValue("navigationMode", 1));
+        QVERIFY(appearance.setValue("tooltips", 0));
+        QVERIFY(appearance.setValue("previewVisible", 0));
+        QVERIFY(appearance.setValue("reduceMotion", 1));
+        QVERIFY(appearance.setValue("tooltipDelay", 200));
+        QCOMPARE(appearance.values().value("galleryFitPercent").toInt(), 83);
+        QVERIFY(appearance.setValue("galleryFitPercent", 90));
+        QVERIFY(appearance.setValue("contentRowHeight", 68));
+        QVERIFY(appearance.setValue("showFollowers", 0));
+        QVERIFY(appearance.setValue("showSummary", 0));
+        QVERIFY(!appearance.setValue("navigationMode", 1.5));
+        QVERIFY(!appearance.setValue("showAuthor", 0.5));
+        QVERIFY(!appearance.setValue("tooltips", 2));
+        Appearance restored(nullptr, dir.path());
+        QCOMPARE(restored.values(), appearance.values());
+        restored.resetValue("showSummary");
+        QCOMPARE(restored.values().value("showSummary").toInt(), 1);
+        QCOMPARE(restored.values().value("showFollowers").toInt(), 0);
+        restored.resetGroup("Interface");
+        QCOMPARE(restored.values().value("tooltips").toInt(), 1);
+        QCOMPARE(restored.values().value("previewVisible").toInt(), 1);
+        QCOMPARE(restored.values().value("galleryFitPercent").toInt(), 83);
+        QCOMPARE(restored.values().value("navigationMode").toInt(), 0);
+        QCOMPARE(restored.values().value("contentRowHeight").toInt(), 82);
+        QCOMPARE(restored.values().value("showFollowers").toInt(), 0);
+        restored.resetGroup("Content cards");
+        QCOMPARE(restored.values().value("showFollowers").toInt(), 1);
+        Appearance finalState(nullptr, dir.path());
+        QCOMPARE(finalState.values(), restored.values());
+    }
     void layoutPreferencesPersistAndRejectUnsafeSizes() {
         QTemporaryDir dir;
         Appearance layout(nullptr, dir.path());

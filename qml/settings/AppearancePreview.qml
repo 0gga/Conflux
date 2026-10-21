@@ -6,18 +6,33 @@ import "../explore"
 Rectangle {
     id: root
     objectName: "appearanceLivePreview"
+    property string section: "content"
     color: Theme.colors.background; border.color: Theme.colors.border; radius: 14
     implicitHeight: 250
     clip: true
     readonly property real previewScale: Math.min(1,(width-24)/1040)
+    Text { x: 12; y: 8; text: "Live preview · example content"; color: Theme.colors.muted; font.pixelSize: 11 }
     QtObject {
         id: example
         property var filters: ({type:"mod",source:"merged",versions:["1.21.1"],loaders:["neoforge","fabric"],unlocked:false,tags:[],hidden:false,hideInstalled:false})
         property var options: ({versions:["1.21.1","1.20.1","1.19.2"],tags:[],curseforgeTags:[]})
         function configure(change) { filters=Object.assign({},filters,change) }
     }
+    Column {
+        visible: root.section==="interface"; x: 12; y: 32; width: 1040
+        scale: root.previewScale; transformOrigin: Item.TopLeft; spacing: 12
+        LibraryRow { objectName: "previewLibraryRow"; width: parent.width; titleText: "Example modpack"; detailText: "128 mods"; minecraft: "1.21.1"; loader: "neoforge"; entireRowInteractive: false }
+        Rectangle {
+            width: parent.width; height: Appearance.values.contentRowHeight; radius: 12; color: Theme.colors.card
+            SelectionBox { x: 14; anchors.verticalCenter: parent.verticalCenter; Accessible.name: "Example row" }
+            ContentIcon { x: 54; anchors.verticalCenter: parent.verticalCenter; size: Math.min(44,parent.height-24); kind: "mod" }
+            Text { x: 112; anchors.verticalCenter: parent.verticalCenter; text: "Example installed content"; color: Theme.colors.text; font.pixelSize: 13 }
+            ToggleSwitch { anchors.right: parent.right; anchors.rightMargin: 20; anchors.verticalCenter: parent.verticalCenter; checked: true; Accessible.name: "Example enabled content" }
+        }
+    }
     Item {
-        x: 12; y: 12; width: 1040; height: (root.height-24)/root.previewScale
+        visible: root.section!=="interface"
+        x: 12; y: 32; width: 1040; height: (root.height-44)/root.previewScale
         scale: root.previewScale; transformOrigin: Item.TopLeft
         Rectangle {
             id: filterPanel; anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom
@@ -39,4 +54,6 @@ Rectangle {
             }
         }
     }
+    ScrollViewportCorners { anchors.fill: parent; radius: root.radius; outsideColor: Theme.colors.background }
+
 }

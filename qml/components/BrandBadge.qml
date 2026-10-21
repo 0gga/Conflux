@@ -21,5 +21,5 @@ Rectangle {
         Text { visible: !root.iconOnly; text: root.text; color: root.framed ? (root.info.color || Theme.colors.muted) : Theme.colors.muted; font.pixelSize: 12 * root.badgeScale; textFormat: Text.PlainText }
     }
     HoverHandler { id: hover }
-    RoundedToolTip { visible: hover.hovered; text: root.info.label }
+    RoundedToolTip { showWhen: hover.hovered; text: root.info.label }
 }

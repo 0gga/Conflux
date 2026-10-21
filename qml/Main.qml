@@ -24,7 +24,7 @@ ApplicationWindow {
         return instance ? instance.title : session.browse.pack.path === path ? (session.browse.pack.name || "selected instance") : "selected instance"
     }
     readonly property real interfaceScale: Appearance.values.uiScale / 100
-    readonly property bool compactNavigation: width / interfaceScale < 1000
+    readonly property bool compactNavigation: Appearance.values.navigationMode === 1 || width / interfaceScale < (Appearance.values.navigationMode === 2 ? 820 : 1000)
     readonly property string pageTitle: page === "discover"
         ? (session.navigation.route.packPath ? browseInstanceName + ' - Exploring Content' : "Explore content")
         : page === "showcase" ? (session.showcase.project.title || "Mod showcase")
@@ -135,7 +135,7 @@ ApplicationWindow {
                         elide: Text.ElideRight; text: window.pageTitle
                         font.pixelSize: 19; font.weight: Font.DemiBold; color: Theme.colors.text; textFormat: Text.PlainText
                         HoverHandler { id: titleHover }
-                        RoundedToolTip { visible: titleHover.hovered && titleLabel.truncated; text: window.pageTitle }
+                        RoundedToolTip { showWhen: titleHover.hovered && titleLabel.truncated; text: window.pageTitle }
                     }
                     SelectBox {
                         objectName: "browseInstanceSelector"
@@ -162,7 +162,7 @@ ApplicationWindow {
                     onWarningSettingsRequested: window.session.navigation.go({page:"settings",settingsTab:"warnings"})
                     onShowcaseRequested: function(path) { window.session.navigation.go({page:"showcase",packPath:window.app.activePack.path,modPath:path}) }
                 }
-                SettingsPage { app: window.app; warnings: window.session.warnings; browsePreferences: window.session.browsePreferences; tab: window.session.navigation.route.settingsTab || "appearance"; onTabRequested: function(key) { window.session.navigation.go({page:"settings",settingsTab:key}) } }
+                SettingsPage { app: window.app; catalogue: window.session.catalogue; warnings: window.session.warnings; browsePreferences: window.session.browsePreferences; tab: window.session.navigation.route.settingsTab || "appearance"; onTabRequested: function(key) { window.session.navigation.go({page:"settings",settingsTab:key}) } }
                 ShowcasePage { app: window.app; browse: window.session.browse; showcase: window.session.showcase; releaseFilters: window.session.releaseFilters; contentController: window.session.content; tab: window.session.navigation.route.showcaseTab || "description"; onTabRequested: function(key) { const route = Object.assign({},window.session.navigation.route); route.showcaseTab = key; window.session.navigation.go(route) } }
             }
         }

@@ -21,6 +21,9 @@ BrowseCatalogue::BrowseCatalogue(std::shared_ptr<ICatalogueSearch> source,
                  {"hidden", false},
                  {"unlocked", false}};
 }
+void BrowseCatalogue::setDefaults(const QVariantMap &defaults) {
+    m_defaults = defaults;
+}
 void BrowseCatalogue::setScrollPosition(qreal value) {
     m_scroll = qMax(qreal(0), value);
     emit scrollChanged();
@@ -112,6 +115,9 @@ void BrowseCatalogue::activateView(bool sameInstance) {
             pump();
         return;
     }
+    for (const auto &key : {"sort", "size", "source", "hideInstalled"})
+        if (m_defaults.contains(key))
+            m_filters[key] = m_defaults.value(key);
     m_filters["versions"] = m_defaultVersions;
     m_filters["loaders"] = m_defaultLoaders;
     m_filters["unlocked"] = false;

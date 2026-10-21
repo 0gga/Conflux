@@ -754,7 +754,7 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                 }
                 tip->setProperty("text", "Back to the previous page");
                 tip->setProperty("delay", 0);
-                tip->setProperty("visible", true);
+                tip->setProperty("showWhen", true);
                 break;
             }
             case 46:
@@ -768,7 +768,7 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                 }
                 window->findChild<QObject *>("navigationBackButton")
                     ->findChild<QObject *>("roundedToolTip")
-                    ->setProperty("visible", false);
+                    ->setProperty("showWhen", false);
                 session.navigation()->go({{"page", "settings"}, {"settingsTab", "appearance"}});
                 break;
             case 47: {
@@ -834,15 +834,11 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     fail("Restored appearance render failed");
                     return;
                 }
-                if (auto *controls = findVisualItem(window->contentItem(), "appearanceControls")) {
-                    auto *viewport = controls->property("viewport").value<QQuickItem *>();
-                    auto *heading = findVisualItem(window->contentItem(), "themeColorsHeading");
-                    if (!viewport || !heading) {
-                        fail("Theme editor controls missing");
-                        return;
-                    }
-                    viewport->setProperty("contentY", viewport->property("contentY").toReal() +
-                                                          heading->mapToItem(viewport, QPointF{}).y());
+                if (auto *settings = findVisualItem(window->contentItem(), "appearanceSettings"))
+                    settings->setProperty("section", "colors");
+                else {
+                    fail("Tabbed Appearance settings missing");
+                    return;
                 }
                 break;
             case 52: {
@@ -850,10 +846,8 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     fail("Theme editor render failed");
                     return;
                 }
-                auto *controls = findVisualItem(window->contentItem(), "appearanceControls");
-                auto *viewport = controls->property("viewport").value<QQuickItem *>();
-                viewport->setProperty(
-                    "contentY", qMax(0.0, viewport->property("contentHeight").toReal() - viewport->height()));
+                if (auto *theme = findVisualItem(window->contentItem(), "themeSettings"))
+                    theme->setProperty("group", "status");
                 break;
             }
             case 53:
@@ -964,8 +958,8 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     fail("Gallery close control missing");
                     return;
                 }
-                session.navigation()->go({{"page", "workspace"}, {"packPath", state->externalPath},
-                                          {"section", "content"}});
+                session.navigation()->go(
+                    {{"page", "workspace"}, {"packPath", state->externalPath}, {"section", "content"}});
                 break;
             }
             case 61: {
@@ -1009,8 +1003,11 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     return;
                 }
                 session.navigation()->go({{"page", "discover"}, {"packPath", state->externalPath}});
-                session.catalogue()->configure({{"type", "mod"}, {"query", "Sodium"}, {"source", "modrinth"},
-                                                 {"sort", "relevance"}, {"size", 10}});
+                session.catalogue()->configure({{"type", "mod"},
+                                                {"query", "Sodium"},
+                                                {"source", "modrinth"},
+                                                {"sort", "relevance"},
+                                                {"size", 10}});
                 break;
             }
             case 65: {
@@ -1020,24 +1017,137 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     fail("Card statistics render failed");
                     return;
                 }
+                session.navigation()->go({{"page", "settings"}, {"settingsTab", "appearance"}});
+                window->setWidth(1360);
+                window->setHeight(900);
+                break;
+            }
+            case 66: {
+                auto *settings = findVisualItem(window->contentItem(), "appearanceSettings");
+                auto *appearance = qmlEngine(window)->singletonInstance<Appearance *>(
+                    qmlTypeId("Conflux.Style", 1, 0, "Appearance"));
+                if (!settings || !appearance) {
+                    fail("Configurable settings missing");
+                    return;
+                }
+                settings->setProperty("section", "interface");
+                appearance->setValue("libraryRowHeight", 112);
+                appearance->setValue("contentRowHeight", 68);
+                appearance->setValue("navigationMode", 1);
+                appearance->setValue("reduceMotion", 1);
+                appearance->setValue("tooltipDelay", 100);
+                appearance->setValue("showFollowers", 0);
+                break;
+            }
+            case 67:
+                if (!capture("settings-interface-options")) {
+                    fail("Interface settings render failed");
+                    return;
+                }
+                findVisualItem(window->contentItem(), "appearanceSettings")
+                    ->setProperty("section", "content");
+                break;
+            case 68:
+                if (!capture("settings-content-options")) {
+                    fail("Content settings render failed");
+                    return;
+                }
+                findVisualItem(window->contentItem(), "appearanceSearch")->setProperty("text", "follower");
+                break;
+            case 69:
+                if (!capture("settings-search-result")) {
+                    fail("Settings search render failed");
+                    return;
+                }
+                findVisualItem(window->contentItem(), "appearanceSearch")->setProperty("text", "");
+                findVisualItem(window->contentItem(), "appearanceSettings")
+                    ->setProperty("section", "filters");
+                break;
+            case 70:
+                if (!capture("settings-filter-options")) {
+                    fail("Filter settings render failed");
+                    return;
+                }
+                findVisualItem(window->contentItem(), "appearanceSettings")->setProperty("section", "colors");
+                findVisualItem(window->contentItem(), "themeSettings")->setProperty("group", "surfaces");
+                break;
+            case 71:
+                if (!capture("settings-color-surfaces")) {
+                    fail("Color surfaces render failed");
+                    return;
+                }
+                findVisualItem(window->contentItem(), "themeSettings")->setProperty("group", "status");
+                break;
+            case 72: {
+                if (!capture("settings-color-status")) {
+                    fail("Status colors render failed");
+                    return;
+                }
+                auto *settings = findVisualItem(window->contentItem(), "appearanceSettings");
+                qmlEngine(window)
+                    ->singletonInstance<Appearance *>(qmlTypeId("Conflux.Style", 1, 0, "Appearance"))
+                    ->setValue("previewVisible", 0);
+                settings->setProperty("section", "content");
+                qmlEngine(window)
+                    ->singletonInstance<Appearance *>(qmlTypeId("Conflux.Style", 1, 0, "Appearance"))
+                    ->setValue("uiScale", 150);
+                window->setWidth(1080);
+                window->setHeight(720);
+                break;
+            }
+            case 73:
+                if (!capture("settings-compact-scaled")) {
+                    fail("Compact scaled settings render failed");
+                    return;
+                }
+                qmlEngine(window)
+                    ->singletonInstance<Appearance *>(qmlTypeId("Conflux.Style", 1, 0, "Appearance"))
+                    ->reset();
+                window->setWidth(1360);
+                window->setHeight(900);
+                session.navigation()->go({{"page", "settings"}, {"settingsTab", "browse"}});
+                session.browsePreferences()->setDefault("size", 50);
+                session.browsePreferences()->setDefault("sort", "updated");
+                session.browsePreferences()->setDefault("hideInstalled", true);
+                break;
+            case 74:
+                if (!capture("settings-browsing-defaults")) {
+                    fail("Browsing defaults render failed");
+                    return;
+                }
+                findVisualItem(window->contentItem(), "browsingSettings")
+                    ->setProperty("section", "compatibility");
+                break;
+            case 75:
+                if (!capture("settings-browsing-compatibility")) {
+                    fail("Compatibility settings render failed");
+                    return;
+                }
+                session.browsePreferences()->resetDefaults();
+                break;
+            case 76: {
                 if (smokeRuntimeError) {
                     fail("QML runtime warning in Explore content");
                     return;
                 }
-                qInfo("PASS: contiguous table hover/top/bottom clipping and aligned statistics; "
-                      "source images/formatted descriptions, enlarged gallery zoom, reserved scroll "
-                      "gutters, stable hover; channel/game/loader version filters, active discovery chips "
-                      "and toggle menus; "
-                      "candy-red theme, live appearance preview, independent UI/content/filter sizing, "
-                      "compact cards and scaled menus; compact contextual top bar, scrollable versions and "
-                      "rounded tooltips; provider "
-                      "pagination and page/scroll restoration, right filters, stop-at-bounds "
-                      "scrolling; instance-scoped browse installs, exact installed-version badges, verified "
-                      "live "
-                      "ZIP assets, four content types and branded rounded cards; live API/install/Git, "
-                      "native installed-mod showcase, content "
-                      "selection/filter/version picker, vertical Settings, navigation, visual config saves, "
-                      "worlds and warnings renders");
+                qInfo().noquote()
+                    << "PASS: 83% gallery fit baseline and viewer controls; tabbed/searchable settings, "
+                       "presentation controls, browse defaults and "
+                       "compact150% UI; "
+                       "contiguous table hover/top/bottom clipping and aligned statistics; "
+                       "source images/formatted descriptions, enlarged gallery zoom, reserved scroll "
+                       "gutters, stable hover; channel/game/loader version filters, active discovery chips "
+                       "and toggle menus; "
+                       "candy-red theme, live appearance preview, independent UI/content/filter sizing, "
+                       "compact cards and scaled menus; compact contextual top bar, scrollable versions and "
+                       "rounded tooltips; provider "
+                       "pagination and page/scroll restoration, right filters, stop-at-bounds "
+                       "scrolling; instance-scoped browse installs, exact installed-version badges, verified "
+                       "live "
+                       "ZIP assets, four content types and branded rounded cards; live API/install/Git, "
+                       "native installed-mod showcase, content "
+                       "selection/filter/version picker, vertical Settings, navigation, visual config saves, "
+                       "worlds and warnings renders";
                 timer->stop();
                 application.exit(0);
                 return;

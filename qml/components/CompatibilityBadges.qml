@@ -25,7 +25,7 @@ Row {
             textFormat: Text.PlainText
         }
         HoverHandler { id: hover }
-        RoundedToolTip { visible: hover.hovered; text: "Minecraft " + (root.minecraft || "version unknown") }
+        RoundedToolTip { showWhen: hover.hovered; text: "Minecraft " + (root.minecraft || "version unknown") }
     }
     BrandBadge {
         objectName: "compatibilityLoader"

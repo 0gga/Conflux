@@ -15,5 +15,5 @@ Rectangle {
     Icon { visible: root.locked; x: 8; anchors.verticalCenter: parent.verticalCenter; size: 13; name: "lock" }
     ActionButton { id: removeButton; objectName: "filterChipRemove"; pill: true; focusIndicator: false; visible: !root.locked && root.removable; anchors.right: parent.right; anchors.rightMargin: 2; anchors.verticalCenter: parent.verticalCenter; width: 24; implicitWidth: 24; implicitHeight: 24; iconName: "close"; subtle: true; compact: true; hint: "Remove " + root.text; onClicked: root.removed() }
     HoverHandler { id: hover }
-    RoundedToolTip { visible: root.locked && hover.hovered; text: "From this instance" }
+    RoundedToolTip { showWhen: root.locked && hover.hovered; text: "From this instance" }
 }

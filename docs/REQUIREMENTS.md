@@ -95,3 +95,14 @@ The source statements and reference images distinguish these requirements from i
 - Shared hover/press behavior must preserve control geometry and pill silhouettes. Search fields have an internal trailing clear button. In instance content, put Updates between Hidden and Update all, use a padded short divider after Filter and put Refresh at the far right.
 
 - Keep card actions and statistics harmoniously aligned with consistent icon sizing. Instance-table hover fills the entire cell; partially visible bottom rows retain one clean outer corner without nested rounding or an end divider.
+
+## Expanded configuration and settings organization
+
+- Keep improving the GUI and populate settings with working configuration. Large categories, including Appearance, use tabs to avoid clutter.
+- Appearance has Interface, Content, Filters and Colors tabs, section search, a collapsible live preview and scoped reset actions. Colors retain all semantic roles, organized into four palette groups.
+- Configure navigation style, library/instance row density, scrollbar width, tooltip visibility/delay, reduced motion and individual card metadata alongside existing sizing/color controls.
+- Browsing separates defaults from compatibility. Persist sort, page size, source and installed-content defaults; preserve visited views and saved instance compatibility unless the user explicitly applies defaults to the current view.
+
+- Clicking outside an enlarged gallery image closes the viewer; image interaction and toolbar controls remain usable. At100% zoom the image should occupy roughly the previous83% size. Gallery fit is configurable in Appearance.
+
+- Preserve whole-card hover while the pointer is over tags, downloads and other descendant controls.

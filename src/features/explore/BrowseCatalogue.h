@@ -45,6 +45,7 @@ class BrowseCatalogue final : public QObject {
     void setContext(const QString &, const QStringList &versions, const QStringList &loaders);
     void setInstalled(const QVariantList &inventory);
     void setKey(const QByteArray &);
+    void setDefaults(const QVariantMap &);
     Q_INVOKABLE void configure(const QVariantMap &);
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void next();
@@ -78,7 +79,7 @@ class BrowseCatalogue final : public QObject {
     QHash<QString, QString> m_identities;
     QSet<QString> m_installed, m_seen;
     QHash<QString, Project> m_known;
-    QVariantMap m_filters, m_options;
+    QVariantMap m_filters, m_options, m_defaults;
     QMap<QString, Stream> m_streams;
     QVector<QVariantList> m_pages;
     QMap<QString, Snapshot> m_contexts;

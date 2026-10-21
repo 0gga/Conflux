@@ -26,7 +26,7 @@ Button {
     font.pixelSize: compact ? 12 : 13; font.weight: selected || primary ? Font.DemiBold : Font.Medium
     Accessible.name: text || hint
     Accessible.description: selected ? "Selected" : ""
-    RoundedToolTip { visible: control.interactiveHover && control.hint.length > 0; text: control.hint }
+    RoundedToolTip { showWhen: control.interactiveHover && control.hint.length > 0; text: control.hint }
     HoverHandler { enabled: control.enabled; cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor }
     contentItem: Item {
         implicitWidth: labelRow.implicitWidth; implicitHeight: labelRow.implicitHeight
@@ -55,7 +55,7 @@ Button {
         border.width: 1
         border.color: control.primary ? "transparent" : control.selected ? Qt.lighter(Theme.colors.border, 1.5)
             : control.subtle ? "transparent" : Theme.colors.border
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Appearance.values.reduceMotion ? 0 : 100 } }
         Rectangle {
             anchors.fill: parent; anchors.margins: -3; radius: parent.radius + 3
             color: "transparent"; border.width: 1; border.color: Theme.colors.accent

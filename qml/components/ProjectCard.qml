@@ -22,7 +22,7 @@ Rectangle {
     signal installRequested
     implicitHeight: Math.max(Appearance.values.artworkSize * contentScale, heading.implicitHeight + 34 * contentScale, actions.implicitHeight) + 2 * inset
     radius: 14
-    color: hover.containsMouse ? Theme.colors.hover : Theme.colors.card
+    color: hover.hovered ? Theme.colors.hover : Theme.colors.card
     border.width: 0
     readonly property bool unavailable: !installState.canInstall && !installState.installed
     opacity: unavailable ? Appearance.values.unavailableOpacity / 100 : 1
@@ -31,7 +31,8 @@ Rectangle {
         if (!isFinite(days)) return ""
         return days===0 ? "Today" : days===1 ? "1 day ago" : days<60 ? days+" days ago" : days<730 ? Math.floor(days/30)+" months ago" : Math.floor(days/365)+" years ago"
     }
-    MouseArea { id: hover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.opened() }
+    HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }
+    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.opened() }
     ContentIcon {
         id: artwork; objectName: "browseArtwork"
         anchors.left: parent.left; anchors.leftMargin: root.inset; anchors.top: parent.top; anchors.topMargin: root.inset
@@ -48,9 +49,9 @@ Rectangle {
         Row {
             width: parent.width; spacing: 7 * root.contentScale
             Text { id: title; objectName: "browseTitle"; text: root.project.title; width: Math.min(implicitWidth,parent.width*0.68); color: Theme.colors.text; font.pixelSize: 18 * root.contentScale; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
-            Text { objectName: "browseAuthor"; anchors.baseline: title.baseline; width: Math.max(0,parent.width-title.width-parent.spacing); text: "by " + (root.project.author || "Unknown author"); color: Theme.colors.muted; font.pixelSize: 12 * root.contentScale; elide: Text.ElideRight; textFormat: Text.PlainText }
+            Text { visible: !!Appearance.values.showAuthor; objectName: "browseAuthor"; anchors.baseline: title.baseline; width: Math.max(0,parent.width-title.width-parent.spacing); text: "by " + (root.project.author || "Unknown author"); color: Theme.colors.muted; font.pixelSize: 12 * root.contentScale; elide: Text.ElideRight; textFormat: Text.PlainText }
         }
-        Text { width: parent.width; text: root.project.summary || ""; color: Theme.colors.muted; font.pixelSize: 12 * root.contentScale; elide: Text.ElideRight; textFormat: Text.PlainText }
+        Text { objectName: "browseSummary"; visible: !!Appearance.values.showSummary; width: parent.width; text: root.project.summary || ""; color: Theme.colors.muted; font.pixelSize: 12 * root.contentScale; elide: Text.ElideRight; textFormat: Text.PlainText }
     }
     Flickable {
         id: tags; objectName: "browseBadges"
@@ -74,19 +75,19 @@ Rectangle {
                 width: versionText.implicitWidth + 16 * root.contentScale; height: tags.height; radius: height/2; color: Theme.colors.input
                 Text { id: versionText; anchors.centerIn: parent; text: root.minecraft; color: Theme.colors.muted; font.pixelSize: 11 * root.contentScale }
                 HoverHandler { id: versionHover }
-                RoundedToolTip { visible: versionHover.hovered; text: "Minecraft " + root.minecraft }
+                RoundedToolTip { showWhen: versionHover.hovered; text: "Minecraft " + root.minecraft }
             }
             Item { width: 3 * root.contentScale; height: 1 }
             Rectangle {
                 objectName: "browseEnvironmentBadge"
-                visible: !!root.project.environment && root.project.environment !== "unknown"
+                visible: !!Appearance.values.showEnvironment && !!root.project.environment && root.project.environment !== "unknown"
                 width: tags.height; height: tags.height; radius: height/2; color: Theme.colors.input
                 Icon { anchors.centerIn: parent; name: root.project.environment === "client" ? "monitor" : "world"; size: 14 * root.contentScale }
                 HoverHandler { id: environmentHover }
-                RoundedToolTip { visible: environmentHover.hovered; text: Branding.label(root.project.environment || "") }
+                RoundedToolTip { showWhen: environmentHover.hovered; text: Branding.label(root.project.environment || "") }
             }
             Repeater {
-                model: (root.project.categories || []).filter(function(tag) { return (root.project.loaders || []).indexOf(tag) === -1 })
+                model: Appearance.values.showCategories ? (root.project.categories || []).filter(function(tag) { return (root.project.loaders || []).indexOf(tag) === -1 }) : []
                 delegate: Rectangle {
                     required property string modelData
                     objectName: "browseCategoryBadge"
@@ -117,10 +118,10 @@ Rectangle {
         RowLayout {
             id: statistics; objectName: "browseStatistics"
             Layout.alignment: Qt.AlignRight; spacing: 8 * root.contentScale
-            Repeater { model: root.project.downloadStats || []; delegate: ContentStatistic { required property var modelData; brand: modelData.provider; text: modelData.count; hint: Branding.label(brand) + " downloads"; statisticScale: root.contentScale } }
-            ContentStatistic { visible: (root.project.followersRaw || 0)>0; iconName: "heart"; text: root.project.followers || ""; hint: "Followers"; statisticScale: root.contentScale }
+            Repeater { model: Appearance.values.showDownloads ? (root.project.downloadStats || []) : []; delegate: ContentStatistic { required property var modelData; brand: modelData.provider; text: modelData.count; hint: Branding.label(brand) + " downloads"; statisticScale: root.contentScale } }
+            ContentStatistic { visible: !!Appearance.values.showFollowers && (root.project.followersRaw || 0)>0; iconName: "heart"; text: root.project.followers || ""; hint: "Followers"; statisticScale: root.contentScale }
         }
-        ContentStatistic { id: updated; objectName: "browseUpdated"; Layout.alignment: Qt.AlignRight; visible: !!root.project.updated; iconName: "history"; text: root.updatedAge(root.project.updated || ""); hint: root.project.updated || ""; statisticScale: root.contentScale }
+        ContentStatistic { id: updated; objectName: "browseUpdated"; Layout.alignment: Qt.AlignRight; visible: !!Appearance.values.showUpdated && !!root.project.updated; iconName: "history"; text: root.updatedAge(root.project.updated || ""); hint: root.project.updated || ""; statisticScale: root.contentScale }
     }
     PopupButton {
         popup: menu

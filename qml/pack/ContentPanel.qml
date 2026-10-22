@@ -93,7 +93,7 @@ Item {
                                     RowLayout {
                                         Layout.fillWidth: true; spacing: 6
                                         ContentIcon { visible: !!entry.modelData.authorIcon; source: entry.modelData.authorIcon || ""; size: 18; radius: 9; kind: "mod" }
-                                        ContentLink { objectName: "contentAuthorLink"; Layout.fillWidth: true; text: entry.modelData.author || "Unknown author"; enabled: !!entry.modelData.authorIds; onClicked: root.authorRequested({name:entry.modelData.author,ids:entry.modelData.authorIds || {},projects:entry.modelData.sourceIds || {}}); color: Theme.colors.muted; font.pixelSize: 11; elide: Text.ElideRight; textFormat: Text.PlainText }
+                                        AuthorLinks { objectName: "contentAuthorLink"; Layout.fillWidth: true; authors: entry.modelData.authors || []; author: entry.modelData.author || ""; authorIds: entry.modelData.authorIds || {}; onAuthorRequested: function(author) { root.authorRequested(author) }; color: Theme.colors.muted; font.pixelSize: 11 }
                                     }
                                 }
                                 ColumnLayout {

@@ -1,4 +1,5 @@
 #include "domain/Catalogue.h"
+#include "platform/ProjectAuthors.h"
 #include "platform/ReviewedAuthorIdentities.h"
 #include "services/CatalogueClient.h"
 #include "services/InstallationDiscovery.h"
@@ -54,6 +55,37 @@ class FoundationTests : public QObject {
         return file.open(QIODevice::WriteOnly) && file.write(data) == data.size();
     }
   private slots:
+    void authorRostersKeepExactSeparateIdentitiesAndStableOwnershipOrder() {
+        const auto member = [](const QString &id, const QString &name, const QString &role,
+                               bool accepted = true) {
+            return QJsonObject{{"user", QJsonObject{{"id", id},
+                                                    {"username", name},
+                                                    {"avatar_url", "https://example.test/icon.png"}}},
+                               {"role", role},
+                               {"accepted", accepted}};
+        };
+        const auto authors = ProjectAuthors::modrinthTeam(
+            {member("two", "Second, Author", "Developer"), member("one", "First_Author", "owner"),
+             member("two", "Second, Author", "Developer"), member("pending", "Pending", "Developer", false),
+             member("three", "First_Author", "Developer")});
+        QCOMPARE(authors.size(), 3);
+        QCOMPARE(authors[0].toMap().value("name").toString(), QString("First_Author"));
+        QCOMPARE(authors[0].toMap().value("ids").toMap().value("modrinth").toString(), QString("one"));
+        QCOMPARE(authors[1].toMap().value("name").toString(), QString("Second, Author"));
+        QCOMPARE(authors[2].toMap().value("ids").toMap().value("modrinth").toString(), QString("three"));
+        const auto cf = ProjectAuthors::curseforge(
+            {QJsonObject{{"id", 12}, {"name", "One"}}, QJsonObject{{"id", 34}, {"name", "Two"}},
+             QJsonObject{{"id", 12}, {"name", "One"}}, QJsonObject{{"id", 0}, {"name", "Unlinked"}}});
+        QCOMPARE(cf.size(), 3);
+        QCOMPARE(cf[1].toMap().value("ids").toMap().value("curseforge").toString(), QString("34"));
+        QVERIFY(cf[2].toMap().value("ids").toMap().isEmpty());
+        Project p;
+        p.author = "Legacy, Name";
+        p.authorIds = {{"modrinth", "exact-id"}};
+        QCOMPARE(p.toVariant().value("authors").toList().size(), 1);
+        p.authors = authors;
+        QCOMPARE(p.toVariant().value("authors").toList(), authors);
+    }
     void authorIdentityLinksRejectAmbiguousNamesAndPreserveExactProviderIds() {
         QTemporaryDir temp;
         const auto path = temp.path() + "/authors.json";

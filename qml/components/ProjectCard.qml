@@ -63,7 +63,7 @@ Rectangle {
         Row {
             width: parent.width; spacing: 7 * root.contentScale
             ContentLink { onClicked: root.opened(); id: title; objectName: "browseTitle"; text: root.project.title; width: Math.min(implicitWidth,parent.width*0.68); color: Theme.colors.text; font.pixelSize: 18 * root.contentScale; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
-            ContentLink { enabled: !!root.project.authorIds && Object.keys(root.project.authorIds).length > 0; onClicked: root.authorRequested({name:root.project.author,ids:root.project.authorIds || {}}); visible: !!Appearance.values.showAuthor; objectName: "browseAuthor"; anchors.baseline: title.baseline; width: Math.max(0,parent.width-title.width-parent.spacing); text: "by " + (root.project.author || "Unknown author"); color: Theme.colors.muted; font.pixelSize: 12 * root.contentScale; elide: Text.ElideRight; textFormat: Text.PlainText }
+            AuthorLinks { authors: root.project.authors || []; author: root.project.author || ""; authorIds: root.project.authorIds || {}; prefix: "by "; onAuthorRequested: function(author) { root.authorRequested(author) }; visible: !!Appearance.values.showAuthor; objectName: "browseAuthor"; anchors.baseline: title.baseline; width: Math.max(0,parent.width-title.width-parent.spacing); color: Theme.colors.muted; font.pixelSize: 12 * root.contentScale }
         }
         Text { objectName: "browseSummary"; visible: !!Appearance.values.showSummary; width: parent.width; text: root.project.summary || ""; color: Theme.colors.muted; font.pixelSize: 12 * root.contentScale; elide: Text.ElideRight; textFormat: Text.PlainText }
     }

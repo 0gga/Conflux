@@ -2,6 +2,7 @@
 #include "domain/ContentCompatibility.h"
 #include "domain/ContentTypes.h"
 #include "domain/LicensePolicy.h"
+#include "platform/ProjectAuthors.h"
 #include <QJsonArray>
 #include <QNetworkReply>
 #include <QUrlQuery>
@@ -124,12 +125,16 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
                                                                           : "unknown";
                                 } else if (!environments.isEmpty())
                                     row["environment"] = "unknown";
-                                const auto owner = teams.value(project.value("team").toString()).toObject();
-                                if (!owner.isEmpty()) {
-                                    row["author"] = owner.value("username");
-                                    row["authorIcon"] = owner.value("avatar_url");
-                                    row["authorIds"] =
-                                        QVariantMap{{"modrinth", owner.value("id").toString()}};
+                                const auto authors = ProjectAuthors::modrinthTeam(
+                                    teams.value(project.value("team").toString()).toArray());
+                                if (!authors.isEmpty()) {
+                                    QStringList names;
+                                    for (const auto &author : authors)
+                                        names << author.toMap().value("name").toString();
+                                    row["authors"] = authors;
+                                    row["author"] = names.join(", ");
+                                    row["authorIcon"] = authors.first().toMap().value("icon");
+                                    row["authorIds"] = authors.first().toMap().value("ids");
                                 }
                             }
                             const auto latest =
@@ -173,17 +178,16 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
                                         [batch, finish](const QJsonDocument &members, const QString &error) {
                                             if (!error.isEmpty())
                                                 batch->errors << "Authors: " + error;
-                                            QJsonObject owners;
+                                            QJsonObject teams;
                                             for (const auto &team : members.array())
                                                 for (const auto &value : team.toArray()) {
                                                     const auto member = value.toObject();
                                                     const auto id = member.value("team_id").toString();
-                                                    if (!owners.contains(id) ||
-                                                        member.value("role").toString().compare(
-                                                            "Owner", Qt::CaseInsensitive) == 0)
-                                                        owners[id] = member.value("user");
+                                                    auto roster = teams.value(id).toArray();
+                                                    roster << member;
+                                                    teams[id] = roster;
                                                 }
-                                            finish(owners);
+                                            finish(teams);
                                         });
                             });
                 };

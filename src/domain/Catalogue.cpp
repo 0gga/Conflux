@@ -55,6 +55,9 @@ QVariantMap Project::toVariant() const {
             {"summary", summary},
             {"author", author},
             {"authorIds", variantIds(authorIds)},
+            {"authors", authors.isEmpty() && !author.isEmpty()
+                            ? QVariantList{QVariantMap{{"name", author}, {"ids", variantIds(authorIds)}}}
+                            : authors},
             {"icon", icon},
             {"url", url},
             {"categories", categories},

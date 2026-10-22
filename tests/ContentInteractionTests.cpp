@@ -35,6 +35,92 @@ class ContentInteractionTests : public QObject {
         QQuickStyle::setStyle("Basic");
         qputenv("CONFLUX_STYLE_SETTINGS_DIR", styleStorage.path().toUtf8());
     }
+    void individualAuthorLinksHaveIndependentHoverAndClickTargets_data() {
+        QTest::addColumn<int>("scale");
+        for (int scale : {75, 100, 150})
+            QTest::newRow(qPrintable(QString::number(scale))) << scale;
+    }
+    void individualAuthorLinksHaveIndependentHoverAndClickTargets() {
+        QFETCH(int, scale);
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(700, 170);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/components/AuthorLinks.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        const QVariantList authors{
+            QVariantMap{{"name", "First_Author"}, {"ids", QVariantMap{{"modrinth", "mr-first"}}}},
+            QVariantMap{{"name", "Second, Author"}, {"ids", QVariantMap{{"curseforge", "123"}}}},
+            QVariantMap{{"name", "Unlinked"}, {"ids", QVariantMap{}}}};
+        std::unique_ptr<QQuickItem> links(qobject_cast<QQuickItem *>(
+            component.createWithInitialProperties({{"authors", authors}, {"prefix", "by "}})));
+        QVERIFY2(links, qPrintable(component.errorString()));
+        links->setParentItem(window.contentItem());
+        links->setX(10);
+        links->setY(30);
+        links->setWidth(650);
+        QFont font;
+        font.setPixelSize(12 * scale / 100);
+        links->setProperty("font", font);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QCoreApplication::processEvents();
+        QList<QQuickItem *> names;
+        std::function<void(QQuickItem *)> collect = [&](QQuickItem *item) {
+            if (item->objectName() == "authorNameLink")
+                names << item;
+            for (auto *child : item->childItems())
+                collect(child);
+        };
+        collect(links.get());
+        QCOMPARE(names.size(), 3);
+        QVERIFY(names[0]->isEnabled());
+        QVERIFY(names[1]->isEnabled());
+        QVERIFY(!names[2]->isEnabled());
+        auto center = [](QQuickItem *item) {
+            return item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint();
+        };
+        auto underlined = [](QQuickItem *item) { return item->property("font").value<QFont>().underline(); };
+        QTest::mouseMove(&window, center(names[0]));
+        QTRY_VERIFY(underlined(names[0]));
+        QVERIFY(!underlined(names[1]));
+        QTest::mouseMove(&window, center(names[1]));
+        QTRY_VERIFY(underlined(names[1]));
+        QVERIFY(!underlined(names[0]));
+        const auto payload = [](const QVariant &value) {
+            return value.metaType() == QMetaType::fromType<QJSValue>()
+                       ? value.value<QJSValue>().toVariant().toMap()
+                       : value.toMap();
+        };
+        QSignalSpy requested(links.get(), SIGNAL(authorRequested(QVariant)));
+        QVERIFY(requested.isValid());
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(names[1]));
+        QCOMPARE(requested.size(), 1);
+        QCOMPARE(payload(requested[0][0]).value("ids").toMap(), QVariantMap({{"curseforge", "123"}}));
+        QCOMPARE(payload(requested[0][0]).value("name").toString(), QString("Second, Author"));
+        names[0]->forceActiveFocus(Qt::TabFocusReason);
+        QTRY_VERIFY(underlined(names[0]));
+        QTest::keyClick(&window, Qt::Key_Return);
+        QCOMPARE(requested.size(), 2);
+        QCOMPARE(payload(requested[1][0]).value("ids").toMap(), QVariantMap({{"modrinth", "mr-first"}}));
+        links->setWidth(45);
+        QCoreApplication::processEvents();
+        QVERIFY(links->clip());
+        for (auto *name : names)
+            if (name->width() > 0) {
+                const auto origin = name->mapToItem(links.get(), QPointF());
+                QVERIFY(origin.x() + name->width() <= links->width() + 0.5);
+            }
+        QVERIFY(!names[1]->isEnabled());
+        names[0]->setFocus(false);
+        QTest::mouseMove(&window, QPoint(690, 150));
+        QTRY_VERIFY(!underlined(names[0]));
+        links->setWidth(650);
+        QCoreApplication::processEvents();
+        QVERIFY(window.grabWindow().save(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                         "/../artifacts/separate-authors-" + QString::number(scale) +
+                                         ".png"));
+    }
     void brandAndNavigationIconsRemainCenteredAtEveryScale() {
         QQmlEngine engine;
         QQuickWindow window;
@@ -1571,18 +1657,24 @@ Item {
                              std::make_shared<ContentCatalogueFixture>(),
                              std::make_shared<ContentInstallerFixture>(),
                              std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
-        model.setContext({{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "fabric"}},
-                         {QVariantMap{{"title", "Example"},
-                                      {"relativePath", "mods/example.jar"},
-                                      {"fileName", "example.jar"},
-                                      {"category", "mods"},
-                                      {"sha1", "hash"},
-                                      {"enabled", true},
-                                      {"version", "1.0"},
-                                      {"author", "Author"},
-                                      {"projectId", "project"},
-                                      {"sourceIds", QVariantMap{{"modrinth", "project"}}},
-                                      {"projectUrl", "https://modrinth.com/mod/project"}}});
+        model.setContext(
+            {{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "fabric"}},
+            {QVariantMap{
+                {"title", "Example"},
+                {"relativePath", "mods/example.jar"},
+                {"fileName", "example.jar"},
+                {"category", "mods"},
+                {"sha1", "hash"},
+                {"enabled", true},
+                {"version", "1.0"},
+                {"author", "First, Second"},
+                {"authors",
+                 QVariantList{
+                     QVariantMap{{"name", "First"}, {"ids", QVariantMap{{"modrinth", "first-id"}}}},
+                     QVariantMap{{"name", "Second"}, {"ids", QVariantMap{{"curseforge", "second-id"}}}}}},
+                {"projectId", "project"},
+                {"sourceIds", QVariantMap{{"modrinth", "project"}}},
+                {"projectUrl", "https://modrinth.com/mod/project"}}});
         QTRY_VERIFY(!model.busy());
         QQmlEngine engine;
         QQmlComponent component(
@@ -1631,6 +1723,30 @@ Item {
         QTRY_COMPARE(showcase.count(), 2);
         QCOMPARE(showcase.last().at(1).toString(), QString("versions"));
         showcase.clear();
+        QSignalSpy authorsRequested(panel, SIGNAL(authorRequested(QVariant)));
+        auto *authorGroup = findItem(panel, "contentAuthorLink");
+        QVERIFY(authorGroup);
+        QList<QQuickItem *> authorNames;
+        std::function<void(QQuickItem *)> collectAuthors = [&](QQuickItem *item) {
+            if (item->objectName() == "authorNameLink")
+                authorNames << item;
+            for (auto *child : item->childItems())
+                collectAuthors(child);
+        };
+        collectAuthors(authorGroup);
+        QCOMPARE(authorNames.size(), 2);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          authorNames[1]
+                              ->mapToScene(QPointF(authorNames[1]->width() / 2, authorNames[1]->height() / 2))
+                              .toPoint());
+        QTRY_COMPARE(authorsRequested.size(), 1);
+        QCOMPARE(showcase.size(), 0);
+        const auto authorValue = authorsRequested[0][0];
+        const auto requestedAuthor = authorValue.metaType() == QMetaType::fromType<QJSValue>()
+                                         ? authorValue.value<QJSValue>().toVariant().toMap()
+                                         : authorValue.toMap();
+        QCOMPARE(requestedAuthor.value("name").toString(), QString("Second"));
+        QCOMPARE(requestedAuthor.value("ids").toMap(), QVariantMap({{"curseforge", "second-id"}}));
         auto *selection = findItem(window.contentItem(), "contentSelection");
         QVERIFY(selection);
         QTest::mouseClick(

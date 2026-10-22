@@ -18,6 +18,7 @@ struct Project {
     QStringList loaders;
     QMap<QString, qint64> sourceDownloads;
     qint64 followers = 0;
+    QVariantList authors;
     qint64 totalDownloads() const;
     QVariantMap toVariant() const;
 };

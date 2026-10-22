@@ -137,3 +137,6 @@ Keep the running task at the top of the task overview, followed by queued work a
 
 
 Updating or downloading content with an existing filename should overwrite it silently, preserving content locks, safe paths, backups and atomic replacement. Audit and optimize the complete installation/update/loading flow, and add performance and state regression tests. The owner reported a collision at mods/better_modlist-21.1.5.jar, slow updates and multi-second mod loading on 2026-10-22.
+
+
+For content with multiple authors, each author's name must be independently clickable and have its own underline hover effect. Keep each navigation target tied to that author's actual identity.

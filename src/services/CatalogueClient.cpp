@@ -1,5 +1,6 @@
 #include "CatalogueClient.h"
 #include "domain/ContentCompatibility.h"
+#include "platform/ProjectAuthors.h"
 #include "platform/ReviewedAuthorIdentities.h"
 #include <QJsonArray>
 #include <QNetworkReply>
@@ -210,19 +211,22 @@ void CatalogueClient::fetch(const CatalogueQuery &query, int offset, int limit, 
                                     : row.value("icon_url").toString();
                         p.url = cf ? row.value("links").toObject().value("websiteUrl").toString()
                                    : "https://modrinth.com/" + p.type + "/" + p.id;
-                        p.author = cf ? (row.value("authors").toArray().isEmpty() ? QString{}
-                                                                                  : row.value("authors")
-                                                                                        .toArray()
-                                                                                        .first()
-                                                                                        .toObject()
-                                                                                        .value("name")
-                                                                                        .toString())
-                                      : row.value("author").toString();
-                        if (cf && !row.value("authors").toArray().isEmpty())
-                            p.authorIds["curseforge"] = QString::number(
-                                row.value("authors").toArray().first().toObject().value("id").toInteger());
-                        else if (!cf && !p.author.isEmpty())
-                            p.authorIds["modrinth"] = p.author;
+                        if (cf) {
+                            p.authors = ProjectAuthors::curseforge(row.value("authors").toArray());
+                            QStringList names;
+                            for (const auto &author : p.authors)
+                                names << author.toMap().value("name").toString();
+                            p.author = names.join(", ");
+                            if (!p.authors.isEmpty()) {
+                                const auto ids = p.authors.first().toMap().value("ids").toMap();
+                                for (auto it = ids.cbegin(); it != ids.cend(); ++it)
+                                    p.authorIds[it.key()] = it.value().toString();
+                            }
+                        } else {
+                            p.author = row.value("author").toString();
+                            if (!p.author.isEmpty())
+                                p.authorIds["modrinth"] = p.author;
+                        }
                         p.sourceIds[p.provider] = p.id;
                         p.sourceDownloads[p.provider] = p.downloads;
                         if (cf) {

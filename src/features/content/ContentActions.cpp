@@ -124,7 +124,7 @@ void ContentActions::refresh(bool checkUpdates) {
             const QStringList metadata{"sourceIds",        "external",      "provider",        "projectId",
                                        "installedRelease", "updateRelease", "updateAvailable", "projectUrl",
                                        "author",           "authorIcon",    "environment",     "openSource",
-                                       "authorIds"};
+                                       "authorIds",        "authors"};
             // Prefer an unchanged path/hash pair; a shared binary alone can be ambiguous.
             QHash<QPair<QString, QString>, QVariantMap> previousByHash, previousByPath;
             QSet<QPair<QString, QString>> ambiguousHashes;

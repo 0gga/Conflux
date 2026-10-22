@@ -67,10 +67,23 @@ QVariantList reconcileContentRows(const QVariantList &actual, const QVariantList
         paths.insert({category, normalized(row.value("relativePath").toString())}, row);
     }
     QVariantList result;
-    const QStringList metadata{"sourceIds",        "external",      "provider",        "projectId",
-                               "installedRelease", "updateRelease", "updateAvailable", "projectUrl",
-                               "author",           "authorIcon",    "authorIds",       "environment",
-                               "openSource",       "title",         "version",         "icon"};
+    const QStringList metadata{"sourceIds",
+                               "external",
+                               "provider",
+                               "projectId",
+                               "installedRelease",
+                               "updateRelease",
+                               "updateAvailable",
+                               "projectUrl",
+                               "author",
+                               "authorIcon",
+                               "authorIds",
+                               "authors",
+                               "environment",
+                               "openSource",
+                               "title",
+                               "version",
+                               "icon"};
     QSet<QString> keys;
     for (const auto &value : actual) {
         auto row = value.toMap();

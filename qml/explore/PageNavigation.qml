@@ -7,11 +7,12 @@ import "../components"
 RowLayout {
     id: root
     required property var catalogue
+    property bool compact: false
     readonly property int currentPage: catalogue.page
     readonly property int pageCount: Math.max(1, catalogue.pageCount)
     readonly property var entries: {
         const pages = [1]
-        for (let page = Math.max(2,currentPage-1); page <= Math.min(pageCount-1,currentPage+1); ++page) pages.push(page)
+        for (let page = Math.max(2,currentPage-(compact ? 0 : 1)); page <= Math.min(pageCount-1,currentPage+(compact ? 0 : 1)); ++page) pages.push(page)
         if (pageCount > 1) pages.push(pageCount)
         pages.sort(function(a,b) { return a-b })
         const result = []

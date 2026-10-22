@@ -41,7 +41,8 @@ DesktopSmokeTest::DesktopSmokeTest(const QStringList &arguments, QObject *parent
     qInstallMessageHandler([](QtMsgType, const QMessageLogContext &, const QString &message) {
         if (message.contains("Binding loop") || message.contains("ReferenceError") ||
             message.contains("TypeError") || message.contains("Cannot assign") ||
-            message.contains("Error decoding") || message.contains("recursive rearrange"))
+            message.contains("Unable to assign") || message.contains("Error decoding") ||
+            message.contains("recursive rearrange"))
             smokeRuntimeError = true;
         QFile output(smokeLogPath);
         if (output.open(QIODevice::Append))
@@ -742,22 +743,36 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
             case 45: {
                 if (session.catalogue()->busy())
                     return;
-                auto *selector = window->findChild<QQuickItem *>("browseInstanceSelector");
-                auto *filters = window->findChild<QQuickItem *>("browseFilterPanel");
-                auto *versions = window->findChild<QQuickItem *>("browseVersionList");
+                auto *selector = findVisualItem(window->contentItem(), "browseInstanceSelector");
+                auto *filters = findVisualItem(window->contentItem(), "browseFilterPanel");
+                auto *versions = findVisualItem(window->contentItem(), "browseVersionList");
+                auto *tabs = findVisualItem(window->contentItem(), "browseContentTypes");
+                auto *toggle = findVisualItem(window->contentItem(), "browseFiltersButton");
+                if (!versions && toggle) {
+                    if (!QMetaObject::invokeMethod(toggle, "clicked"))
+                        fail("Compact catalogue filters did not open");
+                    return;
+                }
                 auto *title = window->findChild<QQuickItem *>("pageTitle");
-                if (!selector || !filters || !versions || !title ||
-                    qAbs(selector->width() - filters->width()) > 1 ||
-                    qAbs(selector->mapToScene(QPointF{}).x() - filters->mapToScene(QPointF{}).x()) > 1 ||
-                    !versions->isVisible() || versions->property("count").toInt() < 20 ||
+                const bool headerAligned =
+                    selector && tabs &&
+                    qAbs(selector->mapToScene(QPointF{}).y() - tabs->mapToScene(QPointF{}).y()) < 4;
+                const bool sidebarAligned =
+                    !filters ||
+                    (selector && qAbs(selector->width() - filters->width()) < 2 &&
+                     qAbs(selector->mapToScene(QPointF{}).x() - filters->mapToScene(QPointF{}).x()) < 2);
+                if (!headerAligned || !sidebarAligned || !versions || !title ||
+                    versions->property("count").toInt() < 20 ||
                     !title->property("text").toString().endsWith(" - Exploring Content")) {
-                    fail("Explore top-bar alignment or unlocked scrollable version list failed");
+                    fail("Responsive catalogue header or unlocked scrollable version list failed");
                     return;
                 }
                 if (!capture("browse-unlocked-versions")) {
                     fail("Unlocked versions render failed");
                     return;
                 }
+                if (auto *popup = window->findChild<QObject *>("browseFiltersPopup"))
+                    QMetaObject::invokeMethod(popup, "close");
                 auto *back = window->findChild<QObject *>("navigationBackButton");
                 auto *tip = back ? back->findChild<QObject *>("roundedToolTip") : nullptr;
                 auto *background = tip ? tip->property("background").value<QQuickItem *>() : nullptr;

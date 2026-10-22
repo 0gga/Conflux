@@ -17,6 +17,6 @@ Flow {
     Repeater { model: root.catalogue.filters.versions || []; delegate: FilterChip { required property string modelData; objectName: "activeGameFilter"; text: modelData; locked: root.instanceLocked; onRemoved: root.remove("versions",modelData) } }
     Repeater { model: root.catalogue.filters.type === "mod" ? (root.catalogue.filters.loaders || []) : []; delegate: FilterChip { required property string modelData; text: Branding.label(modelData); onRemoved: root.remove("loaders",modelData) } }
     Repeater { model: root.catalogue.filters.tags || []; delegate: FilterChip { required property string modelData; text: root.tagTitle(modelData); onRemoved: root.remove("tags",modelData) } }
-    FilterChip { visible: !!root.catalogue.filters.hideInstalled; text: "Hide installed"; onRemoved: root.catalogue.configure({hideInstalled:false}) }
+    FilterChip { objectName: "activeHideInstalledFilter"; visible: root.catalogue.hideInstalledActive; text: "Hide installed"; onRemoved: root.catalogue.configure({hideInstalled:false}) }
     FilterChip { visible: !!root.catalogue.filters.hidden; text: "Hidden content"; onRemoved: root.catalogue.configure({hidden:false}) }
 }

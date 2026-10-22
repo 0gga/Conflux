@@ -29,12 +29,15 @@ bool ContentVisibility::hidden(const QVariantMap &item, const QString &instance)
     return false;
 }
 void ContentVisibility::setHidden(const QVariantMap &item, bool hidden, const QString &instance) {
+    const auto previous = m_hidden;
     for (const auto &key : identities(item, instance)) {
         if (hidden && !m_hidden.contains(key))
             m_hidden << key;
         if (!hidden)
             m_hidden.removeAll(key);
     }
+    if (previous == m_hidden)
+        return;
     m_store->save("browse/hiddenContent", m_hidden);
     emit changed();
 }

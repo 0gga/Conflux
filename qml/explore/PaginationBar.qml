@@ -8,37 +8,39 @@ GridLayout {
     id: root
     required property var catalogue
     property bool contextBusy: false
-    columns: width < 740 ? 1 : 2
+    columns: width < choices.implicitWidth + navigation.implicitWidth + columnSpacing ? 1 : 2
     columnSpacing: 12
     rowSpacing: 8
     RowLayout {
+        id: choices
         Layout.fillWidth: true
         spacing: 8
         SelectBox {
-            Layout.preferredWidth: 190
+            objectName: "browseSortSelector"
+            Layout.preferredWidth: 190; Layout.minimumWidth: 90; Layout.fillWidth: true
             model: ["Relevance", "Downloads", "Followers", "Date published", "Date updated"]
             currentIndex: ["relevance","downloads","follows","newest","updated"].indexOf(root.catalogue.filters.sort)
             onActivated: root.catalogue.configure({sort:["relevance","downloads","follows","newest","updated"][currentIndex]})
         }
         SelectBox {
-            Layout.preferredWidth: 140; model: ["View: 10","View: 20","View: 50","View: 100"]
+            objectName: "browseSizeSelector"
+            Layout.preferredWidth: 140; Layout.minimumWidth: 90; model: ["10 per page","20 per page","50 per page","100 per page"]
             currentIndex: [10,20,50,100].indexOf(root.catalogue.filters.size)
             onActivated: root.catalogue.configure({size:[10,20,50,100][currentIndex]})
         }
-        Item { Layout.fillWidth: true }
     }
     RowLayout {
+        id: navigation
         Layout.fillWidth: true
         spacing: 8
-        Item { Layout.fillWidth: true }
         BusyIndicator { visible: root.catalogue.busy || root.contextBusy; running: visible; Layout.preferredWidth: 20; Layout.preferredHeight: 20 }
         SelectBox {
             objectName: "browseSourceSelector"
-            Layout.preferredWidth: 160; model: ["All sources","Modrinth","CurseForge"]
+            Layout.preferredWidth: 140; Layout.minimumWidth: 90; Layout.fillWidth: true; model: ["All sources","Modrinth","CurseForge"]
             currentIndex: ["merged","modrinth","curseforge"].indexOf(root.catalogue.filters.source)
             onActivated: root.catalogue.configure({source:["merged","modrinth","curseforge"][currentIndex],tags:[]})
         }
-        PageNavigation { catalogue: root.catalogue }
-        ActionButton { iconName: "refresh"; hint: "Refresh catalogue"; compact: true; subtle: true; enabled: !root.catalogue.busy; onClicked: root.catalogue.refresh() }
+        PageNavigation { catalogue: root.catalogue; compact: root.width < 720 }
+        ActionButton { objectName: "browseRefreshButton"; iconName: "refresh"; hint: "Refresh catalogue"; compact: true; subtle: true; enabled: !root.catalogue.busy; onClicked: root.catalogue.refresh() }
     }
 }

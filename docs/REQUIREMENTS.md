@@ -140,3 +140,10 @@ Updating or downloading content with an existing filename should overwrite it si
 
 
 For content with multiple authors, each author's name must be independently clickable and have its own underline hover effect. Keep each navigation target tied to that author's actual identity.
+
+
+## Catalogue usability and verification
+
+The owner requests a polished, responsive Discover catalogue at 1920x1080, rounded viewport corners without square card edges, predictable Hide installed / Show hidden interactions, more integration tests and 100% coverage. Keep the content list usable at smaller sizes and supported interface/filter scales; controls must stay inside their containers. Use compact filter access when a sidebar would crowd the results. Hidden-only mode must let users find and restore hidden installed content; the saved Hide installed preference resumes when leaving that mode. Preserve per-instance/type compatibility, exact provider identities and page/scroll restoration without stale asynchronous replies replacing current intent. Measure coverage and retain uncovered paths honestly; a passing suite does not establish 100% coverage.
+
+Recent content dates: the owner requires coarse elapsed hours through and including 24 hours everywhere content dates appear. Release rows retain the readable calendar date and append the hour age; card ages use the same boundary and their date hints preserve the date. Do not discard provider publication times or invent hourly precision for date-only values.

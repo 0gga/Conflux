@@ -17,6 +17,8 @@ class BrowseCatalogue final : public QObject {
     Q_PROPERTY(int pageCount READ pageCount NOTIFY changed)
     Q_PROPERTY(bool hasNext READ hasNext NOTIFY changed)
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
+    Q_PROPERTY(int viewRevision READ viewRevision NOTIFY changed)
+    Q_PROPERTY(bool hideInstalledActive READ hideInstalledActive NOTIFY changed)
     Q_PROPERTY(QString notice READ notice NOTIFY changed)
     Q_PROPERTY(qreal scrollPosition READ scrollPosition WRITE setScrollPosition NOTIFY scrollChanged)
   public:
@@ -38,6 +40,12 @@ class BrowseCatalogue final : public QObject {
     }
     bool busy() const {
         return m_busy;
+    }
+    int viewRevision() const {
+        return m_generation;
+    }
+    bool hideInstalledActive() const {
+        return m_filters.value("hideInstalled").toBool() && !m_filters.value("hidden").toBool();
     }
     bool hasNext() const;
     int pageCount() const;
@@ -81,6 +89,8 @@ class BrowseCatalogue final : public QObject {
         int page = 0;
         qreal scroll = 0;
         bool defaultLoaders = true;
+        QStringList hidden;
+        bool complete = false;
     };
     std::shared_ptr<ICatalogueSearch> m_source;
     std::shared_ptr<IContentVisibility> m_visibility;
@@ -93,11 +103,15 @@ class BrowseCatalogue final : public QObject {
     QMap<QString, Stream> m_streams;
     QVector<QVariantList> m_pages;
     QMap<QString, Snapshot> m_contexts;
-    QString m_context, m_notice;
+    QMap<QString, QSet<QString>> m_inventories;
+    QString m_context, m_baseContext, m_notice;
+    QByteArray m_key;
+    int m_optionsGeneration = 0;
     QStringList m_defaultVersions, m_defaultLoaders;
     int m_page = 0, m_targetPage = 0, m_generation = 0, m_reads = 0;
     bool m_busy = false, m_cf = false, m_optionsLoaded = false;
     bool m_defaultLoaderSelection = true;
+    bool m_awaitingReply = false;
     qreal m_scroll = 0;
     QVariantList m_building;
     CatalogueQuery request(const QString &) const;
@@ -111,7 +125,9 @@ class BrowseCatalogue final : public QObject {
     bool before(const Project &, const Project &) const;
     QString viewKey() const;
     void saveSnapshot();
-    void activateView(bool sameInstance = false);
+    void activateView(const QVariantMap &changes = {});
+    bool applyChanges(const QVariantMap &);
+    void schedulePump();
     void saveCompatibility();
     bool applyDefaults();
 };

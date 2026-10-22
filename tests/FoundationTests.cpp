@@ -55,6 +55,17 @@ class FoundationTests : public QObject {
         return file.open(QIODevice::WriteOnly) && file.write(data) == data.size();
     }
   private slots:
+    void releaseVariantsPreservePublicationTimeAndTimezone() {
+        auto value = release("modrinth", "exact-time");
+        for (const auto &timestamp :
+             {"2026-10-22T11:16:33.063140+00:00", "2026-10-22T13:16:33+02:00", "2026-10-22", ""}) {
+            value.published = timestamp;
+            const auto row = value.toVariant();
+            QCOMPARE(row.value("published").toString(), QString(timestamp));
+            QCOMPARE(releaseFromVariant(row).published, QString(timestamp));
+        }
+    }
+
     void authorRostersKeepExactSeparateIdentitiesAndStableOwnershipOrder() {
         const auto member = [](const QString &id, const QString &name, const QString &role,
                                bool accepted = true) {
@@ -339,6 +350,79 @@ class FoundationTests : public QObject {
         QCOMPARE(row.value("loaderVersion").toString(), QString("21.1.248"));
         QVERIFY(before.open(QIODevice::ReadOnly));
         QCOMPARE(before.readAll(), bytes);
+    }
+    void liveCurseforgeCatalogueAndReleases() {
+        if (!qEnvironmentVariableIsSet("MODPACK_STUDIO_LIVE_TEST") ||
+            qEnvironmentVariableIsEmpty("CURSEFORGE_API_KEY"))
+            QSKIP("Live CurseForge verification requires explicit opt-in and a session API key.");
+        CatalogueClient client;
+        client.setCurseforgeKey(qgetenv("CURSEFORGE_API_KEY"));
+        bool fetched = false;
+        CataloguePage page;
+        CatalogueQuery query;
+        query.provider = "curseforge";
+        query.type = "mod";
+        query.versions = {"1.21.1"};
+        query.loaders = {"neoforge"};
+        query.sort = "downloads";
+        client.fetch(query, 0, 3, [&](CataloguePage result) {
+            page = result;
+            fetched = true;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(fetched, 25000);
+        QVERIFY2(page.error.isEmpty(), qPrintable(page.error));
+        QVERIFY(!page.projects.isEmpty());
+        QVERIFY(page.projects.size() <= 3);
+        const auto project = page.projects.first();
+        QCOMPARE(project.provider, QString("curseforge"));
+        QCOMPARE(project.sourceIds.value("curseforge"), project.id);
+        QCOMPARE(project.sourceDownloads.value("curseforge"), project.downloads);
+        QVERIFY(!project.title.isEmpty());
+        QVERIFY(!project.authors.isEmpty());
+
+        bool loaded = false;
+        ProjectDetail detail;
+        connect(&client, &CatalogueClient::detailFinished, this,
+                [&](int generation, const ProjectDetail &result) {
+                    QCOMPARE(generation, 1);
+                    detail = result;
+                    loaded = true;
+                });
+        client.loadProject(project, "1.21.1", "neoforge", 1);
+        QTRY_VERIFY_WITH_TIMEOUT(loaded, 25000);
+        QVERIFY2(detail.errors.isEmpty(), qPrintable(detail.errors.join(';')));
+        QVERIFY(!detail.description.isEmpty());
+        QVERIFY(!detail.releases.isEmpty());
+        for (const auto &release : detail.releases) {
+            QCOMPARE(release.provider, QString("curseforge"));
+            QCOMPARE(release.projectId, project.id);
+            QVERIFY(release.gameVersions.contains("1.21.1"));
+            QVERIFY(release.loaders.contains("neoforge"));
+            QCOMPARE(release.sha1.size(), 40);
+            QVERIFY(!release.filename.isEmpty());
+            QVERIFY(!release.published.isEmpty());
+        }
+        bool changelogLoaded = false;
+        QString changelogError;
+        client.loadChangelog(detail.releases.first(), [&](QString, QString error) {
+            changelogError = error;
+            changelogLoaded = true;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(changelogLoaded, 25000);
+        QVERIFY2(changelogError.isEmpty(), qPrintable(changelogError));
+
+        bool facetsLoaded = false;
+        QVariantMap facets;
+        QString facetsError;
+        client.facets([&](QVariantMap result, QString error) {
+            facets = result;
+            facetsError = error;
+            facetsLoaded = true;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(facetsLoaded, 25000);
+        QVERIFY2(facetsError.isEmpty(), qPrintable(facetsError));
+        QVERIFY(!facets.value("curseforgeTags").toList().isEmpty());
+        QVERIFY(facets.value("versions").toStringList().contains("1.21.1"));
     }
     void liveModrinthSearchAndReleases() {
         if (!qEnvironmentVariableIsSet("MODPACK_STUDIO_LIVE_TEST"))

@@ -6,11 +6,14 @@
 #include "features/preferences/ContentPreferences.h"
 #include "platform/BrowseSettingsStore.h"
 #include "services/CatalogueClient.h"
+#include <QElapsedTimer>
 #include <QJsonDocument>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QUrlQuery>
 #include <QtTest>
 #include <algorithm>
+#include <limits>
 using namespace studio;
 class MemoryBrowseSettings final : public IBrowseSettingsStore {
   public:
@@ -32,6 +35,8 @@ class SearchFixture final : public ICatalogueSearch {
     QMap<QString, QVector<Project>> rows;
     QList<Call> calls;
     bool delayed = false;
+    bool delayedFacets = false;
+    QList<std::function<void(QVariantMap, QString)>> facetCalls;
     void fetch(const CatalogueQuery &query, int offset, int limit, Callback callback) override {
         calls << Call{query, offset, limit, callback};
         if (!delayed)
@@ -53,7 +58,9 @@ class SearchFixture final : public ICatalogueSearch {
         call.callback({projects.mid(call.offset, call.limit), projects.size(), {}});
     }
     void facets(std::function<void(QVariantMap, QString)> callback) override {
-        callback({{"versions", QStringList{"1.21.1", "1.20.1"}}}, {});
+        facetCalls << callback;
+        if (!delayedFacets)
+            callback({{"versions", QStringList{"1.21.1", "1.20.1"}}}, {});
     }
     void setKey(const QByteArray &) override {}
 };
@@ -75,6 +82,463 @@ class BrowseCatalogueTests final : public QObject {
         return fixture;
     }
   private slots:
+    void credentialChangesInvalidatePagesAndIgnoreOutdatedFacets() {
+        auto fixture = source(3);
+        fixture->delayedFacets = true;
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
+        BrowseCatalogue model(fixture, visibility);
+        model.setContext("pack", {}, {});
+        QTRY_VERIFY(!model.busy());
+        model.loadOptions();
+        QCOMPARE(fixture->facetCalls.size(), 1);
+        model.setKey("fixture-one");
+        QTRY_VERIFY(!model.busy());
+        model.setKey("fixture-two");
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(fixture->facetCalls.size(), 3);
+        fixture->facetCalls[2]({{"versions", QStringList{"current"}}}, {});
+        fixture->facetCalls[0]({{"versions", QStringList{"stale"}}}, "obsolete error");
+        fixture->facetCalls[1]({{"versions", QStringList{"stale"}}}, {});
+        QCOMPARE(model.options().value("versions").toStringList(), QStringList{"current"});
+        QVERIFY(model.notice().isEmpty());
+        const auto calls = fixture->calls.size();
+        model.setKey("fixture-two");
+        QCOMPARE(fixture->calls.size(), calls);
+        model.setKey({});
+        QTRY_VERIFY(!model.busy());
+        QVERIFY(model.options().isEmpty());
+        QCOMPARE(fixture->facetCalls.size(), 4);
+        for (int index = calls; index < fixture->calls.size(); ++index)
+            QCOMPARE(fixture->calls[index].query.provider, QString("modrinth"));
+    }
+    void facetFailuresRemainVisibleAndRefreshCanRetry() {
+        auto fixture = source(3);
+        fixture->delayedFacets = true;
+        BrowseCatalogue model(fixture,
+                              std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()));
+        model.setContext("pack", {}, {});
+        QTRY_VERIFY(!model.busy());
+        model.loadOptions();
+        model.loadOptions();
+        QCOMPARE(fixture->facetCalls.size(), 1);
+        fixture->facetCalls[0]({}, "Facet service unavailable");
+        QCOMPARE(model.notice(), QString("Facet service unavailable"));
+        model.refresh();
+        QCOMPARE(fixture->facetCalls.size(), 2);
+        fixture->facetCalls[1]({{"versions", QStringList{"1.21.1"}}}, {});
+        QTRY_VERIFY(!model.busy());
+        QVERIFY(model.notice().isEmpty());
+        QCOMPARE(model.options().value("versions").toStringList(), QStringList{"1.21.1"});
+    }
+    void callbacksAfterCatalogueDestructionAreHarmless() {
+        auto fixture = source(3);
+        fixture->delayed = true;
+        fixture->delayedFacets = true;
+        auto model = std::make_unique<BrowseCatalogue>(
+            fixture, std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()));
+        model->setContext("pack", {}, {});
+        model->loadOptions();
+        model.reset();
+        fixture->deliver(0);
+        fixture->facetCalls[0]({}, "late error");
+        QCoreApplication::processEvents();
+        QCOMPARE(fixture->calls.size(), 1);
+    }
+    void filteringThousandsOfInstalledItemsHasABoundedReadBudgetAndYieldsToEvents() {
+        auto fixture = source(1500);
+        BrowseCatalogue model(fixture,
+                              std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()));
+        model.setContext("large-pack", {}, {});
+        QTRY_VERIFY(!model.busy());
+        QVariantList installed;
+        for (int i = 0; i < 1200; ++i)
+            installed << QVariantMap{{"sourceIds", QVariantMap{{"modrinth", QString::number(i)}}},
+                                     {"category", "mods"}};
+        model.setInstalled(installed);
+        int heartbeats = 0;
+        QTimer::singleShot(0, &model, [&] { ++heartbeats; });
+        const auto before = fixture->calls.size();
+        QElapsedTimer elapsed;
+        elapsed.start();
+        model.configure({{"hideInstalled", true}});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(fixture->calls.size() - before, 24);
+        QVERIFY(model.hasNext());
+        QVERIFY(heartbeats > 0);
+        QVERIFY(model.projects().isEmpty());
+        QVERIFY(!model.notice().isEmpty());
+        model.next();
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 20);
+        QCOMPARE(model.projects().first().toMap().value("id").toString(), QString("1200"));
+        QVERIFY2(elapsed.elapsed() < 5000, "Installed filtering exceeded its UI responsiveness budget");
+    }
+    void providerFailuresAreVisibleAndAnExplicitRefreshRecovers() {
+        auto fixture = source(3);
+        fixture->delayed = true;
+        BrowseCatalogue model(fixture,
+                              std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()));
+        model.setContext("pack", {}, {});
+        fixture->calls[0].callback({{}, 0, "Provider unavailable"});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.notice(), QString("Provider unavailable"));
+        QVERIFY(model.projects().isEmpty());
+        QVERIFY(!model.hasNext());
+        model.refresh();
+        fixture->deliver(1);
+        QTRY_VERIFY(!model.busy());
+        QVERIFY(model.notice().isEmpty());
+        QCOMPARE(model.projects().size(), 3);
+    }
+    void mergedSortOrdersRespectProviderDatesAndFollowers_data() {
+        QTest::addColumn<QString>("sort");
+        for (const auto &sort : {"follows", "updated", "newest"})
+            QTest::newRow(sort) << QString(sort);
+    }
+    void mergedSortOrdersRespectProviderDatesAndFollowers() {
+        QFETCH(QString, sort);
+        auto fixture = source(1);
+        auto cf = project(2, "curseforge");
+        cf.followers = 500;
+        cf.updated = "2026-10-22T12:00:00Z";
+        cf.created = "2026-10-22T12:00:00Z";
+        fixture->rows["curseforge"] = {cf};
+        fixture->rows["modrinth"][0].followers = 1;
+        fixture->rows["modrinth"][0].updated = "2020-10-22T12:00:00Z";
+        fixture->rows["modrinth"][0].created = "2020-10-22T12:00:00Z";
+        BrowseCatalogue model(fixture,
+                              std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()));
+        model.setKey("fixture");
+        model.setContext("pack", {}, {});
+        model.configure({{"sort", sort}});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().first().toMap().value("provider").toString(), QString("curseforge"));
+        QCOMPARE(model.notice().isEmpty(), sort != "follows");
+    }
+    void curseforgeOnlyViewHydratesModrinthPriority_data() {
+        QTest::addColumn<QString>("reply");
+        for (const auto &reply : {"success", "empty", "error", "stale", "destroyed"})
+            QTest::newRow(reply) << QString(reply);
+    }
+    void curseforgeOnlyViewHydratesModrinthPriority() {
+        QFETCH(QString, reply);
+        auto fixture = source(1);
+        fixture->rows["curseforge"] = {project(10, "curseforge")};
+        const QHash<QString, QString> ids{{"modrinth:0", "pair"}, {"curseforge:10", "pair"}};
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
+        auto model = std::make_unique<BrowseCatalogue>(fixture, visibility, ids);
+        model->setKey("fixture");
+        model->setContext("pack", {}, {});
+        QTRY_VERIFY(!model->busy());
+        fixture->delayed = true;
+        model->configure({{"source", "curseforge"}});
+        const int base = fixture->calls.size() - 1;
+        fixture->deliver(base);
+        QTRY_COMPARE(fixture->calls.size(), base + 2);
+        const auto hydration = fixture->calls.last();
+        QCOMPARE(hydration.query.projectIds, QStringList{"0"});
+        if (reply == "destroyed") {
+            model.reset();
+            fixture->deliver(base + 1);
+            QCoreApplication::processEvents();
+            return;
+        }
+        if (reply == "stale") {
+            model->configure({{"query", "new query"}});
+            fixture->deliver(base + 1);
+            QVERIFY(model->busy());
+            fixture->deliver(base + 2);
+            QTRY_COMPARE(fixture->calls.size(), base + 4);
+            fixture->deliver(base + 3);
+            QTRY_VERIFY(!model->busy());
+            return;
+        }
+        if (reply == "success")
+            fixture->deliver(base + 1);
+        else
+            hydration.callback({{}, 0, reply == "error" ? "metadata offline" : QString{}});
+        QTRY_VERIFY(!model->busy());
+        QCOMPARE(model->projects().size(), 1);
+        QCOMPARE(model->projects().first().toMap().value("provider").toString(),
+                 reply == "success" ? "modrinth" : "curseforge");
+        QCOMPARE(model->notice().isEmpty(), reply != "error");
+        if (reply == "error")
+            QVERIFY(model->notice().contains("metadata offline"));
+    }
+    void downloadHydrationErrorsAndObsoleteRepliesDoNotBreakNewQueries_data() {
+        QTest::addColumn<bool>("stale");
+        QTest::newRow("error") << false;
+        QTest::newRow("stale") << true;
+    }
+    void downloadHydrationErrorsAndObsoleteRepliesDoNotBreakNewQueries() {
+        QFETCH(bool, stale);
+        auto fixture = source(1);
+        fixture->rows["curseforge"] = {project(10, "curseforge")};
+        const QHash<QString, QString> ids{{"modrinth:0", "pair"}, {"curseforge:10", "pair"}};
+        BrowseCatalogue model(
+            fixture, std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()), ids);
+        model.setKey("fixture");
+        model.setContext("pack", {}, {});
+        QTRY_VERIFY(!model.busy());
+        fixture->delayed = true;
+        model.configure({{"sort", "downloads"}, {"source", "modrinth"}});
+        const int base = fixture->calls.size() - 1;
+        fixture->deliver(base);
+        QTRY_COMPARE(fixture->calls.size(), base + 2);
+        const auto hydration = fixture->calls.last();
+        QCOMPARE(hydration.query.provider, QString("curseforge"));
+        if (stale) {
+            model.configure({{"sort", "relevance"}});
+            hydration.callback({{}, 0, "obsolete"});
+            QVERIFY(model.notice().isEmpty());
+            fixture->deliver(base + 2);
+        } else
+            hydration.callback({{}, 0, "counterpart unavailable"});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 1);
+        QCOMPARE(model.notice().isEmpty(), stale);
+    }
+    void exhaustedFilteredLastPageReturnsToTheLastNonemptyPage() {
+        auto fixture = source(60);
+        BrowseCatalogue model(fixture,
+                              std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()));
+        model.setContext("pack", {}, {});
+        QTRY_VERIFY(!model.busy());
+        QVariantList installed;
+        for (int i = 20; i < 60; ++i)
+            installed << QVariantMap{{"sourceIds", QVariantMap{{"modrinth", QString::number(i)}}},
+                                     {"category", "mods"}};
+        model.setInstalled(installed);
+        model.configure({{"hideInstalled", true}});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 20);
+        QVERIFY(model.hasNext());
+        model.next();
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.page(), 1);
+        QCOMPARE(model.projects().size(), 20);
+        QVERIFY(!model.hasNext());
+        QCOMPARE(model.pageCount(), 1);
+        const auto calls = fixture->calls.size();
+        model.next();
+        model.previous();
+        model.goToPage(1);
+        model.setInstalled(installed);
+        QCOMPARE(fixture->calls.size(), calls);
+    }
+    void nativeJumpHandlesProviderBecomingCompletelyEmpty() {
+        auto fixture = source(60);
+        BrowseCatalogue model(fixture,
+                              std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()));
+        model.setContext("pack", {}, {});
+        QTRY_VERIFY(!model.busy());
+        fixture->rows.clear();
+        model.goToPage(3);
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.page(), 1);
+        QCOMPARE(model.pageCount(), 1);
+        QVERIFY(model.projects().isEmpty());
+        QVERIFY(!model.hasNext());
+    }
+    void bufferedFinalProviderRowsKeepNextAvailableWithoutFetchingAgain() {
+        auto fixture = source(75);
+        BrowseCatalogue model(fixture,
+                              std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()));
+        model.setContext("pack", {}, {});
+        model.goToPage(4);
+        QCOMPARE(model.page(), 1); // busy navigation is a no-op
+        QTRY_VERIFY(!model.busy());
+        model.next();
+        QTRY_VERIFY(!model.busy());
+        model.next();
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.page(), 3);
+        QVERIFY(model.hasNext());
+        const int before = fixture->calls.size();
+        model.next();
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 15);
+        QCOMPARE(fixture->calls.size(), before);
+        QVERIFY(!model.hasNext());
+    }
+    void hiddenInstalledCombinations_data() {
+        QTest::addColumn<bool>("hidden");
+        QTest::addColumn<bool>("hideInstalled");
+        for (bool hidden : {false, true})
+            for (bool hide : {false, true})
+                QTest::newRow(qPrintable(QString("hidden%1-installed%2").arg(hidden).arg(hide)))
+                    << hidden << hide;
+    }
+    void hiddenInstalledCombinations() {
+        QFETCH(bool, hidden);
+        QFETCH(bool, hideInstalled);
+        auto fixture = source(4);
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
+        visibility->setHidden(project(0).toVariant(), true);
+        visibility->setHidden(project(1).toVariant(), true);
+        BrowseCatalogue model(fixture, visibility);
+        model.setContext("pack", {}, {});
+        model.setInstalled(
+            {QVariantMap{{"sourceIds", QVariantMap{{"modrinth", "0"}}}, {"category", "mods"}},
+             QVariantMap{{"sourceIds", QVariantMap{{"modrinth", "2"}}}, {"category", "mods"}}});
+        model.configure({{"hidden", hidden}, {"hideInstalled", hideInstalled}});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.hideInstalledActive(), hideInstalled && !hidden);
+        QCOMPARE(model.projects().size(), hidden || !hideInstalled ? 2 : 1);
+        QCOMPARE(model.projects().first().toMap().value("id").toString(), hidden          ? "0"
+                                                                          : hideInstalled ? "3"
+                                                                                          : "2");
+    }
+    void cachedTypesUseCurrentInventoryInsteadOfRestoringAnOldInventory() {
+        auto fixture = source(3);
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
+        BrowseCatalogue model(fixture, visibility);
+        model.setContext("pack", {}, {});
+        model.configure({{"hideInstalled", true}});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 3);
+        model.configure({{"type", "resourcepack"}});
+        QTRY_VERIFY(!model.busy());
+        model.setInstalled(
+            {QVariantMap{{"sourceIds", QVariantMap{{"modrinth", "0"}}}, {"category", "mods"}}});
+        model.configure({{"type", "mod"}});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 2);
+        QCOMPARE(model.projects().first().toMap().value("id").toString(), QString("1"));
+        model.setContext("other", {}, {});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 3);
+        model.setContext("pack", {}, {});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 2);
+    }
+    void hiddenChangesInvalidateOtherCachedTypesAndContexts() {
+        auto fixture = source(3);
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
+        BrowseCatalogue model(fixture, visibility);
+        connect(visibility.get(), &ContentVisibility::changed, &model, &BrowseCatalogue::refresh);
+        model.setContext("pack", {}, {});
+        QTRY_VERIFY(!model.busy());
+        model.setContext("other", {}, {});
+        QTRY_VERIFY(!model.busy());
+        model.hide(project(0).toVariant());
+        QTRY_VERIFY(!model.busy());
+        model.setContext("pack", {}, {});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 2);
+        model.configure({{"type", "resourcepack"}});
+        QTRY_VERIFY(!model.busy());
+        model.hide(project(1).toVariant());
+        QTRY_VERIFY(!model.busy());
+        model.configure({{"type", "mod"}});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 1);
+    }
+    void typeAndFiltersStartOnlyOneFinalRequest() {
+        auto fixture = source(5);
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
+        BrowseCatalogue model(fixture, visibility);
+        model.setContext("pack", {}, {});
+        QTRY_VERIFY(!model.busy());
+        fixture->delayed = true;
+        const int before = fixture->calls.size();
+        model.configure({{"type", "resourcepack"}, {"query", "final"}, {"source", "modrinth"}, {"size", 10}});
+        QCOMPARE(fixture->calls.size(), before + 1);
+        QCOMPARE(fixture->calls.last().query.text, QString("final"));
+        QCOMPARE(fixture->calls.last().query.type, QString("resourcepack"));
+        fixture->deliver(before);
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(fixture->calls.size(), before + 1);
+    }
+    void queuedPumpCannotDuplicateNewGenerationRequest() {
+        auto fixture = source(5);
+        fixture->delayed = true;
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
+        BrowseCatalogue model(fixture, visibility);
+        model.setContext("pack", {}, {});
+        fixture->deliver(0);                 // queues old pump
+        model.configure({{"hidden", true}}); // no hidden identities, no fetch
+        model.configure({{"hidden", false}, {"query", "new"}});
+        QCOMPARE(fixture->calls.size(), 2);
+        QCoreApplication::processEvents();
+        QCOMPARE(fixture->calls.size(), 2); // old timer must not launch another offset zero
+        fixture->deliver(1);
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 5);
+    }
+    void returningToInFlightViewRestartsSafelyAndIgnoresOldReplies() {
+        auto fixture = source(3);
+        fixture->delayed = true;
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
+        BrowseCatalogue model(fixture, visibility);
+        model.setContext("first", {}, {});
+        model.setContext("second", {}, {});
+        model.setContext("first", {}, {});
+        QCOMPARE(fixture->calls.size(), 3);
+        fixture->deliver(0);
+        fixture->deliver(1);
+        QVERIFY(model.busy());
+        fixture->deliver(2);
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 3);
+        QCOMPARE(fixture->calls.size(), 3);
+    }
+    void invalidConfigurationIsAnIdempotentNoOp_data() {
+        QTest::addColumn<QVariantMap>("changes");
+        QTest::newRow("invalid-size") << QVariantMap{{"size", 17}};
+        QTest::newRow("fractional-size") << QVariantMap{{"size", 20.5}};
+        QTest::newRow("sort") << QVariantMap{{"sort", "bogus"}};
+        QTest::newRow("source") << QVariantMap{{"source", "bogus"}};
+        QTest::newRow("type") << QVariantMap{{"type", "bogus"}};
+        QTest::newRow("string-bool") << QVariantMap{{"hideInstalled", "false"}};
+        QTest::newRow("integer-bool") << QVariantMap{{"hidden", 1}};
+        QTest::newRow("unknown") << QVariantMap{{"unknown", "x"}};
+        QTest::newRow("unchanged") << QVariantMap{{"query", ""}};
+    }
+    void invalidConfigurationIsAnIdempotentNoOp() {
+        QFETCH(QVariantMap, changes);
+        auto fixture = source(2);
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
+        BrowseCatalogue model(fixture, visibility);
+        model.setContext("pack", {}, {});
+        QTRY_VERIFY(!model.busy());
+        const auto before = model.filters();
+        const int calls = fixture->calls.size();
+        QSignalSpy changed(&model, &BrowseCatalogue::changed);
+        model.configure(changes);
+        QCOMPARE(model.filters(), before);
+        QVERIFY(!model.busy());
+        QCOMPARE(fixture->calls.size(), calls);
+        QCOMPARE(changed.size(), 0);
+    }
+    void scrollRejectsNonFiniteValuesAndDoesNotRepeatNotifications() {
+        BrowseCatalogue model(source(),
+                              std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()));
+        QSignalSpy changed(&model, &BrowseCatalogue::scrollChanged);
+        model.setScrollPosition(40);
+        model.setScrollPosition(40);
+        model.setScrollPosition(std::numeric_limits<qreal>::infinity());
+        model.setScrollPosition(std::numeric_limits<qreal>::quiet_NaN());
+        QCOMPARE(model.scrollPosition(), qreal(40));
+        QCOMPARE(changed.size(), 1);
+        model.setScrollPosition(-3);
+        QCOMPARE(model.scrollPosition(), qreal(0));
+        QCOMPARE(changed.size(), 2);
+    }
+    void visibilityWritesAndSignalsOnlyForActualIdentityChanges() {
+        auto store = std::make_shared<MemoryBrowseSettings>();
+        ContentVisibility visibility(store);
+        QSignalSpy changed(&visibility, &ContentVisibility::changed);
+        visibility.setHidden({}, true);
+        visibility.setHidden(project(1).toVariant(), false);
+        QCOMPARE(changed.size(), 0);
+        QVERIFY(store->data.isEmpty());
+        visibility.setHidden(project(1).toVariant(), true);
+        visibility.setHidden(project(1).toVariant(), true);
+        QCOMPARE(changed.size(), 1);
+        visibility.setHidden(project(1).toVariant(), false);
+        QCOMPARE(changed.size(), 2);
+    }
     void typoFallbackIsBoundedKeepsFiltersCachesAndNeverMasksProviderErrors() {
         auto source = std::make_shared<SearchFixture>();
         source->delayed = true;

@@ -5,6 +5,7 @@ import Conflux.Style
 ComboBox {
     id: control
     implicitHeight: 42; implicitWidth: 160; font.pixelSize: 13; hoverEnabled: true
+    padding: 0
     opacity: enabled ? 1 : 0.38
     HoverHandler { cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor }
     background: Rectangle {

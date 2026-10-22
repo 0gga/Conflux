@@ -79,16 +79,17 @@ Item {
                         id: version; required property var modelData
                         property int variantIndex: 0
                         readonly property var release: modelData.variants[Math.min(variantIndex,modelData.variants.length - 1)] || ({})
+                        readonly property string publishedLabel: ContentTime.dateLabel(release.published || "", ContentTime.now)
                         readonly property bool installed: { const ready=root.browse.ready; const busy=root.browse.busy; return root.browse.installed(release,root.showcase.project.type || "mod") }
                         readonly property bool groupInstalled: { const ready=root.browse.ready; const busy=root.browse.busy; return modelData.variants.some(function(item) { return root.browse.installed(item,root.showcase.project.type || "mod") }) }
-                        width: versionList.viewportWidth; height: version.modelData.variants.length > 1 ? 148 : 112; radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border
+                        width: versionList.viewportWidth; height: Math.max(version.modelData.variants.length > 1 ? 148 : 112, versionInfo.implicitHeight + 32); radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border
                         RowLayout {
                             anchors.fill: parent; anchors.margins: 16; spacing: 16
                             ColumnLayout {
-                                Layout.fillWidth: true; spacing: 8
+                                id: versionInfo; Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: 8
                                 ContentLink { objectName:"releaseChangelogLink";onClicked:{root.showcase.selectChangelog(version.release);changelog.mode="all";root.tabRequested("changelog")} Layout.fillWidth: true; text: version.modelData.label; color: Theme.colors.text; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
                                 CompatibilityBadges { minecraft: (version.release.gameVersions || []).filter(function(value) { return root.releaseFilters.filters.versions.indexOf(value)!==-1 })[0] || (version.release.gameVersions || [])[0] || ""; loader: (version.release.loaders || []).filter(function(value) { return root.releaseFilters.filters.loaders.indexOf(value)!==-1 })[0] || (version.release.loaders || []).filter(function(value) { return value !== "minecraft" && value !== "datapack" })[0] || "" }
-                                Text { Layout.fillWidth: true; text: (version.release.channel || "release").charAt(0).toUpperCase() + (version.release.channel || "release").slice(1) + (version.release.published ? " · " + Qt.formatDate(new Date(version.release.published),"d. MMM yyyy") : ""); color: Theme.colors.muted; font.pixelSize: 11; elide: Text.ElideRight }
+                                Text { objectName: "releasePublished"; Layout.fillWidth: true; text: (version.release.channel || "release").charAt(0).toUpperCase() + (version.release.channel || "release").slice(1) + (version.publishedLabel.length ? " · " + version.publishedLabel : ""); color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
                                 SelectBox { visible: version.modelData.variants.length > 1; Layout.fillWidth: true; model: version.modelData.variants.map(function(row) { return (row.provider === "modrinth" ? "Modrinth" : "CurseForge") + " · " + row.filename }); onActivated: version.variantIndex = currentIndex }
                             }
                             SourceBadge { source: version.release.provider || "modrinth"; iconOnly: true }

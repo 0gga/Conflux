@@ -5,6 +5,7 @@
 #include <QPointer>
 #include <QTimer>
 #include <algorithm>
+#include <cmath>
 #include <limits>
 namespace studio {
 BrowseCatalogue::BrowseCatalogue(std::shared_ptr<ICatalogueSearch> source,
@@ -28,26 +29,35 @@ void BrowseCatalogue::setDefaults(const QVariantMap &defaults) {
     m_defaults = defaults;
 }
 void BrowseCatalogue::setScrollPosition(qreal value) {
-    m_scroll = qMax(qreal(0), value);
+    if (!std::isfinite(value))
+        return;
+    value = qMax(qreal(0), value);
+    if (m_scroll == value)
+        return;
+    m_scroll = value;
     emit scrollChanged();
 }
 void BrowseCatalogue::setKey(const QByteArray &key) {
+    if (m_key == key)
+        return;
+    m_key = key;
     m_source->setKey(key);
-    const bool enabled = !key.isEmpty();
-    if (enabled != m_cf) {
-        m_cf = enabled;
-        m_optionsLoaded = false;
-        loadOptions();
-        reset();
-    }
+    m_cf = !key.isEmpty();
+    m_contexts.clear();
+    m_options.clear();
+    m_optionsLoaded = false;
+    ++m_optionsGeneration;
+    reset();
+    loadOptions();
 }
 void BrowseCatalogue::loadOptions() {
     if (m_optionsLoaded)
         return;
     m_optionsLoaded = true;
     QPointer<BrowseCatalogue> guard(this);
-    m_source->facets([guard](QVariantMap options, QString error) {
-        if (!guard)
+    const auto generation = m_optionsGeneration;
+    m_source->facets([guard, generation](QVariantMap options, QString error) {
+        if (!guard || guard->m_optionsGeneration != generation)
             return;
         guard->m_options = options;
         guard->m_optionsLoaded = error.isEmpty();
@@ -69,8 +79,18 @@ void BrowseCatalogue::saveCompatibility() {
 void BrowseCatalogue::saveSnapshot() {
     if (m_context.isEmpty())
         return;
-    m_contexts[viewKey()] = {m_filters, m_pages,    m_streams, m_seen,   m_installed,
-                             m_known,   m_building, m_page,    m_scroll, m_defaultLoaderSelection};
+    m_contexts[viewKey()] = {m_filters,
+                             m_pages,
+                             m_streams,
+                             m_seen,
+                             m_installed,
+                             m_known,
+                             m_building,
+                             m_page,
+                             m_scroll,
+                             m_defaultLoaderSelection,
+                             m_visibility->hiddenIdentities(),
+                             !m_busy};
 }
 bool BrowseCatalogue::applyDefaults() {
     // A requested instance can be selected before its inventory metadata has arrived.
@@ -88,9 +108,10 @@ bool BrowseCatalogue::applyDefaults() {
     }
     return changed;
 }
-void BrowseCatalogue::activateView(bool sameInstance) {
+void BrowseCatalogue::activateView(const QVariantMap &changes) {
     ++m_generation;
     m_downloadLookups.clear();
+    m_awaitingReply = false;
     m_busy = false;
     m_notice.clear();
     if (m_contexts.contains(viewKey())) {
@@ -99,9 +120,7 @@ void BrowseCatalogue::activateView(bool sameInstance) {
         m_pages = state.pages;
         m_streams = state.streams;
         m_seen = state.seen;
-        const bool installedChanged = sameInstance && m_installed != state.installed;
-        if (!sameInstance)
-            m_installed = state.installed;
+        const bool installedChanged = m_installed != state.installed;
         m_known = state.known;
         m_building = state.building;
         m_page = state.page;
@@ -109,15 +128,15 @@ void BrowseCatalogue::activateView(bool sameInstance) {
         m_scroll = state.scroll;
         m_defaultLoaderSelection = state.defaultLoaders;
         m_reads = 0;
-        if (applyDefaults() || (installedChanged && m_filters.value("hideInstalled").toBool())) {
+        const bool defaultsChanged = applyDefaults();
+        const bool filtersChanged = applyChanges(changes);
+        if (defaultsChanged || filtersChanged || !state.complete ||
+            state.hidden != m_visibility->hiddenIdentities() || (installedChanged && hideInstalledActive())) {
             reset();
             return;
         }
-        m_busy = m_page >= m_pages.size();
         emit changed();
         emit scrollChanged();
-        if (m_busy)
-            pump();
         return;
     }
     for (const auto &key : {"sort", "size", "source", "hideInstalled"})
@@ -142,6 +161,7 @@ void BrowseCatalogue::activateView(bool sameInstance) {
             m_defaultLoaderSelection = saved->defaultLoaders;
             applyDefaults();
         }
+    applyChanges(changes);
     reset();
 }
 void BrowseCatalogue::setContext(const QString &baseKey, const QStringList &versions,
@@ -168,7 +188,8 @@ void BrowseCatalogue::setContext(const QString &baseKey, const QStringList &vers
                                   : !previousAuthor.isEmpty() ? "mod"
                                                               : m_filters.value("type").toString());
     m_context = key;
-    m_installed.clear();
+    m_baseContext = baseKey;
+    m_installed = m_inventories.value(baseKey);
     activateView();
 }
 void BrowseCatalogue::setInstalled(const QVariantList &inventory) {
@@ -177,12 +198,14 @@ void BrowseCatalogue::setInstalled(const QVariantList &inventory) {
         const auto row = value.toMap();
         const auto sourceIds = row.value("sourceIds").toMap();
         for (auto it = sourceIds.cbegin(); it != sourceIds.cend(); ++it)
-            ids.insert(it.key() + ':' + it.value().toString() + '|' + row.value("category").toString());
+            if (!it.key().isEmpty() && !it.value().toString().isEmpty())
+                ids.insert(it.key() + ':' + it.value().toString() + '|' + row.value("category").toString());
     }
     if (ids == m_installed)
         return;
     m_installed = std::move(ids);
-    if (m_filters.value("hideInstalled").toBool())
+    m_inventories[m_baseContext] = m_installed;
+    if (hideInstalledActive())
         reset();
     else
         emit changed();
@@ -213,8 +236,17 @@ void BrowseCatalogue::configure(const QVariantMap &requested) {
         QStringList{"all", "mod", "resourcepack", "shader", "datapack"}.contains(type)) {
         saveSnapshot();
         m_filters["type"] = type;
-        activateView(true);
+        activateView(changes);
+        return;
     }
+    if (applyChanges(changes))
+        reset();
+}
+bool BrowseCatalogue::applyChanges(const QVariantMap &requested) {
+    auto changes = requested;
+    for (const auto &key : {"hideInstalled", "hidden", "unlocked"})
+        if (changes.contains(key) && changes.value(key).metaType().id() != QMetaType::Bool)
+            changes.remove(key);
     if (changes.contains("loaders"))
         m_defaultLoaderSelection = false;
     if (changes.contains("unlocked") && !changes.value("unlocked").toBool() && m_context != "global") {
@@ -231,16 +263,14 @@ void BrowseCatalogue::configure(const QVariantMap &requested) {
             values.removeDuplicates();
             value = values;
         }
-        if (it.key() == "size" && !QList<int>{10, 20, 50, 100}.contains(value.toInt()))
+        if (it.key() == "size" &&
+            (value.toDouble() != value.toInt() || !QList<int>{10, 20, 50, 100}.contains(value.toInt())))
             continue;
         if (it.key() == "sort" &&
             !QStringList{"relevance", "downloads", "follows", "newest", "updated"}.contains(value.toString()))
             continue;
         if (it.key() == "source" &&
             !QStringList{"merged", "modrinth", "curseforge"}.contains(value.toString()))
-            continue;
-        if (it.key() == "type" &&
-            !QStringList{"all", "mod", "resourcepack", "shader", "datapack"}.contains(value.toString()))
             continue;
         if (m_filters.value(it.key()) != value) {
             m_filters[it.key()] = value;
@@ -249,13 +279,12 @@ void BrowseCatalogue::configure(const QVariantMap &requested) {
     }
     if (changes.contains("versions") || changes.contains("loaders") || changes.contains("unlocked"))
         saveCompatibility();
-    if (changed)
-        reset();
+    return changed;
 }
 void BrowseCatalogue::refresh() {
+    reset();
     if (!m_optionsLoaded)
         loadOptions();
-    reset();
 }
 void BrowseCatalogue::reset() {
     ++m_generation;
@@ -270,6 +299,7 @@ void BrowseCatalogue::reset() {
     m_scroll = 0;
     m_reads = 0;
     m_busy = true;
+    m_awaitingReply = false;
     m_notice.clear();
     const auto source = m_filters.value("source").toString();
     if (source != "curseforge")
@@ -297,7 +327,7 @@ bool BrowseCatalogue::accepted(const Project &p) const {
     const auto map = p.toVariant();
     if (m_visibility->hidden(map) != m_filters.value("hidden").toBool())
         return false;
-    if (m_filters.value("hideInstalled").toBool())
+    if (hideInstalledActive())
         for (auto it = p.sourceIds.cbegin(); it != p.sourceIds.cend(); ++it)
             if (m_installed.contains(it.key() + ':' + it.value() + '|' + contentCategory(p.type)) ||
                 (m_filters.value("type") == "datapack" &&
@@ -329,10 +359,12 @@ void BrowseCatalogue::fetchMore(const QString &provider) {
     const auto generation = m_generation;
     const int offset = m_streams.value(provider).offset;
     QPointer<BrowseCatalogue> guard(this);
+    m_awaitingReply = true;
     m_source->fetch(
         request(provider), offset, 50, [guard, generation, provider, offset](CataloguePage result) {
             if (!guard || guard->m_generation != generation)
                 return;
+            guard->m_awaitingReply = false;
             auto &stream = guard->m_streams[provider];
             stream.offset += result.projects.size();
             stream.total = qMax(qint64(0), result.total);
@@ -367,10 +399,7 @@ void BrowseCatalogue::fetchMore(const QString &provider) {
                     guard->m_pages.clear();
                 }
             }
-            QTimer::singleShot(0, guard, [guard] {
-                if (guard)
-                    guard->pump();
-            });
+            guard->schedulePump();
         });
 }
 bool BrowseCatalogue::hydrateDownloads() {
@@ -390,9 +419,11 @@ bool BrowseCatalogue::hydrateDownloads() {
                 query.projectIds = {it.key().section(':', 1)};
                 const auto generation = m_generation;
                 QPointer<BrowseCatalogue> guard(this);
+                m_awaitingReply = true;
                 m_source->fetch(query, 0, 1, [guard, generation, key](CataloguePage result) {
                     if (!guard || guard->m_generation != generation)
                         return;
+                    guard->m_awaitingReply = false;
                     if (!result.projects.isEmpty())
                         guard->m_known[key] =
                             mergeProjects({guard->m_known.value(key), result.projects.first()},
@@ -400,18 +431,22 @@ bool BrowseCatalogue::hydrateDownloads() {
                                 .first();
                     if (!result.error.isEmpty())
                         guard->m_notice = result.error;
-                    QTimer::singleShot(0, guard, [guard] {
-                        if (guard)
-                            guard->pump();
-                    });
+                    guard->schedulePump();
                 });
                 return true;
             }
         }
     return false;
 }
+void BrowseCatalogue::schedulePump() {
+    const auto generation = m_generation;
+    QTimer::singleShot(0, this, [this, generation] {
+        if (generation == m_generation)
+            pump();
+    });
+}
 void BrowseCatalogue::pump() {
-    if (!m_busy)
+    if (!m_busy || m_awaitingReply)
         return;
     for (auto it = m_streams.begin(); it != m_streams.end(); ++it)
         if (it->rows.isEmpty() && !it->exhausted) {
@@ -492,9 +527,11 @@ void BrowseCatalogue::pump() {
             query.projectIds = {p.sourceIds.value("modrinth")};
             const auto generation = m_generation;
             QPointer<BrowseCatalogue> guard(this);
+            m_awaitingReply = true;
             m_source->fetch(query, 0, 1, [guard, generation, p](CataloguePage result) {
                 if (!guard || guard->m_generation != generation)
                     return;
+                guard->m_awaitingReply = false;
                 auto joined = p;
                 if (!result.projects.isEmpty())
                     joined = mergeProjects(QVector<Project>{p, result.projects.first()}, guard->m_identities)
@@ -502,16 +539,13 @@ void BrowseCatalogue::pump() {
                 else if (!result.error.isEmpty())
                     guard->m_notice = "Modrinth metadata: " + result.error;
                 guard->publish(joined);
-                QTimer::singleShot(0, guard, [guard] {
-                    if (guard)
-                        guard->pump();
-                });
+                guard->schedulePump();
             });
             return;
         }
         publish(p);
         if (m_filters.value("sort") == "downloads" && m_building.size() < size) {
-            QTimer::singleShot(0, this, &BrowseCatalogue::pump);
+            schedulePump();
             return;
         }
         bool needsPage = false;
@@ -534,7 +568,7 @@ void BrowseCatalogue::pump() {
     if (m_page < m_targetPage && hasNext()) {
         ++m_page;
         m_reads = 0;
-        QTimer::singleShot(0, this, &BrowseCatalogue::pump);
+        schedulePump();
         return;
     }
     m_targetPage = m_page;
@@ -590,6 +624,7 @@ void BrowseCatalogue::goToPage(int pageNumber) {
     const int target = qBound(1, pageNumber, pageCount()) - 1;
     if (target == m_page)
         return;
+    ++m_generation;
     m_scroll = 0;
     emit scrollChanged();
     m_targetPage = target;
@@ -600,7 +635,8 @@ void BrowseCatalogue::goToPage(int pageNumber) {
     }
     // A single unfiltered provider supports a native offset jump without loading
     // every intervening page. Filtered/merged views preserve their dedup cursor.
-    if (m_streams.size() == 1 && !m_filters.value("hidden").toBool() &&
+    const bool sequential = target == m_page + 1 && target == m_pages.size();
+    if (!sequential && m_streams.size() == 1 && !m_filters.value("hidden").toBool() &&
         !m_filters.value("hideInstalled").toBool() &&
         !(m_filters.value("sort") == "downloads" && m_cf && !m_identities.isEmpty())) {
         auto &stream = m_streams.first();

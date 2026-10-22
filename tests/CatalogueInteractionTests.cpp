@@ -1,0 +1,524 @@
+#include "CatalogueFixtures.h"
+#include "features/explore/BrowseCatalogue.h"
+#include "features/preferences/ContentVisibility.h"
+#include "theme/Appearance.h"
+#include <QFontDatabase>
+#include <QQmlComponent>
+#include <QQmlEngine>
+#include <QQmlProperty>
+#include <QQuickItem>
+#include <QQuickStyle>
+#include <QQuickWindow>
+#include <QSGRendererInterface>
+#include <QScreen>
+#include <QTemporaryDir>
+#include <QtQml/qqmlextensionplugin.h>
+#include <QtTest>
+Q_IMPORT_QML_PLUGIN(Conflux_StylePlugin)
+using namespace studio;
+class CatalogueInteractionTests final : public QObject {
+    Q_OBJECT
+    QTemporaryDir storage;
+    static QQuickItem *item(QQuickItem *root, const QString &name) {
+        if (root->objectName() == name && root->isVisible())
+            return root;
+        for (auto *child : root->childItems())
+            if (auto *found = item(child, name))
+                return found;
+        return nullptr;
+    }
+    static QPoint center(QQuickItem *item) {
+        return item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint();
+    }
+    static QByteArray wrapper() {
+#ifndef Q_MOC_RUN
+        return R"QML(import QtQuick
+import QtQuick.Controls
+import Conflux.Style
+import ")QML" + QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/pages").toString().toUtf8() +
+               R"QML("
+import ")QML" +
+               QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/components/IconPaths.js")
+                   .toString()
+                   .toUtf8() +
+               R"QML(" as Glyphs
+Item {
+    id: shell
+    required property var catalogueModel
+    property real uiScale: 1
+    function hasGlyph(name) { return !!Glyphs.markup[name] }
+    Rectangle { anchors.fill: parent; color: Theme.colors.background }
+    QtObject { id: fakeApp; property var libraryPacks: [{title:"Fixture",path:"fixture",provider:"modrinth"}]; property bool navigationBusy: false }
+    QtObject { id: fakeBrowse; property bool busy: false; property bool ready: true; property bool connectorAvailable: false; property var pack: ({loader:"neoforge"}); function state(project) { return {label:"Install",canInstall:true,installed:false} } }
+    QtObject { id: fakeContent; property int lockRevision: 0; function sourceLock(project) { return {} } function projectLocked(project) { return false } }
+    DiscoverPage {
+        objectName: "pageUnderTest"
+        x: 216 * shell.uiScale; y: 40 * shell.uiScale
+        width: shell.width / shell.uiScale - 216; height: shell.height / shell.uiScale - 40
+        scale: shell.uiScale; transformOrigin: Item.TopLeft
+        app: fakeApp; content: fakeContent; browse: fakeBrowse; catalogue: shell.catalogueModel; worlds: null; targetPath: "fixture"
+    }
+})QML";
+#endif
+    }
+    static std::unique_ptr<QQuickItem> page(QQmlEngine &engine, BrowseCatalogue &model, QQuickWindow &window,
+                                            qreal scale) {
+        engine.singletonInstance<Appearance *>("Conflux.Style", "Appearance")->reset();
+        QQmlComponent component(&engine);
+        component.setData(wrapper(), QUrl("file:///catalogue-fixture.qml"));
+        if (!component.isReady())
+            qWarning().noquote() << component.errorString();
+        std::unique_ptr<QQuickItem> root(qobject_cast<QQuickItem *>(component.createWithInitialProperties(
+            {{"catalogueModel", QVariant::fromValue(&model)}, {"uiScale", scale}})));
+        if (root) {
+            root->setParentItem(window.contentItem());
+            root->setSize(window.size());
+        }
+        return root;
+    }
+  private slots:
+    void initTestCase() {
+        const auto fonts = qEnvironmentVariable("WINDIR", "C:/Windows") + "/Fonts/";
+        for (const auto &file : {"segoeui.ttf", "seguisb.ttf", "segoeuib.ttf", "seguisym.ttf"})
+            QVERIFY(QFontDatabase::addApplicationFont(fonts + file) >= 0);
+        QGuiApplication::setFont(QFont("Segoe UI"));
+        QQuickStyle::setStyle("Basic");
+        qputenv("CONFLUX_STYLE_SETTINGS_DIR", storage.path().toUtf8());
+    }
+    void init() {
+        QTest::failOnWarning(QRegularExpression(
+            ".*(recursive rearrange|binding loop|TypeError|ReferenceError|Cannot assign|Unable to assign).*",
+            QRegularExpression::CaseInsensitiveOption));
+    }
+    void controlsStayInsideViewport_data() {
+        QTest::addColumn<QSize>("size");
+        QTest::addColumn<qreal>("scale");
+        QTest::addColumn<int>("filterScale");
+        for (const auto &size : {QSize(1920, 1080), QSize(1366, 768), QSize(1280, 720)})
+            for (qreal scale : {1., 1.25, 1.5})
+                for (int filterScale : {75, 100, 150})
+                    QTest::newRow(qPrintable(QString("%1x%2-%3-filter%4")
+                                                 .arg(size.width())
+                                                 .arg(size.height())
+                                                 .arg(scale)
+                                                 .arg(filterScale)))
+                        << size << scale << filterScale;
+    }
+    void controlsStayInsideViewport() {
+        QFETCH(QSize, size);
+        QFETCH(qreal, scale);
+        QFETCH(int, filterScale);
+        auto source = std::make_shared<catalogue_test::Search>(24000);
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<catalogue_test::Settings>());
+        BrowseCatalogue model(source, visibility);
+        model.setContext("fixture", {"1.21.1"}, {"neoforge"});
+        QTRY_VERIFY(!model.busy());
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(size);
+        auto root = page(engine, model, window, scale);
+        QVERIFY(root);
+        auto *appearance = engine.singletonInstance<Appearance *>("Conflux.Style", "Appearance");
+        QVERIFY(appearance);
+        QVERIFY(appearance->setValue("filterScale", filterScale));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        for (int pageNumber : {1, 50, 1200}) {
+            model.goToPage(pageNumber);
+            QTRY_VERIFY(!model.busy());
+            QTest::qWait(40);
+            QStringList controls{"browseContentTypes", "browseInstanceSelector", "modSearchInput",
+                                 "browseSortSelector", "browseSizeSelector",     "browseSourceSelector",
+                                 "browsePageNumber",   "browseRefreshButton",    "browseResults"};
+            for (const auto &name : controls) {
+                auto *control = item(root.get(), name);
+                QVERIFY2(control, qPrintable(name));
+                auto bounds = control->mapRectToScene(QRectF(0, 0, control->width(), control->height()));
+                QVERIFY2(bounds.left() >= 216 * scale - 1 && bounds.right() <= size.width() + 1 &&
+                             bounds.top() >= -1 && bounds.bottom() <= size.height() + 1,
+                         qPrintable(name + " " +
+                                    QString("%1,%2 %3x%4")
+                                        .arg(bounds.x())
+                                        .arg(bounds.y())
+                                        .arg(bounds.width())
+                                        .arg(bounds.height())));
+            }
+            auto *results = item(root.get(), "browseResults");
+            QVERIFY(results->height() >= 100);
+            if (auto *panel = item(root.get(), "browseFilterPanel")) {
+                auto resultsRight = results->mapToScene(QPointF(results->width(), 0)).x();
+                QVERIFY(resultsRight < panel->mapToScene(QPointF()).x());
+                const auto panelBounds = panel->mapRectToScene(QRectF(0, 0, panel->width(), panel->height()));
+                for (const auto &name : {"browseHideInstalled", "browseShowHidden"}) {
+                    auto *control = item(root.get(), name);
+                    QVERIFY(control);
+                    const auto rect =
+                        control->mapRectToScene(QRectF(0, 0, control->width(), control->height()));
+                    QVERIFY2(rect.left() >= panelBounds.left() && rect.right() <= panelBounds.right() + 1,
+                             qPrintable(QString(name) + " escaped filter panel"));
+                }
+            } else {
+                QVERIFY(item(root.get(), "browseFiltersButton"));
+            }
+        }
+        if (scale == 1.5 && size.width() == 1920 && filterScale == 100)
+            window.grabWindow().save(QStringLiteral(CONFLUX_TEST_ARTIFACT_DIR) + "/catalogue-1080-150.png");
+    }
+    void realHiddenAndInstalledControlsRemainConsistentDuringRequests() {
+        auto source = std::make_shared<catalogue_test::Search>(5);
+        auto visibility = std::make_shared<ContentVisibility>(std::make_shared<catalogue_test::Settings>());
+        visibility->setHidden(source->projects[0].toVariant(), true);
+        BrowseCatalogue model(source, visibility);
+        connect(visibility.get(), &ContentVisibility::changed, &model, &BrowseCatalogue::refresh);
+        model.setContext("fixture", {"1.21.1"}, {"neoforge"});
+        model.setInstalled(
+            {QVariantMap{{"sourceIds", QVariantMap{{"modrinth", "0"}}}, {"category", "mods"}},
+             QVariantMap{{"sourceIds", QVariantMap{{"modrinth", "1"}}}, {"category", "mods"}}});
+        QTRY_VERIFY(!model.busy());
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(1920, 1080);
+        auto root = page(engine, model, window, 1);
+        QVERIFY(root);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTest::qWait(40);
+        auto *hide = item(root.get(), "browseHideInstalled");
+        auto *hidden = item(root.get(), "browseShowHidden");
+        QVERIFY(hide);
+        QVERIFY(hidden);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(hide));
+        QTRY_VERIFY(!model.busy());
+        QVERIFY(model.hideInstalledActive());
+        QCOMPARE(model.projects().size(), 3);
+        source->delayed = true;
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(hidden));
+        QVERIFY(model.busy());
+        QVERIFY(!model.hideInstalledActive());
+        QVERIFY(!hide->isEnabled());
+        const int pending = source->calls.size() - 1;
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(hidden));
+        const int last = source->calls.size() - 1;
+        QVERIFY(last > pending);
+        source->deliver(last);
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 3);
+        source->deliver(pending);
+        QCoreApplication::processEvents();
+        QCOMPARE(model.projects().size(), 3);
+        source->delayed = false;
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(hidden));
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 1);
+        QCOMPARE(model.projects().first().toMap().value("id").toString(), QString("0"));
+        QVERIFY(!item(root.get(), "activeHideInstalledFilter"));
+    }
+    void compactFiltersCloseOnEscapeAndRetainOneFilterInstanceAcrossResize() {
+        auto source = std::make_shared<catalogue_test::Search>();
+        BrowseCatalogue model(
+            source, std::make_shared<ContentVisibility>(std::make_shared<catalogue_test::Settings>()));
+        model.setContext("fixture", {}, {});
+        QTRY_VERIFY(!model.busy());
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(1280, 720);
+        auto root = page(engine, model, window, 1.5);
+        QVERIFY(root);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTest::qWait(40);
+        auto *button = item(root.get(), "browseFiltersButton");
+        QVERIFY(button);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(button));
+        QTest::qWait(40);
+        auto *filters = item(window.contentItem(), "browseFilters");
+        QVERIFY(filters);
+        auto bounds = filters->mapRectToScene(QRectF(0, 0, filters->width(), filters->height()));
+        QVERIFY(bounds.left() >= 0 && bounds.right() <= 1281 && bounds.bottom() <= 721);
+        auto *toggle = item(window.contentItem(), "browseHideInstalled");
+        QVERIFY(toggle);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(toggle));
+        QTRY_VERIFY(!model.busy());
+        QVERIFY(model.hideInstalledActive());
+        QTest::keyClick(&window, Qt::Key_Escape);
+        QTest::qWait(30);
+        QVERIFY(!item(window.contentItem(), "browseFilters"));
+        QVERIFY(button->hasActiveFocus());
+        root->setSize(QSizeF(2400, 1400));
+        window.resize(2400, 1400);
+        QTest::qWait(40);
+        QCOMPARE(item(root.get(), "browseFilters"), filters);
+        QVERIFY(!item(root.get(), "browseFiltersButton"));
+        QVERIFY(item(root.get(), "browseHideInstalled")->property("checked").toBool());
+    }
+    void changingPagesDuringSmoothScrollingDoesNotOverwriteNewPagePosition() {
+        auto source = std::make_shared<catalogue_test::Search>(80);
+        BrowseCatalogue model(
+            source, std::make_shared<ContentVisibility>(std::make_shared<catalogue_test::Settings>()));
+        model.setContext("fixture", {}, {});
+        QTRY_VERIFY(!model.busy());
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(1366, 768);
+        auto root = page(engine, model, window, 1);
+        QVERIFY(root);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTest::qWait(40);
+        auto *results = item(root.get(), "browseResults");
+        QVERIFY(results);
+        auto wheel = [&] {
+            const QPointF pos = center(results);
+            QWheelEvent event(pos, window.mapToGlobal(pos.toPoint()), QPoint(), QPoint(0, -120), Qt::NoButton,
+                              Qt::NoModifier, Qt::NoScrollPhase, false);
+            QCoreApplication::sendEvent(&window, &event);
+        };
+        // First page -> newly fetched page, then back -> cached page, while the old animation is active.
+        for (int round = 0; round < 2; ++round) {
+            wheel();
+            QTRY_VERIFY(results->property("contentY").toReal() > 0);
+            QVERIFY(results->property("moving").toBool());
+            model.next();
+            QTRY_VERIFY(!model.busy());
+            QTest::qWait(230);
+            QCOMPARE(model.page(), 2);
+            QCOMPARE(model.scrollPosition(), qreal(0));
+            QCOMPARE(results->property("contentY").toReal(), qreal(0));
+            model.previous();
+            QTRY_VERIFY(!model.busy());
+            QTest::qWait(40);
+            QCOMPARE(model.page(), 1);
+        }
+    }
+    void cardsAndActualVersionRowsUseTheSameRecentTimeAndWrapWithinTheirRows_data() {
+        QTest::addColumn<int>("width");
+        QTest::newRow("narrow") << 640;
+        QTest::newRow("wide") << 1100;
+    }
+    void cardsAndActualVersionRowsUseTheSameRecentTimeAndWrapWithinTheirRows() {
+#ifndef Q_MOC_RUN
+        QFETCH(int, width);
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData(
+            R"QML(
+import QtQuick
+import "pages"
+import "components"
+Item {
+    id:root
+    required property var releaseRows
+    required property string timestamp
+    property var sourceProject: ({title:"Example",updated:timestamp,sources:[]})
+    QtObject { id:model;property var project:root.sourceProject;property var gallery:[];property bool busy:false;property string notice:"";property var descriptionBlocks:[];property var changelogVersions:[];property var changelogBlocks:[];property var changelogRelease:({});property string changelogNotice:"";property bool changelogBusy:false;signal changed() }
+    QtObject { id:browser;property bool ready:false;property bool busy:false;property string notice:"";function installed(release,type){return false} }
+    QtObject { id:applicationModel;property bool navigationBusy:false;function openWeb(url){} }
+    QtObject { id:content;property string notice:"";property int lockRevision:0;function projectLocked(project){return false} function sourceLock(project){return ({})} }
+    QtObject { id:filters;property var rows:root.releaseRows;property var options:({channels:[],versions:[],loaders:[]});property var filters:({channels:[],versions:[],loaders:[],source:"all"}) }
+    ProjectCard { id:card;objectName:"dateCard";width:parent.width;project:root.sourceProject;installState:({canInstall:false,label:"Install"}) }
+    ShowcasePage { x:0;y:card.height+12;width:parent.width;height:parent.height-y;showcase:model;browse:browser;app:applicationModel;contentController:content;releaseFilters:filters;tab:"versions" }
+})QML",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/RecentTimeFixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        Release release;
+        release.provider = "modrinth";
+        release.id = "recent";
+        release.version = "1.0";
+        release.published = QDateTime::currentDateTimeUtc().addSecs(-3 * 3600).toString(Qt::ISODateWithMs);
+        release.gameVersions = {"1.21.1"};
+        release.loaders = {"neoforge"};
+        auto groups = [&] {
+            return QVariantList{
+                QVariantMap{{"label", "1.0"}, {"variants", QVariantList{release.toVariant()}}}};
+        };
+        std::unique_ptr<QQuickItem> root(qobject_cast<QQuickItem *>(component.createWithInitialProperties(
+            {{"releaseRows", groups()}, {"timestamp", release.published}})));
+        QVERIFY2(root, qPrintable(component.errorString()));
+        QQuickWindow window;
+        window.resize(width, 900);
+        root->setParentItem(window.contentItem());
+        root->setSize(window.size());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTRY_VERIFY(item(root.get(), "releasePublished"));
+        auto *published = item(root.get(), "releasePublished");
+        auto *updated = item(root.get(), "browseUpdated");
+        QVERIFY(updated);
+        QCOMPARE(updated->property("text").toString(), QString("3 hours ago"));
+        QVERIFY(updated->property("hint").toString().endsWith(" · 3 hours ago"));
+        QVERIFY(published->property("text").toString().endsWith(" · 3 hours ago"));
+        auto *row = published->parentItem()->parentItem()->parentItem();
+        const auto bounds =
+            published->mapRectToItem(row, QRectF(0, 0, published->width(), published->height()));
+        QVERIFY(bounds.left() >= 0 && bounds.right() <= row->width() && bounds.bottom() <= row->height());
+        // Legacy providers may supply only a day: never infer midnight as a release time.
+        release.published = QDate::currentDate().toString(Qt::ISODate);
+        root->setProperty("releaseRows", groups());
+        root->setProperty("timestamp", release.published);
+        QTRY_VERIFY(!item(root.get(), "releasePublished")->property("text").toString().contains("ago"));
+        QVERIFY(!updated->property("text").toString().contains("ago"));
+#endif
+    }
+    void loaderPillsHaveTheSameSelectionBehaviorAsTheirCheckboxes() {
+        auto source = std::make_shared<catalogue_test::Search>();
+        BrowseCatalogue model(
+            source, std::make_shared<ContentVisibility>(std::make_shared<catalogue_test::Settings>()));
+        model.setContext("fixture", {}, {"neoforge"});
+        QTRY_VERIFY(!model.busy());
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(1920, 1080);
+        auto root = page(engine, model, window, 1);
+        QVERIFY(root);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTest::qWait(40);
+        auto *fabric = item(root.get(), "browseLoader_fabric");
+        QVERIFY(fabric);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(fabric));
+        QTRY_VERIFY(!model.busy());
+        QVERIFY(model.filters().value("loaders").toStringList().contains("fabric"));
+        QVERIFY(model.filters().value("loaders").toStringList().contains("neoforge"));
+        const int requests = source->calls.size();
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(fabric));
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.filters().value("loaders").toStringList(), QStringList{"neoforge"});
+        QCOMPARE(source->calls.size(), requests + 1);
+    }
+    void realAppearancePreviewImplementsTheSameEffectiveVisibilityContract() {
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                                             "/settings/AppearancePreview.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> preview(
+            qobject_cast<QQuickItem *>(component.createWithInitialProperties({{"section", "filters"}})));
+        QVERIFY(preview);
+        QQuickWindow window;
+        window.resize(1100, 700);
+        preview->setParentItem(window.contentItem());
+        preview->setSize(window.size());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTest::qWait(40);
+        auto *hide = item(preview.get(), "browseHideInstalled");
+        auto *hidden = item(preview.get(), "browseShowHidden");
+        QVERIFY(hide);
+        QVERIFY(hidden);
+        QVERIFY(!hide->property("checked").toBool());
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(hide));
+        QVERIFY(hide->property("checked").toBool());
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(hidden));
+        QVERIFY(!hide->isEnabled());
+        QVERIFY(!hide->property("checked").toBool());
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(hidden));
+        QVERIFY(hide->isEnabled());
+        QVERIFY(hide->property("checked").toBool());
+    }
+    void visibleDiscoverIconsHaveExplicitDefinitionsInsteadOfFileFallbacks() {
+        auto source = std::make_shared<catalogue_test::Search>();
+        BrowseCatalogue model(
+            source, std::make_shared<ContentVisibility>(std::make_shared<catalogue_test::Settings>()));
+        model.setContext("fixture", {}, {"neoforge"});
+        QTRY_VERIFY(!model.busy());
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(1280, 720);
+        auto root = page(engine, model, window, 1.5);
+        QVERIFY(root);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTest::qWait(40);
+        QVERIFY(item(root.get(), "browseFiltersButton"));
+        int checked = 0;
+        std::function<void(QQuickItem *)> verify = [&](QQuickItem *node) {
+            if (node->isVisible() && QByteArray(node->metaObject()->className()).startsWith("Icon_QMLTYPE")) {
+                const auto name = node->property("name");
+                QVariant defined;
+                QVERIFY(QMetaObject::invokeMethod(root.get(), "hasGlyph", Q_RETURN_ARG(QVariant, defined),
+                                                  Q_ARG(QVariant, name)));
+                QVERIFY2(defined.toBool(), qPrintable("Missing explicit icon: " + name.toString()));
+                ++checked;
+            }
+            for (auto *child : node->childItems())
+                verify(child);
+        };
+        verify(root.get());
+        QVERIFY(checked > 10);
+    }
+    void viewportCornersRemainRounded_data() {
+        QTest::addColumn<qreal>("scale");
+        for (qreal scale : {1., 1.25, 1.5})
+            QTest::newRow(qPrintable(QString::number(scale))) << scale;
+    }
+    void viewportCornersRemainRounded() {
+#ifndef Q_MOC_RUN
+        QFETCH(qreal, scale);
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        const QByteArray source =
+            R"QML(import QtQuick
+import ")QML" +
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/components").toString().toUtf8() +
+            R"QML("
+Rectangle { width:400; height:300; color:"#102030"
+    property alias list: list
+    ContentListView { id:list; objectName:"list"; x:20;y:20;width:300;height:180; outsideColor:"#102030"; cornerRadius:20; spacing:8; model:20; delegate:Rectangle { required property int index; width:list.viewportWidth; height:115; color:"#df4321" } }
+})QML";
+        component.setData(source, QUrl("file:///corner-fixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> root(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY(root);
+        QQuickWindow window;
+        if (qEnvironmentVariableIsSet("CONFLUX_CATALOGUE_NATIVE_RENDER")) {
+            const auto screens = QGuiApplication::screens();
+            auto screen = std::find_if(screens.cbegin(), screens.cend(),
+                                       [](QScreen *s) { return s != QGuiApplication::primaryScreen(); });
+            QVERIFY2(screen != screens.cend(), "Native validation requires a secondary monitor");
+            window.setFlags(Qt::Tool | Qt::WindowDoesNotAcceptFocus);
+            window.setScreen(*screen);
+            window.setPosition((*screen)->availableGeometry().topLeft() + QPoint(40, 40));
+        }
+        window.resize(qRound(400 * scale), qRound(300 * scale));
+        root->setParentItem(window.contentItem());
+        root->setScale(scale);
+        root->setTransformOrigin(QQuickItem::TopLeft);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        if (qEnvironmentVariableIsSet("CONFLUX_CATALOGUE_NATIVE_RENDER")) {
+            const auto api = window.rendererInterface()->graphicsApi();
+            qInfo() << "Native renderer" << api << "screen" << window.screen()->name();
+            QVERIFY(api != QSGRendererInterface::Software && api != QSGRendererInterface::Unknown);
+        }
+        auto *list = item(root.get(), "list");
+        QVERIFY(list);
+        for (int step = 0; step < 5; ++step) {
+            list->setProperty("contentY", step * 107);
+            if (step == 1)
+                list->setHeight(207);
+            if (step == 2) {
+                root->setVisible(false);
+                QCoreApplication::processEvents();
+                root->setVisible(true);
+            }
+            if (step == 3)
+                list->setProperty("model", 30);
+            if (step == 4)
+                list->setWidth(271);
+            QTest::qWait(50);
+            auto image = window.grabWindow();
+            QVERIFY(!image.isNull());
+            auto *viewport = item(list, "contentListViewport");
+            QVERIFY(viewport);
+            const QRectF rect = viewport->mapRectToScene(QRectF(0, 0, viewport->width(), viewport->height()));
+            const qreal ratio = image.width() / qreal(window.width());
+            for (auto point : {rect.topLeft(), rect.topRight() + QPointF(-1, 0),
+                               rect.bottomLeft() + QPointF(0, -1), rect.bottomRight() + QPointF(-1, -1)}) {
+                QCOMPARE(image.pixelColor(qRound(point.x() * ratio), qRound(point.y() * ratio)),
+                         QColor("#102030"));
+            }
+        }
+#endif
+    }
+};
+QTEST_MAIN(CatalogueInteractionTests)
+#include "CatalogueInteractionTests.moc"

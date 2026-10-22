@@ -84,7 +84,7 @@ QVariantMap Release::toVariant() const {
             {"url", url},
             {"sha1", sha1},
             {"sha512", sha512},
-            {"published", published.left(10)},
+            {"published", published},
             {"channel", channel},
             {"gameVersions", gameVersions},
             {"loaders", loaders},

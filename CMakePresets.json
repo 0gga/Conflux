@@ -1,18 +1,55 @@
 {
   "version": 6,
-  "configurePresets": [{
-    "name": "windows-local",
-    "displayName": "Windows / Qt 6.10.1 / MinGW",
-    "generator": "Ninja",
-    "binaryDir": "${sourceDir}/build",
-    "cacheVariables": {
-      "CMAKE_BUILD_TYPE": "Release",
-      "CMAKE_PREFIX_PATH": "C:/Qt/6.10.1/mingw_64",
-      "CMAKE_CXX_COMPILER": "C:/Qt/Tools/mingw1310_64/bin/g++.exe",
-      "CMAKE_MAKE_PROGRAM": "C:/Qt/Tools/Ninja/ninja.exe",
-      "BUILD_TESTING": "ON"
+  "configurePresets": [
+    {
+      "name": "windows-local",
+      "displayName": "Windows / Qt 6.10.1 / MinGW",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "C:/Qt/6.10.1/mingw_64",
+        "CMAKE_CXX_COMPILER": "C:/Qt/Tools/mingw1310_64/bin/g++.exe",
+        "CMAKE_MAKE_PROGRAM": "C:/Qt/Tools/Ninja/ninja.exe",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "windows-coverage",
+      "displayName": "Windows / isolated GCC coverage",
+      "inherits": "windows-local",
+      "binaryDir": "${sourceDir}/artifacts/coverage-build",
+      "cacheVariables": {
+        "CONFLUX_ENABLE_COVERAGE": "ON"
+      }
     }
-  }],
-  "buildPresets": [{"name": "windows-local", "configurePreset": "windows-local", "jobs": 6}],
-  "testPresets": [{"name": "windows-local", "configurePreset": "windows-local", "output": {"outputOnFailure": true}}]
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-local",
+      "configurePreset": "windows-local",
+      "jobs": 6
+    },
+    {
+      "name": "windows-coverage",
+      "configurePreset": "windows-coverage",
+      "jobs": 6
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-local",
+      "configurePreset": "windows-local",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-coverage",
+      "configurePreset": "windows-coverage",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
 }

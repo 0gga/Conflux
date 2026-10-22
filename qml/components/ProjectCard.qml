@@ -30,9 +30,7 @@ Rectangle {
     border.width: 0
     opacity: installState.installed ? Appearance.values.installedOpacity / 100 : 1
     function updatedAge(value) {
-        const days=Math.max(0,Math.floor((Date.now()-Date.parse(value))/86400000))
-        if (!isFinite(days)) return ""
-        return days===0 ? "Today" : days===1 ? "1 day ago" : days<60 ? days+" days ago" : days<730 ? Math.floor(days/30)+" months ago" : Math.floor(days/365)+" years ago"
+        return ContentTime.age(value, ContentTime.now)
     }
     function exactCount(value) { return Number(value || 0).toLocaleString(Qt.locale(), 'f', 0) }
     readonly property string downloadsHint: {
@@ -42,8 +40,7 @@ Rectangle {
         return root.exactCount(project.downloadsRaw) + " total downloads" + (rows.length ? "\n" + rows.join("\n") : "")
     }
     function updatedHint(value) {
-        const date = new Date(value)
-        return isNaN(date.getTime()) ? "" : "Updated " + Qt.formatDateTime(date, "d. MMM yyyy - h:mm AP")
+        return ContentTime.updatedHint(value, ContentTime.now)
     }
     HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }
     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.opened() }
@@ -134,7 +131,7 @@ Rectangle {
             ContentStatistic { objectName: "browseDownloads"; visible: !!Appearance.values.showDownloads; iconName: "download"; text: root.project.downloads || "0"; hint: root.downloadsHint; statisticScale: root.contentScale }
             ContentStatistic { objectName: "browseFollowers"; visible: !!Appearance.values.showFollowers && (root.project.followersRaw || 0)>0; iconName: "heart"; text: root.project.followers || ""; hint: root.exactCount(root.project.followersRaw) + " followers"; statisticScale: root.contentScale }
         }
-        ContentStatistic { id: updated; objectName: "browseUpdated"; Layout.alignment: Qt.AlignRight; visible: !!Appearance.values.showUpdated && !!root.project.updated; iconName: "history"; text: root.updatedAge(root.project.updated || ""); hint: root.updatedHint(root.project.updated || ""); statisticScale: root.contentScale }
+        ContentStatistic { id: updated; objectName: "browseUpdated"; Layout.alignment: Qt.AlignRight; visible: !!Appearance.values.showUpdated && text.length > 0; iconName: "history"; text: root.updatedAge(root.project.updated || ""); hint: root.updatedHint(root.project.updated || ""); statisticScale: root.contentScale }
     }
     PopupButton {
         tooltipsEnabled: false

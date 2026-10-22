@@ -1,6 +1,8 @@
 .pragma library
 // Lucide c29c276f16590cf017126671535ad8c792be64d8; see third_party/LICENSE.lucide.
 var markup = {
+  // Project-local funnel on the shared 24px stroke grid.
+  "filter": "<path d='M3 4h18l-7 8v8l-4-2v-6L3 4Z'/>",
   "unlock": "<rect x='4' y='11' width='16' height='10' rx='2'/><path d='M8 11V7a4 4 0 0 1 7.8-1.2'/><path d='M12 15v2'/>",
   "minimize": "<path d='M5 12h14'/>",
   "maximize": "<rect x='5' y='5' width='14' height='14' rx='2'/>",

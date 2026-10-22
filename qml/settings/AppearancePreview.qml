@@ -15,6 +15,7 @@ Rectangle {
     QtObject {
         id: example
         property var filters: ({type:"mod",source:"merged",versions:["1.21.1"],loaders:["neoforge","fabric"],unlocked:false,tags:[],hidden:false,hideInstalled:false})
+        readonly property bool hideInstalledActive: !!filters.hideInstalled && !filters.hidden
         property var options: ({versions:["1.21.1","1.20.1","1.19.2"],tags:[],curseforgeTags:[]})
         function configure(change) { filters=Object.assign({},filters,change) }
     }

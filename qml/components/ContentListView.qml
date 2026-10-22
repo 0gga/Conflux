@@ -17,6 +17,7 @@ Item {
     property real bottomInset: 0
     property real cornerRadius: ControlStyle.panelRadius
     property color outsideColor: Theme.colors.background
+    function stopScrolling() { view.stopScrolling() }
     signal movementEnded()
     SmoothListView {
         id: view; objectName: "contentListViewport"

@@ -30,6 +30,7 @@ class OperationHistory final : public QAbstractListModel {
     void progress(quint64, const QString &);
     void finish(quint64, bool, const QString &, bool retryable = true);
     Q_INVOKABLE void dismiss(quint64);
+    Q_INVOKABLE void clearFinished();
     Q_INVOKABLE void retry(quint64 id) {
         emit retryRequested(id);
     }
@@ -43,5 +44,7 @@ class OperationHistory final : public QAbstractListModel {
     QVariantList m_entries;
     void set(quint64, const QString &, const QVariant &);
     void prune();
+    int insertionIndex(const QVariantMap &, int excluded = -1) const;
+    int reposition(int);
 };
 } // namespace studio

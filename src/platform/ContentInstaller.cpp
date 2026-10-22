@@ -220,6 +220,7 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
             if (error && !QFile::copy(source, destination))
                 return ContentFileState{pack, {}, "Could not stage " + relative};
             if (!ref.isEmpty()) {
+                ref["confluxRetainedPath"] = relative;
                 ref["installPath"] = stagedRelative;
                 ref["projectTitle"] = row.value("title").toString();
                 ref["projectSourceIds"] = QJsonObject::fromVariantMap(row.value("sourceIds").toMap());

@@ -246,8 +246,25 @@ Item { width:520;height:320
                                          "/../artifacts/atomic-task-failure.png"));
         click("retryOperation");
         QCOMPARE(content.operations()->activeCount(), 1);
+        content.operations()->queued(1000, {}, "Earlier failure", "Update");
+        content.operations()->finish(1000, false, "A previous task failed");
+        content.operations()->queued(1001, {}, "Next content", "Update");
+        QCOMPARE(content.operations()->entries().first().toMap().value("state").toString(),
+                 QString("running"));
+        QTest::qWait(100);
+        QVERIFY(window.grabWindow().save(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                         "/../artifacts/active-task-overview.png"));
+        click("clearFinishedOperations");
+        QCOMPARE(content.operations()->failedCount(), 0);
+        QCOMPARE(content.operations()->activeCount(), 2);
+        QCOMPARE(content.operations()->rowCount(), 2);
         installer->completion({true, {}});
         QTRY_VERIFY(!content.busy());
+        click("clearFinishedOperations");
+        QCOMPARE(content.operations()->rowCount(), 1);
+        content.operations()->finish(1001, true, {});
+        click("clearFinishedOperations");
+        QCOMPARE(content.operations()->rowCount(), 0);
         QMetaObject::invokeMethod(popup, "close");
         QTest::qWait(50);
         click("runningInstancesButton");

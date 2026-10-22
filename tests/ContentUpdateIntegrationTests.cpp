@@ -6,6 +6,8 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QtTest>
@@ -58,7 +60,7 @@ class ContentUpdateIntegrationTests : public QObject {
         QFETCH(int, failureAt);
         QFETCH(bool, managed);
         QTemporaryDir temp;
-        QVariantMap pack{{"path", temp.path() + "/external"},
+        QVariantMap pack{{"path", temp.path() + "/ModrinthApp/profiles/Fixture"},
                          {"minecraft", "1.21.1"},
                          {"loader", "fabric"},
                          {"managed", managed}};
@@ -120,6 +122,55 @@ class ContentUpdateIntegrationTests : public QObject {
                 assets << pin;
             }
         }
+        QString protectedPath;
+        QByteArray protectedBytes, launcherMetadata;
+        if (!managed) {
+            auto protectedRow = row("protected", "resourcepacks");
+            const auto bytes = archive(temp.path() + "/protected.zip", "resourcepacks", "protected", 1);
+            auto pin = protectedRow.value("installedRelease").toMap();
+            pin["sha1"] = hash(bytes);
+            protectedRow["sha1"] = hash(bytes);
+            protectedRow["installedRelease"] = pin;
+            protectedRow["updateAvailable"] = false;
+            write(root + '/' + protectedRow.value("relativePath").toString(), bytes);
+            protectedPath = root + '/' + protectedRow.value("relativePath").toString();
+            protectedBytes = bytes;
+            rows << protectedRow;
+            const auto connection = QUuid::createUuid().toString();
+            {
+                auto db = QSqlDatabase::addDatabase("QSQLITE", connection);
+                db.setDatabaseName(temp.path() + "/ModrinthApp/app.db");
+                QVERIFY(db.open());
+                QSqlQuery query(db);
+                for (const auto &sql :
+                     {"CREATE TABLE instances(id TEXT,path TEXT)",
+                      "CREATE TABLE instance_files(id TEXT,instance_id TEXT,relative_path TEXT,sha1 "
+                      "TEXT,enabled INTEGER)",
+                      "CREATE TABLE instance_content_entries(file_id TEXT,project_id TEXT,version_id TEXT)",
+                      "CREATE TABLE instance_content_locks(file_id TEXT)",
+                      "INSERT INTO instances VALUES('instance','Fixture')"})
+                    QVERIFY(query.exec(sql));
+                for (int i = 0; i < rows.size(); ++i) {
+                    const auto r = rows[i].toMap();
+                    query.prepare("INSERT INTO instance_files VALUES(?,'instance',?,?,?)");
+                    query.addBindValue(QString::number(i));
+                    query.addBindValue(r.value("relativePath"));
+                    query.addBindValue(r.value("sha1"));
+                    query.addBindValue(r.value("enabled"));
+                    QVERIFY(query.exec());
+                    query.prepare("INSERT INTO instance_content_entries VALUES(?,?,?)");
+                    query.addBindValue(QString::number(i));
+                    query.addBindValue(r.value("projectId"));
+                    query.addBindValue(r.value("installedRelease").toMap().value("id"));
+                    QVERIFY(query.exec());
+                }
+                QVERIFY(query.exec("INSERT INTO instance_content_locks VALUES('3')"));
+            }
+            QSqlDatabase::removeDatabase(connection);
+            launcherMetadata = read(temp.path() + "/ModrinthApp/app.db");
+            pack["provider"] = "modrinth";
+            pack["launcherInstanceId"] = "instance";
+        }
         if (managed) {
             const auto repository = PackRepository::inspect(root);
             QVERIFY(PackRepository::updateContentReferences(root, repository.manifest, mods, assets).ok);
@@ -179,6 +230,7 @@ class ContentUpdateIntegrationTests : public QObject {
             QVERIFY(!QFileInfo::exists(root + "/pack.json"));
         else {
             const auto manifest = PackRepository::inspect(root).manifest;
+            QVERIFY(!QJsonDocument(manifest).toJson().contains("confluxRetainedPath"));
             QCOMPARE(manifest.value("mods").toArray().size() + manifest.value("assets").toArray().size(), 3);
         }
         corrupt = false;
@@ -191,6 +243,10 @@ class ContentUpdateIntegrationTests : public QObject {
             read(root + '/' + newPaths[failureAt]),
             payloads.value(
                 '/' + rows[failureAt].toMap().value("updateRelease").toMap().value("filename").toString()));
+        if (!managed) {
+            QCOMPARE(read(protectedPath), protectedBytes);
+            QCOMPARE(read(temp.path() + "/ModrinthApp/app.db"), launcherMetadata);
+        }
     }
 };
 QTEST_GUILESS_MAIN(ContentUpdateIntegrationTests)

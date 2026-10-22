@@ -62,6 +62,126 @@ class ContentTransactionTests : public QObject {
         return {{"path", path}, {"provider", "modrinth"}, {"minecraft", "1.21.1"}, {"loader", "fabric"}};
     }
   private slots:
+    void retainedFilesAreNotReplacedOrReidentified_data() {
+        QTest::addColumn<bool>("duplicateIdentity");
+        QTest::newRow("locked-without-project-metadata") << false;
+        QTest::newRow("unrelated-files-with-one-project") << true;
+    }
+    void retainedFilesAreNotReplacedOrReidentified() {
+        QFETCH(bool, duplicateIdentity);
+        QTemporaryDir temp, stage;
+        const QVariantMap pack{{"path", temp.path()}};
+        QVariantList rows;
+        QJsonArray refs;
+        for (int i = 0; i < 2; ++i) {
+            const auto bytes = QByteArray("retained") + QByteArray::number(i);
+            const auto path = QString("mods/original%1.jar").arg(i);
+            const auto stagedPath = "mods/" + hash(bytes) + ".jar";
+            write(temp.path() + '/' + path, bytes);
+            write(stage.path() + '/' + stagedPath, bytes);
+            rows << QVariantMap{
+                {"category", "mods"},
+                {"relativePath", path},
+                {"sha1", hash(bytes)},
+                {"enabled", true},
+                {"locked", true},
+                {"sourceIds", duplicateIdentity ? QVariantMap{{"modrinth", "retained"}} : QVariantMap{}}};
+            refs << QJsonObject{{"provider", "modrinth"},    {"projectId", "retained"},
+                                {"sha1", hash(bytes)},       {"filename", path.section('/', -1)},
+                                {"installPath", stagedPath}, {"confluxRetainedPath", path}};
+        }
+        write(stage.path() + "/mods/new.jar", "new");
+        refs << QJsonObject{{"provider", "modrinth"},
+                            {"projectId", "new"},
+                            {"sha1", hash("new")},
+                            {"filename", "new.jar"},
+                            {"installPath", "mods/new.jar"}};
+        auto locks = std::make_shared<ContentLockRegistry>();
+        locks->setRows(temp.path(), rows);
+        NativeContentStore files(nullptr, temp.path() + "/backups", locks);
+        const auto result = files.commitStagedContent(pack, rows, stage.path(), {{"mods", refs}}, {"new"});
+        QVERIFY2(result.ok, qPrintable(result.error));
+        QCOMPARE(read(temp.path() + "/mods/new.jar"), QByteArray("new"));
+        for (int i = 0; i < 2; ++i) {
+            const auto bytes = QByteArray("retained") + QByteArray::number(i);
+            QCOMPARE(read(temp.path() + QString("/mods/original%1.jar").arg(i)), bytes);
+            QVERIFY(!QFileInfo::exists(temp.path() + "/mods/" + hash(bytes) + ".jar"));
+        }
+    }
+    void unlockedUpdatesIgnoreUnrelatedLauncherLocks() {
+        QTemporaryDir temp, stage;
+        const QByteArray protectedBytes = "protected pack", oldBytes = "old mod", newBytes = "new mod";
+        const auto pack = sourcePack(temp.path(), protectedBytes);
+        const auto root = pack.value("path").toString();
+        write(root + "/resourcepacks/locked.zip", protectedBytes);
+        write(root + "/mods/old.jar", oldBytes);
+        write(stage.path() + "/mods/new.jar", newBytes);
+        NativeContentStore files(nullptr, temp.path() + "/backups");
+        auto rows = files.snapshot(
+            pack, {QVariantMap{{"relativePath", "mods/old.jar"}, {"category", "mods"}},
+                   QVariantMap{{"relativePath", "resourcepacks/locked.zip"}, {"category", "resourcepacks"}}});
+        auto mod = rows[0].toMap();
+        mod["sourceIds"] = QVariantMap{{"modrinth", "unlocked-project"}};
+        rows[0] = mod;
+        const QJsonObject manifest{{"mods", QJsonArray{QJsonObject{{"provider", "modrinth"},
+                                                                   {"projectId", "unlocked-project"},
+                                                                   {"sha1", hash(newBytes)},
+                                                                   {"filename", "new.jar"},
+                                                                   {"installPath", "mods/new.jar"}}}}};
+        const auto result =
+            files.commitStagedContent(pack, rows, stage.path(), manifest, {"unlocked-project"});
+        QVERIFY2(result.ok, qPrintable(result.error));
+        QCOMPARE(read(root + "/mods/new.jar"), newBytes);
+        QVERIFY(!QFileInfo::exists(root + "/mods/old.jar"));
+        QCOMPARE(read(root + "/resourcepacks/locked.zip"), protectedBytes);
+    }
+    void changedOrAmbiguousRetainedOriginsCannotAuthorizeWrites_data() {
+        QTest::addColumn<QString>("fault");
+        for (const auto &fault :
+             {"hash", "category", "missing", "duplicate", "also-replaced", "replaced-first"})
+            QTest::newRow(fault) << QString(fault);
+    }
+    void changedOrAmbiguousRetainedOriginsCannotAuthorizeWrites() {
+        QFETCH(QString, fault);
+        QTemporaryDir temp, stage;
+        write(temp.path() + "/mods/original.jar", "old");
+        write(stage.path() + "/mods/retained.jar", fault == "hash" ? "changed" : "old");
+        write(stage.path() + "/mods/new.jar", "new");
+        const QVariantList rows{QVariantMap{{"relativePath", "mods/original.jar"},
+                                            {"category", "mods"},
+                                            {"sha1", hash("old")},
+                                            {"enabled", true},
+                                            {"sourceIds", QVariantMap{{"modrinth", "project"}}}}};
+        QJsonObject ref{
+            {"provider", "modrinth"},
+            {"projectId", "project"},
+            {"sha1", hash(fault == "hash" ? "changed" : "old")},
+            {"filename", "original.jar"},
+            {"installPath", "mods/retained.jar"},
+            {"confluxRetainedPath", fault == "missing" ? "mods/missing.jar" : "mods/original.jar"}};
+        QJsonObject manifest{{"mods", QJsonArray{ref}}};
+        if (fault == "category") {
+            ref["category"] = "resourcepacks";
+            manifest = {{"assets", QJsonArray{ref}}};
+        }
+        if (fault == "duplicate")
+            manifest["mods"] = QJsonArray{ref, ref};
+        if (fault == "also-replaced" || fault == "replaced-first") {
+            QJsonObject replacement{{"provider", "modrinth"},
+                                    {"projectId", "project"},
+                                    {"sha1", hash("new")},
+                                    {"filename", "new.jar"},
+                                    {"installPath", "mods/new.jar"}};
+            manifest["mods"] =
+                fault == "also-replaced" ? QJsonArray{ref, replacement} : QJsonArray{replacement, ref};
+        }
+        NativeContentStore files(nullptr, temp.path() + "/backups");
+        const auto result =
+            files.commitStagedContent({{"path", temp.path()}}, rows, stage.path(), manifest, {"project"});
+        QVERIFY(!result.ok);
+        QCOMPARE(read(temp.path() + "/mods/original.jar"), QByteArray("old"));
+        QVERIFY(!QFileInfo::exists(temp.path() + "/mods/new.jar"));
+    }
     void launcherLocksProtectAssetsAndRestoreOnlyTheExactMissingBinary() {
         QTemporaryDir temp;
         const QByteArray original = "original locked resource pack";

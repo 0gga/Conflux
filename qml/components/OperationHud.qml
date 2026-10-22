@@ -28,11 +28,16 @@ Item {
  }
  FocusPopup {
   id:tasks;objectName:"operationTasksPopup";parent:tasksButton;x:tasksButton.width-width;y:tasksButton.height+8
+  onOpened: taskList.viewport.positionViewAtBeginning()
   width:Math.min(480,root.availableWidth-32);padding:14
   background:Rectangle{radius: ControlStyle.panelRadius;color:Theme.colors.panel;border.color:Theme.colors.border}
   contentItem:ColumnLayout {
    spacing:12
-   Text {text:"Tasks";color:Theme.colors.text;font.pixelSize:20;font.weight:Font.DemiBold}
+   RowLayout {
+    Layout.fillWidth:true
+    Text {Layout.fillWidth:true;text:"Tasks";color:Theme.colors.text;font.pixelSize:20;font.weight:Font.DemiBold}
+    ActionButton {objectName:"clearFinishedOperations";text:"Clear finished";iconName:"trash";compact:true;visible:root.history.entries.length>root.history.activeCount;onClicked:root.history.clearFinished()}
+   }
    Text {visible:root.history.entries.length===0;text:root.content.busy ? "Checking content" : "No active tasks";color:Theme.colors.muted;font.pixelSize:13}
    ContentListView {
     id:taskList;objectName:"operationTaskList";Layout.fillWidth:true;outsideColor:Theme.colors.panel

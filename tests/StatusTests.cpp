@@ -13,6 +13,50 @@ using namespace studio;
 class StatusTests : public QObject {
     Q_OBJECT
   private slots:
+    void activeTasksStayAboveQueuedAndFinishedWithoutResettingTheModel() {
+        OperationHistory history;
+        QSignalSpy resets(&history, &QAbstractItemModel::modelReset);
+        history.queued(1, {}, "First", "Update");
+        QPersistentModelIndex first(history.index(0));
+        history.start(1);
+        history.queued(2, {}, "Second", "Update");
+        history.queued(3, {}, "Third", "Update");
+        QCOMPARE(history.entries().first().toMap().value("id").toULongLong(), quint64(1));
+        history.finish(1, false, "Failure");
+        history.start(2);
+        QCOMPARE(history.entries()[0].toMap().value("id").toULongLong(), quint64(2));
+        QCOMPARE(history.entries()[1].toMap().value("id").toULongLong(), quint64(3));
+        QCOMPARE(history.entries()[2].toMap().value("id").toULongLong(), quint64(1));
+        QCOMPARE(first.row(), 2);
+        history.queued(4, {}, "Fourth", "Update");
+        QCOMPARE(history.entries().first().toMap().value("id").toULongLong(), quint64(2));
+        history.progress(2, "Downloading");
+        QCOMPARE(history.entries().first().toMap().value("message").toString(), QString("Downloading"));
+        QCOMPARE(resets.size(), 0);
+    }
+    void clearingFinishedPreservesAllActiveWorkAndRetiresFailurePayloads() {
+        OperationHistory history;
+        for (quint64 id = 1; id <= 4; ++id)
+            history.queued(id, {}, "Fixture", "Update");
+        history.start(3);
+        history.finish(1, false, "Failure");
+        history.finish(2, true, {});
+        QSignalSpy retired(&history, &OperationHistory::dismissed),
+            changes(&history, &OperationHistory::changed);
+        history.clearFinished();
+        QCOMPARE(history.rowCount(), 2);
+        QCOMPARE(history.activeCount(), 2);
+        QCOMPARE(history.failedCount(), 0);
+        QCOMPARE(retired.size(), 2);
+        QCOMPARE(changes.size(), 1);
+        QCOMPARE(history.entries().first().toMap().value("id").toULongLong(), quint64(3));
+        history.clearFinished();
+        QCOMPARE(changes.size(), 1);
+        history.finish(3, false, "Again");
+        history.clearFinished();
+        QCOMPARE(history.rowCount(), 1);
+        QCOMPARE(history.entries().first().toMap().value("id").toULongLong(), quint64(4));
+    }
     void largeQueuesKeepActiveTasksAndOnlyTheLatestHundredFailures() {
         OperationHistory history;
         QSignalSpy retired(&history, &OperationHistory::dismissed),

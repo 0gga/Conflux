@@ -132,3 +132,5 @@ Bulk updates commit each content item independently. A failed or cancelled updat
 Main tab groups retain their outer capsule; subtabs have no surrounding container. Only the active tab or subtab has an outline. Inactive selections retain hover and keyboard-focus cues without outlines.
 
 Changelogs represent content versions, combining duplicate releases for different Minecraft versions and loaders. All versions lists every content version and its changelog in one scrollable history, separated by horizontal lines, without accordions. Version links open the corresponding content-version entry; exact release metadata and installation behavior stay unchanged.
+
+Keep the running task at the top of the task overview, followed by queued work and terminal history. Provide Clear finished for completed/failed tasks without removing or cancelling active work. Updating unlocked content must not attempt to replace unrelated unchanged files or be blocked by those files' locks or existing project-identity ambiguity.

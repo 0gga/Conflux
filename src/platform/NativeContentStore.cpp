@@ -185,7 +185,7 @@ ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, const QLis
     };
     for (const auto &edit : edits)
         if (locked(edit))
-            return {false, "Unlock this content before changing it."};
+            return {false, "Unlock " + (edit.from.isEmpty() ? edit.to : edit.from) + " before changing it."};
     QSet<QString> targets, removedPaths;
     for (const auto &edit : edits)
         if (!edit.from.isEmpty() && edit.to.isEmpty())
@@ -562,11 +562,14 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
         return {false, access.error()};
     const auto root = pack.value("path").toString();
     QMap<QString, QString> beforeHashes, actualHashes;
+    QHash<QString, QVariantMap> originalRows;
     for (const auto &value : expected) {
         const auto row = value.toMap();
         const auto path = row.value("relativePath").toString();
-        if (contentPath(path) && !row.value("directory").toBool())
+        if (contentPath(path) && !row.value("directory").toBool()) {
             beforeHashes[path] = row.value("sha1").toString();
+            originalRows.insert(path, row);
+        }
     }
     for (const auto &value : snapshot(pack, PackContent::scan(pack).files)) {
         const auto row = value.toMap();
@@ -604,7 +607,7 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
     const auto sourceLocks = LauncherContentState::read(pack);
     QList<Edit> removals, additions;
     QJsonArray mods, assets;
-    QSet<QString> replaced;
+    QSet<QString> replaced, retained;
     for (const auto &kind : {QString("mods"), QString("assets")})
         for (const auto &value : manifest.value(kind).toArray()) {
             auto ref = value.toObject();
@@ -616,6 +619,22 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
             if (hash.isEmpty() || source.isEmpty() || sha1File(source) != hash ||
                 !contentPath(category + '/' + file))
                 return {false, "Staged content failed final verification. Nothing was applied."};
+            if (ref.contains("confluxRetainedPath")) {
+                const auto originalPath = ref.take("confluxRetainedPath").toString();
+                const auto original = originalRows.value(originalPath);
+                if (original.isEmpty() || original.value("sha1").toString() != hash ||
+                    original.value("category").toString() != category || retained.contains(originalPath) ||
+                    replaced.contains(originalPath))
+                    return {false, "Retained content differs from its verified input. Nothing was applied."};
+                retained.insert(originalPath);
+                ref["installPath"] = originalPath;
+                ref["enabled"] = original.value("enabled").toBool();
+                if (kind == "mods")
+                    mods << ref;
+                else
+                    assets << ref;
+                continue;
+            }
             bool unchangedInput = false;
             for (const auto &value : expected)
                 if (value.toMap().value("sha1").toString() == hash)
@@ -689,7 +708,7 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
                 continue;
             if (!old.isEmpty()) {
                 const auto path = old.value("relativePath").toString();
-                if (replaced.contains(path))
+                if (replaced.contains(path) || retained.contains(path))
                     return {false, "Multiple projects would replace the same file."};
                 replaced.insert(path);
                 removals << Edit{path, {}, {}, old.value("sha1").toString()};

@@ -152,7 +152,7 @@ Item {
             R"QML(import QtQuick
 import QtQuick.Controls
 import "showcase"
-Item { GalleryViewer { id:viewer;objectName:"viewer" } function display(url) { viewer.show([url],0) } })QML",
+Item { GalleryViewer { id:viewer;objectName:"viewer" } function display(urls) { viewer.show(urls,0) } })QML",
             QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/GalleryFixture.qml"));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         std::unique_ptr<QQuickItem> root(qobject_cast<QQuickItem *>(component.create()));
@@ -161,14 +161,20 @@ Item { GalleryViewer { id:viewer;objectName:"viewer" } function display(url) { v
         original.fill(Qt::cyan);
         const auto path = storage.path() + "/original-gallery.png";
         QVERIFY(original.save(path));
+        QStringList urls{QUrl::fromLocalFile(path).toString()};
+        for (const auto &name : {"second", "third"}) {
+            original.fill(name == QString("second") ? Qt::magenta : Qt::green);
+            const auto otherPath = storage.path() + '/' + name + "-gallery.png";
+            QVERIFY(original.save(otherPath));
+            urls << QUrl::fromLocalFile(otherPath).toString();
+        }
         QQuickWindow window;
         window.resize(900, 700);
         root->setParentItem(window.contentItem());
         root->setSize(window.size());
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
-        QVERIFY(QMetaObject::invokeMethod(root.get(), "display",
-                                          Q_ARG(QVariant, QUrl::fromLocalFile(path).toString())));
+        QVERIFY(QMetaObject::invokeMethod(root.get(), "display", Q_ARG(QVariant, urls)));
         QTRY_VERIFY(item(window.contentItem(), "galleryEnlargedImage"));
         auto *picture = item(window.contentItem(), "galleryEnlargedImage");
         QTRY_COMPARE(picture->property("status").toInt(), 1);
@@ -181,6 +187,39 @@ Item { GalleryViewer { id:viewer;objectName:"viewer" } function display(url) { v
         QTRY_COMPARE(picture->width(), fitted * 3);
         QCOMPARE(picture->property("naturalSize").toSize(), original.size());
         QCOMPARE(picture->property("source").toUrl(), QUrl::fromLocalFile(path));
+        auto *viewport = item(window.contentItem(), "galleryEnlargedViewport");
+        QVERIFY(viewport);
+        const auto wheel = [&](int delta, Qt::KeyboardModifiers modifiers = Qt::NoModifier,
+                               QPoint pixels = {}) {
+            const QPointF pos = center(viewport);
+            QWheelEvent event(pos, window.mapToGlobal(pos.toPoint()), pixels, QPoint(0, delta), Qt::NoButton,
+                              modifiers, Qt::NoScrollPhase, false);
+            QCoreApplication::sendEvent(&window, &event);
+        };
+        wheel(120); // The first-image boundary preserves the existing zoom.
+        QCOMPARE(viewer->property("currentIndex").toInt(), 0);
+        QCOMPARE(viewer->property("zoom").toReal(), 3.);
+        wheel(-120);
+        QCOMPARE(viewer->property("currentIndex").toInt(), 1);
+        QCOMPARE(viewer->property("zoom").toReal(), 1.);
+        QCOMPARE(picture->property("source").toUrl(), QUrl(urls[1]));
+        wheel(120, Qt::ControlModifier);
+        QCOMPARE(viewer->property("currentIndex").toInt(), 1);
+        QVERIFY(qAbs(viewer->property("zoom").toReal() - 1.2) < 0.0001);
+        wheel(-120, Qt::ControlModifier | Qt::ShiftModifier);
+        QCOMPARE(viewer->property("currentIndex").toInt(), 1);
+        QVERIFY(qAbs(viewer->property("zoom").toReal() - 1.) < 0.0001);
+        wheel(0, Qt::NoModifier, QPoint(0, -40));
+        QCOMPARE(viewer->property("currentIndex").toInt(), 2);
+        viewer->setProperty("zoom", 3.);
+        wheel(-120); // The last-image boundary does not wrap or reset zoom.
+        QCOMPARE(viewer->property("currentIndex").toInt(), 2);
+        QCOMPARE(viewer->property("zoom").toReal(), 3.);
+        wheel(0);
+        QCOMPARE(viewer->property("zoom").toReal(), 3.);
+        wheel(120);
+        QCOMPARE(viewer->property("currentIndex").toInt(), 1);
+        QCOMPARE(picture->property("source").toUrl(), QUrl(urls[1]));
 #endif
     }
     void initTestCase() {

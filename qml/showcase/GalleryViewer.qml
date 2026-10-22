@@ -12,7 +12,7 @@ FocusPopup {
     property real zoom: 1
     signal externalRequested(string url)
     function show(items,index) { images=items;currentIndex=index;zoom=1;open() }
-    function next(offset) { currentIndex=Math.max(0,Math.min(images.length-1,currentIndex+offset));zoom=1;pan.contentX=0;pan.contentY=0 }
+    function next(offset) { const index=Math.max(0,Math.min(images.length-1,currentIndex+offset));if(index===currentIndex)return;currentIndex=index;zoom=1;pan.contentX=0;pan.contentY=0 }
     function magnify(factor) { zoom=Math.max(0.5,Math.min(4,zoom*factor)) }
     parent: Overlay.overlay
     width: parent ? parent.width / (Appearance.values.uiScale/100) : 1000
@@ -45,16 +45,25 @@ FocusPopup {
                 contentWidth: Math.max(width,picture.width); contentHeight: Math.max(height,picture.height)
                 Image {
                     id: picture; objectName: "galleryEnlargedImage"
-                    readonly property size naturalSize: Qt.size(implicitWidth, implicitHeight)
+                    readonly property size naturalSize: sourceSize
                     readonly property real fit: naturalSize.width>0 ? Math.min(pan.width/naturalSize.width,pan.height/naturalSize.height) * Appearance.values.galleryFitPercent/100 : 1
                     width: naturalSize.width>0 ? naturalSize.width*fit*root.zoom : pan.width
                     height: naturalSize.height>0 ? naturalSize.height*fit*root.zoom : pan.height
                     x: Math.max(0,(pan.width-width)/2); y: Math.max(0,(pan.height-height)/2)
                     source: root.images[root.currentIndex] || ""
-                    sourceSize: Qt.size(0, 0); asynchronous: true; fillMode: Image.PreserveAspectFit
+                    asynchronous: true; fillMode: Image.PreserveAspectFit
                     smooth: true
                 }
-                WheelHandler { onWheel: function(event) { root.magnify(event.angleDelta.y>0 ? 1.2 : 1/1.2);event.accepted=true } }
+                WheelHandler {
+                    acceptedModifiers: Qt.KeyboardModifierMask
+                    onWheel: function(event) {
+                        const delta = event.angleDelta.y || event.pixelDelta.y
+                        if (!delta) return
+                        if (event.modifiers & Qt.ControlModifier) root.magnify(delta > 0 ? 1.2 : 1/1.2)
+                        else root.next(delta > 0 ? -1 : 1)
+                        event.accepted = true
+                    }
+                }
             }
             Rectangle {
                 id: toolbar; objectName: "galleryToolbar"

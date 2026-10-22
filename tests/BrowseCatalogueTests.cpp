@@ -25,7 +25,7 @@ class MemoryBrowseSettings final : public IBrowseSettingsStore {
         data[key] = value;
     }
 };
-class SearchFixture final : public ICatalogueSearch {
+class SearchFixture final : public QObject, public ICatalogueSearch {
   public:
     struct Call {
         CatalogueQuery query;
@@ -35,12 +35,18 @@ class SearchFixture final : public ICatalogueSearch {
     QMap<QString, QVector<Project>> rows;
     QList<Call> calls;
     bool delayed = false;
+    int latencyMs = 0;
     bool delayedFacets = false;
     QList<std::function<void(QVariantMap, QString)>> facetCalls;
     void fetch(const CatalogueQuery &query, int offset, int limit, Callback callback) override {
         calls << Call{query, offset, limit, callback};
-        if (!delayed)
-            deliver(calls.size() - 1);
+        if (!delayed) {
+            const int index = calls.size() - 1;
+            if (latencyMs)
+                QTimer::singleShot(latencyMs, this, [this, index] { deliver(index); });
+            else
+                deliver(index);
+        }
     }
     void deliver(int index) {
         const auto call = calls[index];
@@ -82,6 +88,105 @@ class BrowseCatalogueTests final : public QObject {
         return fixture;
     }
   private slots:
+    void downloadHydrationHasABoundedRequestAndLatencyBudget_data() {
+        QTest::addColumn<QString>("sort");
+        QTest::addColumn<QString>("provider");
+        QTest::newRow("downloads-primary") << QString("downloads") << QString("modrinth");
+        QTest::newRow("relevance-primary") << QString("relevance") << QString("modrinth");
+        QTest::newRow("relevance-secondary") << QString("relevance") << QString("curseforge");
+    }
+    void downloadHydrationHasABoundedRequestAndLatencyBudget() {
+        QFETCH(QString, sort);
+        QFETCH(QString, provider);
+        auto api = source(50);
+        QHash<QString, QString> identities;
+        for (int i = 0; i < 50; ++i) {
+            auto cf = project(i, "curseforge");
+            api->rows["curseforge"] << cf;
+            const auto canonical = "pair-" + QString::number(i);
+            identities["modrinth:" + QString::number(i)] = canonical;
+            identities["curseforge:" + QString::number(i)] = canonical;
+        }
+        BrowseCatalogue model(
+            api, std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()), identities);
+        model.setKey("fixture");
+        model.setContext("pack", {}, {});
+        QTRY_VERIFY(!model.busy());
+        const int before = api->calls.size();
+        api->latencyMs = 20;
+        bool responsiveWhilePending = false;
+        QTimer heartbeat;
+        heartbeat.setInterval(1);
+        connect(&heartbeat, &QTimer::timeout, &model, [&] {
+            if (model.busy())
+                responsiveWhilePending = true;
+        });
+        heartbeat.start();
+        QElapsedTimer elapsed;
+        elapsed.start();
+        model.configure({{"source", provider}, {"sort", sort}});
+        QTRY_VERIFY_WITH_TIMEOUT(!model.busy(), 5000);
+        const int requests = api->calls.size() - before;
+        qInfo() << "Discover50 paired projects requests" << requests << "elapsed ms" << elapsed.elapsed();
+        QVERIFY2(requests <= 3, qPrintable(QString("Expected batched reads, got %1 requests").arg(requests)));
+        QVERIFY(responsiveWhilePending); // Metadata latency must not block the event loop.
+        QVERIFY(elapsed.elapsed() < 1000);
+        QCOMPARE(model.projects().size(), 20);
+        QCOMPARE(model.projects().first().toMap().value("downloadsRaw").toLongLong(), qint64(2000));
+        const int warm = api->calls.size();
+        model.setContext("other", {}, {});
+        QTRY_VERIFY(!model.busy());
+        const int returning = api->calls.size();
+        model.setContext("pack", {}, {});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(api->calls.size(), returning);
+        QVERIFY(returning >= warm);
+    }
+    void batchRepliesFromOldFiltersCannotReleaseNewRequests() {
+        auto api = source(1);
+        api->rows["curseforge"] = {project(0, "curseforge")};
+        const QHash<QString, QString> identities{{"modrinth:0", "pair"}, {"curseforge:0", "pair"}};
+        BrowseCatalogue model(
+            api, std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()), identities);
+        model.setKey("fixture");
+        model.setContext("pack", {}, {});
+        QTRY_VERIFY(!model.busy());
+        api->delayed = true;
+        const int first = api->calls.size();
+        model.configure({{"source", "modrinth"}, {"sort", "downloads"}});
+        api->deliver(first);
+        QTRY_COMPARE(api->calls.size(), first + 2);
+        const int staleBatch = first + 1;
+        model.configure({{"query", "new"}});
+        const int current = api->calls.size() - 1;
+        api->deliver(staleBatch);
+        QVERIFY(model.busy());
+        QVERIFY(model.projects().isEmpty());
+        api->deliver(current);
+        QTRY_COMPARE(api->calls.size(), current + 2);
+        api->deliver(current + 1);
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.filters().value("query").toString(), QString("new"));
+        QCOMPARE(model.projects().size(), 1);
+    }
+    void providerPagesStartInParallelAndAcceptReverseCompletion() {
+        auto api = source(10);
+        api->rows["curseforge"] = {project(50, "curseforge")};
+        BrowseCatalogue model(api,
+                              std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()));
+        model.setKey("fixture");
+        model.setContext("pack", {}, {});
+        QTRY_VERIFY(!model.busy());
+        api->delayed = true;
+        const int before = api->calls.size();
+        model.refresh();
+        QCOMPARE(api->calls.size() - before, 2);
+        api->deliver(before + 1);
+        QVERIFY(model.busy());
+        api->deliver(before);
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 11);
+    }
     void fileVerifiedProviderLinksDeduplicateAndKeepBothDownloadCounts() {
         auto fixture = source(1);
         auto cf = project(10, "curseforge");
@@ -324,6 +429,9 @@ class BrowseCatalogueTests final : public QObject {
             hydration.callback({{}, 0, "obsolete"});
             QVERIFY(model.notice().isEmpty());
             fixture->deliver(base + 2);
+            // Relevance now batches linked metadata too; finish the current generation only.
+            QTRY_COMPARE(fixture->calls.size(), base + 4);
+            fixture->deliver(base + 3);
         } else
             hydration.callback({{}, 0, "counterpart unavailable"});
         QTRY_VERIFY(!model.busy());

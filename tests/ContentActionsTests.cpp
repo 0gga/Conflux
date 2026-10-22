@@ -518,6 +518,120 @@ class ContentActionsTests : public QObject {
         QCOMPARE(content.inventory().first().toMap().value("sha1").toString(), QString("2"));
         QCOMPARE(catalogue->refreshCount, 2);
     }
+    void refreshFindsNewCompatibleUploadsInTheInstalledChannel_data() {
+        QTest::addColumn<QString>("oldChannel");
+        QTest::addColumn<QString>("newChannel");
+        QTest::addColumn<QString>("candidateGame");
+        QTest::addColumn<QString>("candidateLoader");
+        QTest::addColumn<bool>("expected");
+        QTest::newRow("SoundPhysics1.5.1-alpha-to1.5.2-beta")
+            << QString("alpha") << QString("beta") << QString("1.21.1") << QString("neoforge") << true;
+        QTest::newRow("beta-to-beta")
+            << QString("beta") << QString("beta") << QString("1.21.1") << QString("neoforge") << true;
+        QTest::newRow("beta-to-release")
+            << QString("beta") << QString("release") << QString("1.21.1") << QString("neoforge") << true;
+        QTest::newRow("alpha-to-alpha")
+            << QString("alpha") << QString("alpha") << QString("1.21.1") << QString("neoforge") << true;
+        QTest::newRow("stable-does-not-opt-into-beta")
+            << QString("release") << QString("beta") << QString("1.21.1") << QString("neoforge") << false;
+        QTest::newRow("beta-does-not-opt-into-alpha")
+            << QString("beta") << QString("alpha") << QString("1.21.1") << QString("neoforge") << false;
+        QTest::newRow("wrong-minecraft")
+            << QString("alpha") << QString("beta") << QString("1.20.1") << QString("neoforge") << false;
+        QTest::newRow("wrong-loader")
+            << QString("alpha") << QString("beta") << QString("1.21.1") << QString("fabric") << false;
+    }
+    void refreshFindsNewCompatibleUploadsInTheInstalledChannel() {
+        QFETCH(QString, oldChannel);
+        QFETCH(QString, newChannel);
+        QFETCH(QString, candidateGame);
+        QFETCH(QString, candidateLoader);
+        QFETCH(bool, expected);
+        QTcpServer server;
+        QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+        const QString hash(40, 'a');
+        bool published = false;
+        QList<QJsonArray> queries;
+        const auto release = [&](bool newer) {
+            return QJsonObject{
+                {"id", newer ? "85fA7L1W" : "previous"},
+                {"project_id", "qyVF9oeo"},
+                {"version_number", newer ? "neoforge-1.21.1-1.5.2" : "neoforge-1.21.1-1.5.1"},
+                {"date_published", newer ? "2026-10-21T18:10:25.080780Z" : "2025-09-25T14:30:18.415525Z"},
+                {"version_type", newer ? newChannel : oldChannel},
+                {"game_versions", newer ? QJsonArray{"1.21", candidateGame} : QJsonArray{"1.21", "1.21.1"}},
+                {"loaders", QJsonArray{newer ? candidateLoader : QString("neoforge")}},
+                {"files", QJsonArray{QJsonObject{
+                              {"filename", "sound-physics.jar"},
+                              {"primary", true},
+                              {"size", 100},
+                              {"url", "https://example.invalid/sound-physics.jar"},
+                              {"hashes", QJsonObject{{"sha1", newer ? QString(40, 'b') : hash}}}}}}};
+        };
+        connect(&server, &QTcpServer::newConnection, &server, [&] {
+            auto *socket = server.nextPendingConnection();
+            connect(socket, &QTcpSocket::readyRead, socket, [&, socket] {
+                const auto bytes = socket->property("buffer").toByteArray() + socket->readAll();
+                socket->setProperty("buffer", bytes);
+                const int split = bytes.indexOf("\r\n\r\n");
+                if (split < 0 || socket->property("answered").toBool())
+                    return;
+                int size = 0;
+                for (const auto &line : bytes.left(split).split('\n'))
+                    if (line.toLower().startsWith("content-length:"))
+                        size = line.mid(15).trimmed().toInt();
+                if (bytes.size() < split + 4 + size)
+                    return;
+                socket->setProperty("answered", true);
+                const auto path = bytes.split(' ').value(1);
+                QJsonDocument response(QJsonArray{});
+                if (path == "/version_files")
+                    response = QJsonDocument(QJsonObject{{hash, release(false)}});
+                if (path == "/version_files/update") {
+                    const auto channels = QJsonDocument::fromJson(bytes.mid(split + 4, size))
+                                              .object()
+                                              .value("version_types")
+                                              .toArray();
+                    queries << channels;
+                    const bool offer = published && channels.contains(newChannel);
+                    response = QJsonDocument(QJsonObject{{hash, release(offer)}});
+                }
+                const auto body = response.toJson(QJsonDocument::Compact);
+                socket->write("HTTP/1.1 200 OK\r\nContent-Length: " + QByteArray::number(body.size()) +
+                              "\r\nConnection: close\r\n\r\n" + body);
+                socket->disconnectFromHost();
+            });
+            connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+        });
+        QTemporaryDir temp;
+        auto catalogue = std::make_shared<ContentCatalogue>(
+            nullptr, QUrl("http://127.0.0.1:" + QString::number(server.serverPort()) + "/"));
+        catalogue->setCurseforgeKey({});
+        ContentActions content(std::make_shared<ContentFileFixture>(), catalogue,
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        const QVariantMap pack{{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "neoforge"}};
+        content.setContext(pack, {QVariantMap{{"category", "mods"},
+                                              {"relativePath", "mods/sound-physics.jar"},
+                                              {"sha1", hash},
+                                              {"title", "Sound Physics Remastered"}}});
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(content.actionableUpdateCount(), 0);
+        published = true;
+        QVERIFY(QMetaObject::invokeMethod(&content, "refresh"));
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(content.actionableUpdateCount(), expected ? 1 : 0);
+        QCOMPARE(queries.size(), 2);
+        if (oldChannel == "alpha")
+            QVERIFY(queries.last().contains("alpha"));
+        if (oldChannel != "release")
+            QVERIFY(queries.last().contains("beta"));
+        content.setFilter("updates", true);
+        QCOMPARE(content.rows().size(), expected ? 1 : 0);
+        if (expected)
+            QCOMPARE(content.rows().first().toMap().value("updateRelease").toMap().value("id").toString(),
+                     QString("85fA7L1W"));
+    }
     void connectorUpdatesPreserveInstalledLoader_data() {
         QTest::addColumn<QStringList>("installedLoaders");
         QTest::addColumn<QString>("expected");

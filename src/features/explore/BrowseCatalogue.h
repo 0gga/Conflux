@@ -96,6 +96,7 @@ class BrowseCatalogue final : public QObject {
     std::shared_ptr<IContentVisibility> m_visibility;
     std::shared_ptr<IBrowseFilterPreferences> m_preferences;
     QHash<QString, QString> m_identities;
+    QHash<QString, QStringList> m_reviewedAliases;
     QSet<QString> m_installed, m_seen, m_downloadLookups;
     QHash<QString, Project> m_known;
     QVariantMap m_filters, m_options, m_defaults, m_author;
@@ -111,7 +112,7 @@ class BrowseCatalogue final : public QObject {
     int m_page = 0, m_targetPage = 0, m_generation = 0, m_reads = 0;
     bool m_busy = false, m_cf = false, m_optionsLoaded = false;
     bool m_defaultLoaderSelection = true;
-    bool m_awaitingReply = false;
+    int m_pendingReplies = 0;
     qreal m_scroll = 0;
     QVariantList m_building;
     CatalogueQuery request(const QString &) const;
@@ -120,7 +121,7 @@ class BrowseCatalogue final : public QObject {
     void reset();
     void pump();
     void fetchMore(const QString &);
-    bool hydrateDownloads();
+    bool hydrateLinkedProjects();
     void publish(Project);
     bool before(const Project &, const Project &) const;
     QString viewKey() const;

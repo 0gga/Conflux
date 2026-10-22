@@ -28,11 +28,17 @@ static QVariantMap verifiedRowProjects(const QVariantMap &row) {
 BrowseInstalls::BrowseInstalls(std::shared_ptr<IContentCatalogue> source, QObject *parent)
     : QObject(parent), m_catalogue(std::move(source)) {}
 void BrowseInstalls::setContext(const QVariantMap &pack, const QVariantList &rows, bool busy) {
+    if (!m_identitiesChanged && pack == m_pack && rows == m_inputRows && busy == m_indexing)
+        return;
+    m_identitiesChanged = false;
+    m_inputRows = rows;
+    m_projectRows.clear();
     if (m_pack.value("path") != pack.value("path")) {
         m_notice.clear();
     }
     m_pack = pack;
     m_rows = rows;
+    int rowIndex = 0;
     for (auto &value : m_rows) {
         auto row = value.toMap();
         auto ids = verifiedRowProjects(row);
@@ -42,7 +48,17 @@ void BrowseInstalls::setContext(const QVariantMap &pack, const QVariantList &row
                 ids.insert(it.key(), it.value());
         if (!ids.isEmpty())
             row["sourceIds"] = ids;
+        const auto category = row.value("category").toString();
+        const bool destination =
+            category != "datapacks" || row.value("relativePath").toString().startsWith("datapacks/");
+        if (destination)
+            for (auto it = ids.cbegin(); it != ids.cend(); ++it) {
+                const auto key = category + QChar(0x1f) + it.key() + ':' + it.value().toString();
+                if (!it.value().toString().isEmpty() && !m_projectRows.contains(key))
+                    m_projectRows.insert(key, rowIndex);
+            }
         value = row;
+        ++rowIndex;
     }
     m_indexing = busy;
     ++m_revision;
@@ -104,6 +120,7 @@ void BrowseInstalls::rememberReleases(const QVariantMap &project, const QVariant
             }
         }
     if (changed) {
+        m_identitiesChanged = true;
         const auto rows = m_rows;
         setContext(m_pack, rows, m_indexing);
     }
@@ -124,24 +141,23 @@ QVariantMap BrowseInstalls::state(const QVariantMap &project) const {
     auto ids = project.value("sourceIds").toMap();
     if (ids.isEmpty())
         ids[project.value("provider").toString()] = project.value("id");
-    for (const auto &value : m_rows) {
-        const auto row = value.toMap();
-        if (categoryType(row.value("category").toString()) != type &&
-            !(type == "datapack" && row.value("category") == "mods"))
-            continue;
-        if (type == "datapack" && row.value("category") == "datapacks" &&
-            !row.value("relativePath").toString().startsWith("datapacks/"))
-            continue;
-        const auto known = row.value("sourceIds").toMap();
-        for (auto it = ids.cbegin(); it != ids.cend(); ++it)
-            if (!it.value().toString().isEmpty() &&
-                known.value(it.key()).toString() == it.value().toString()) {
-                out["locked"] = row.value("locked").toBool();
-                out["installed"] = true;
-                out["canInstall"] = false;
-                out["label"] = row.value("enabled", true).toBool() ? "Installed" : "Installed · disabled";
-                return out;
-            }
+    int index = -1;
+    const QStringList categories =
+        type == "datapack" ? QStringList{"datapacks", "mods"} : QStringList{contentCategory(type)};
+    for (const auto &category : categories)
+        for (auto it = ids.cbegin(); it != ids.cend(); ++it) {
+            const auto found =
+                m_projectRows.constFind(category + QChar(0x1f) + it.key() + ':' + it.value().toString());
+            if (found != m_projectRows.cend() && (index < 0 || *found < index))
+                index = *found;
+        }
+    if (index >= 0) {
+        const auto row = m_rows.at(index).toMap();
+        out["locked"] = row.value("locked").toBool();
+        out["installed"] = true;
+        out["canInstall"] = false;
+        out["label"] = row.value("enabled", true).toBool() ? "Installed" : "Installed \u00b7 disabled";
+        return out;
     }
     if (ids.value("modrinth").toString().isEmpty() && !m_curseforgeEnabled) {
         out["canInstall"] = false;

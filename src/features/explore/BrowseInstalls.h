@@ -65,7 +65,9 @@ class BrowseInstalls final : public QObject {
   private:
     std::shared_ptr<IContentCatalogue> m_catalogue;
     QVariantMap m_pack;
-    QVariantList m_rows;
+    QVariantList m_rows, m_inputRows;
+    QHash<QString, int> m_projectRows;
+    bool m_identitiesChanged = false;
     QString m_target, m_notice;
     bool m_indexing = false;
     bool m_curseforgeEnabled = false;

@@ -179,18 +179,26 @@ class CurseforgeInstallTests final : public QObject {
         server.responses["/version_files"] = "{}";
         ContentCatalogue source(nullptr, server.base(), server.base());
         source.setCurseforgeKey("fixture-key");
-        const auto installed = curseforgeRelease(old);
-        const QVariantMap row{{"category", "mods"},
-                              {"locked", true},
-                              {"sha1", installed.sha1},
-                              {"sourceIds", QVariantMap{{"curseforge", "11"}}},
-                              {"installedRelease", installed.toVariant()}};
-        for (int scenario = 0; scenario < 3; ++scenario) {
+        auto installed = curseforgeRelease(old);
+        QVariantMap row{{"category", "mods"},
+                        {"locked", true},
+                        {"sha1", installed.sha1},
+                        {"sourceIds", QVariantMap{{"curseforge", "11"}}},
+                        {"installedRelease", installed.toVariant()}};
+        for (int scenario = 0; scenario < 8; ++scenario) {
             if (scenario == 1)
                 candidate = old;
             if (scenario == 2) {
                 candidate = server.file(11, 103, "wrong version");
                 candidate["gameVersions"] = QJsonArray{"1.20.1", "Fabric"};
+            }
+            if (scenario >= 3) {
+                candidate = server.file(11, 102, "new bytes");
+                installed.channel = scenario == 5                    ? "release"
+                                    : scenario == 3 || scenario == 7 ? "alpha"
+                                                                     : "beta";
+                candidate["releaseType"] = scenario == 6 ? 1 : scenario == 4 || scenario == 7 ? 3 : 2;
+                row["installedRelease"] = installed.toVariant();
             }
             server.json("/mods/11/files", QJsonArray{candidate});
             bool done = false;
@@ -204,7 +212,8 @@ class CurseforgeInstallTests final : public QObject {
             QTRY_VERIFY(done);
             QVERIFY2(error.isEmpty(), qPrintable(error));
             QCOMPARE(rows.size(), 1);
-            QCOMPARE(rows.first().toMap().value("updateAvailable").toBool(), scenario == 0);
+            QCOMPARE(rows.first().toMap().value("updateAvailable").toBool(),
+                     (scenario == 0 || scenario == 3 || scenario == 6 || scenario == 7));
             QVERIFY(rows.first().toMap().value("locked").toBool());
         }
     }

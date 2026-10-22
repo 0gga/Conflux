@@ -13,6 +13,8 @@ BrowseCatalogue::BrowseCatalogue(std::shared_ptr<ICatalogueSearch> source,
                                  std::shared_ptr<IBrowseFilterPreferences> preferences, QObject *parent)
     : QObject(parent), m_source(std::move(source)), m_visibility(std::move(visibility)),
       m_preferences(std::move(preferences)), m_identities(std::move(ids)) {
+    for (auto it = m_identities.cbegin(); it != m_identities.cend(); ++it)
+        m_reviewedAliases[it.value()] << it.key();
     m_filters = {{"query", ""},
                  {"source", "merged"},
                  {"type", "mod"},
@@ -111,7 +113,7 @@ bool BrowseCatalogue::applyDefaults() {
 void BrowseCatalogue::activateView(const QVariantMap &changes) {
     ++m_generation;
     m_downloadLookups.clear();
-    m_awaitingReply = false;
+    m_pendingReplies = 0;
     m_busy = false;
     m_notice.clear();
     if (m_contexts.contains(viewKey())) {
@@ -299,7 +301,7 @@ void BrowseCatalogue::reset() {
     m_scroll = 0;
     m_reads = 0;
     m_busy = true;
-    m_awaitingReply = false;
+    m_pendingReplies = 0;
     m_notice.clear();
     const auto source = m_filters.value("source").toString();
     if (source != "curseforge")
@@ -358,26 +360,25 @@ void BrowseCatalogue::fetchMore(const QString &provider) {
     const auto generation = m_generation;
     const int offset = m_streams.value(provider).offset;
     QPointer<BrowseCatalogue> guard(this);
-    m_awaitingReply = true;
+    ++m_pendingReplies;
     m_source->fetch(
         request(provider), offset, 50, [guard, generation, provider, offset](CataloguePage result) {
             if (!guard || guard->m_generation != generation)
                 return;
-            guard->m_awaitingReply = false;
+            --guard->m_pendingReplies;
             auto &stream = guard->m_streams[provider];
             stream.offset += result.projects.size();
             stream.total = qMax(qint64(0), result.total);
             stream.nextDownloadBound =
                 result.projects.isEmpty() ? 0 : qMax(qint64(0), result.projects.last().downloads);
-            if (guard->m_filters.value("sort") == "downloads")
-                for (const auto &project : result.projects) {
-                    const auto key = guard->identity(project);
-                    if (guard->m_known.contains(key))
-                        guard->m_known[key] =
-                            mergeProjects({guard->m_known[key], project}, guard->m_identities).first();
-                    else
-                        guard->m_known[key] = project;
-                }
+            for (const auto &project : result.projects) {
+                const auto key = guard->identity(project);
+                if (guard->m_known.contains(key))
+                    guard->m_known[key] =
+                        mergeProjects({guard->m_known[key], project}, guard->m_identities).first();
+                else
+                    guard->m_known[key] = project;
+            }
             stream.rows += result.projects;
             stream.exhausted =
                 result.projects.isEmpty() || stream.offset >= result.total || !result.error.isEmpty();
@@ -401,41 +402,58 @@ void BrowseCatalogue::fetchMore(const QString &provider) {
             guard->schedulePump();
         });
 }
-bool BrowseCatalogue::hydrateDownloads() {
+bool BrowseCatalogue::hydrateLinkedProjects() {
+    struct Batch {
+        CatalogueQuery query;
+        QHash<QString, QString> keys;
+    };
+    QMap<QString, Batch> batches;
     for (const auto &stream : m_streams)
         for (const auto &project : stream.rows) {
             const auto key = identity(project);
-            for (auto it = m_identities.cbegin(); it != m_identities.cend(); ++it) {
-                const auto provider = it.key().section(':', 0, 0);
-                if (it.value() != key || provider == project.provider ||
-                    (provider == "curseforge" && !m_cf) || m_downloadLookups.contains(it.key()) ||
+            auto aliases = m_reviewedAliases.value(key);
+            const auto sources = m_known.value(key, project).sourceIds;
+            for (auto it = sources.cbegin(); it != sources.cend(); ++it)
+                aliases << it.key() + ':' + it.value();
+            for (const auto &alias : aliases) {
+                const auto provider = alias.section(':', 0, 0), id = alias.section(':', 1);
+                if (provider == project.provider || (provider == "curseforge" && !m_cf) ||
+                    m_downloadLookups.contains(alias) ||
                     m_known.value(key).sourceDownloads.contains(provider))
                     continue;
-                m_downloadLookups.insert(it.key());
-                CatalogueQuery query;
-                query.provider = provider;
-                query.type = project.type;
-                query.projectIds = {it.key().section(':', 1)};
-                const auto generation = m_generation;
-                QPointer<BrowseCatalogue> guard(this);
-                m_awaitingReply = true;
-                m_source->fetch(query, 0, 1, [guard, generation, key](CataloguePage result) {
-                    if (!guard || guard->m_generation != generation)
-                        return;
-                    guard->m_awaitingReply = false;
-                    if (!result.projects.isEmpty())
-                        guard->m_known[key] =
-                            mergeProjects({guard->m_known.value(key), result.projects.first()},
-                                          guard->m_identities)
-                                .first();
-                    if (!result.error.isEmpty())
-                        guard->m_notice = result.error;
-                    guard->schedulePump();
-                });
-                return true;
+                auto &batch = batches[provider + '|' + project.type];
+                if (batch.query.projectIds.size() >= 50)
+                    continue;
+                m_downloadLookups.insert(alias);
+                batch.query.provider = provider;
+                batch.query.type = project.type;
+                batch.query.projectIds << id;
+                batch.keys[id] = key;
             }
         }
-    return false;
+    if (batches.isEmpty())
+        return false;
+    const auto generation = m_generation;
+    QPointer<BrowseCatalogue> guard(this);
+    m_pendingReplies += batches.size();
+    for (const auto &batch : batches)
+        m_source->fetch(batch.query, 0, 50, [guard, generation, keys = batch.keys](CataloguePage result) {
+            if (!guard || guard->m_generation != generation)
+                return;
+            --guard->m_pendingReplies;
+            for (const auto &project : result.projects) {
+                const auto found = keys.constFind(project.id);
+                if (found == keys.cend())
+                    continue;
+                const auto key = *found;
+                guard->m_known[key] =
+                    mergeProjects({guard->m_known.value(key), project}, guard->m_identities).first();
+            }
+            if (!result.error.isEmpty())
+                guard->m_notice = result.error;
+            guard->schedulePump();
+        });
+    return true;
 }
 void BrowseCatalogue::schedulePump() {
     const auto generation = m_generation;
@@ -445,20 +463,29 @@ void BrowseCatalogue::schedulePump() {
     });
 }
 void BrowseCatalogue::pump() {
-    if (!m_busy || m_awaitingReply)
+    if (!m_busy || m_pendingReplies > 0)
         return;
-    for (auto it = m_streams.begin(); it != m_streams.end(); ++it)
+    QStringList missing;
+    for (auto it = m_streams.cbegin(); it != m_streams.cend(); ++it)
         if (it->rows.isEmpty() && !it->exhausted) {
             if (++m_reads > 24) {
                 m_notice = "Many results are hidden. This page is partial; continue to see more.";
                 break;
             }
-            fetchMore(it.key());
-            return;
+            missing << it.key();
         }
+    // Launch all independent provider reads before accepting even synchronous callbacks.
+    if (!missing.isEmpty()) {
+        m_pendingReplies += missing.size();
+        for (const auto &provider : missing) {
+            --m_pendingReplies;
+            fetchMore(provider);
+        }
+        return;
+    }
+    if (hydrateLinkedProjects())
+        return;
     if (m_filters.value("sort") == "downloads") {
-        if (hydrateDownloads())
-            return;
         for (auto &stream : m_streams)
             std::stable_sort(stream.rows.begin(), stream.rows.end(),
                              [this](const Project &a, const Project &b) {
@@ -520,28 +547,6 @@ void BrowseCatalogue::pump() {
             for (auto it = m_identities.cbegin(); it != m_identities.cend(); ++it)
                 if (it.value() == key)
                     p.sourceIds[it.key().section(':', 0, 0)] = it.key().section(':', 1);
-        if (p.provider == "curseforge" && p.sourceIds.contains("modrinth") && !m_known.contains(key)) {
-            CatalogueQuery query;
-            query.type = p.type;
-            query.projectIds = {p.sourceIds.value("modrinth")};
-            const auto generation = m_generation;
-            QPointer<BrowseCatalogue> guard(this);
-            m_awaitingReply = true;
-            m_source->fetch(query, 0, 1, [guard, generation, p](CataloguePage result) {
-                if (!guard || guard->m_generation != generation)
-                    return;
-                guard->m_awaitingReply = false;
-                auto joined = p;
-                if (!result.projects.isEmpty())
-                    joined = mergeProjects(QVector<Project>{p, result.projects.first()}, guard->m_identities)
-                                 .first();
-                else if (!result.error.isEmpty())
-                    guard->m_notice = "Modrinth metadata: " + result.error;
-                guard->publish(joined);
-                guard->schedulePump();
-            });
-            return;
-        }
         publish(p);
         if (m_filters.value("sort") == "downloads" && m_building.size() < size) {
             schedulePump();

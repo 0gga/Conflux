@@ -9,6 +9,15 @@
 #include <QUrlQuery>
 #include <memory>
 namespace studio {
+static QStringList updateChannels(const QString &installedChannel) {
+    QStringList channels{"release"};
+    if (installedChannel == "beta" || installedChannel == "alpha")
+        channels << "beta";
+    if (installedChannel == "alpha")
+        channels << "alpha";
+    return channels;
+}
+
 ContentCatalogue::ContentCatalogue(QObject *parent, QUrl api, QUrl curseforgeApi)
     : QObject(parent), m_network(this), m_api(std::move(api)),
       m_client(this, m_api, std::move(curseforgeApi)) {
@@ -197,7 +206,7 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
                             });
                 };
                 QMap<QString, QJsonArray> groups;
-                QMap<QString, QStringList> permitted;
+                QMap<QString, QStringList> permitted, channels;
                 if (!game.isEmpty())
                     for (const auto &value : batch->rows) {
                         const auto row = value.toMap();
@@ -226,7 +235,9 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
                         if (loaders.isEmpty())
                             continue;
                         loaders.sort();
-                        const auto key = category + '|' + loaders.join('|');
+                        const auto channel = modrinthRelease(installed, hash).channel;
+                        const auto key = category + '|' + loaders.join('|') + '|' + channel;
+                        channels[key] = updateChannels(channel);
                         if (!groups[key].contains(hash))
                             groups[key] << hash;
                         permitted[key] = loaders;
@@ -239,21 +250,23 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
                 for (auto it = groups.cbegin(); it != groups.cend(); ++it) {
                     const auto category = it.key().section('|', 0, 0);
                     const auto loaders = permitted.value(it.key());
+                    const auto allowedChannels = channels.value(it.key());
                     QJsonObject updates{{"hashes", it.value()},
                                         {"algorithm", "sha1"},
                                         {"game_versions", QJsonArray{game}},
                                         {"loaders", QJsonArray::fromStringList(loaders)},
-                                        {"version_types", QJsonArray{"release"}}};
+                                        {"version_types", QJsonArray::fromStringList(allowedChannels)}};
                     request("version_files/update", &updates,
-                            [batch, loadMetadata, pending, category, loaders, game](const QJsonDocument &doc,
-                                                                                    const QString &error) {
+                            [batch, loadMetadata, pending, category, loaders, game,
+                             allowedChannels](const QJsonDocument &doc, const QString &error) {
                                 if (!error.isEmpty())
                                     batch->errors << "Update check: " + error;
                                 const auto values = doc.object();
                                 for (auto it = values.begin(); it != values.end(); ++it) {
                                     const auto release = modrinthRelease(it.value().toObject());
                                     const auto extension = category == "mods" ? ".jar" : ".zip";
-                                    if (release.channel == "release" && release.gameVersions.contains(game) &&
+                                    if (allowedChannels.contains(release.channel) &&
+                                        release.gameVersions.contains(game) &&
                                         sharesLoader(release.loaders, loaders) &&
                                         release.filename.endsWith(extension, Qt::CaseInsensitive))
                                         batch->latest[it.key() + '|' + category] = it.value();
@@ -317,8 +330,9 @@ void ContentCatalogue::refreshCurseforge(QVariantList rows, const QString &game,
                     row["updateAvailable"] = false;
                     row.remove("updateRelease");
                     Release newest;
+                    const auto allowedChannels = updateChannels(installed.channel);
                     for (const auto &release : releases)
-                        if (release.channel == "release" && !release.url.isEmpty() &&
+                        if (allowedChannels.contains(release.channel) && !release.url.isEmpty() &&
                             !release.sha1.isEmpty() && isNewerRelease(installed, release) &&
                             (newest.id.isEmpty() || isNewerRelease(newest, release)))
                             newest = release;

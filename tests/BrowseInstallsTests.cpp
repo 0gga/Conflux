@@ -1,5 +1,6 @@
 #include "domain/ContentTypes.h"
 #include "features/explore/BrowseInstalls.h"
+#include <QElapsedTimer>
 #include <QtTest>
 using namespace studio;
 class DeferredVersionCatalogue final : public IContentCatalogue {
@@ -30,6 +31,32 @@ class BrowseInstallsTests : public QObject {
                  QVariantMap{{"provider", "modrinth"}, {"projectId", "project"}, {"id", "version"}}}};
     }
   private slots:
+    void badgeReadsAndIdenticalContextUpdatesStayWithinBudget() {
+        BrowseInstalls model(std::make_shared<DeferredVersionCatalogue>());
+        QVariantList rows;
+        for (int i = 0; i < 5000; ++i) {
+            auto file = row();
+            file.remove("installedRelease");
+            file["sourceIds"] = QVariantMap{{"modrinth", QString::number(i)}};
+            file["sha1"] = QString::number(i);
+            rows << file;
+        }
+        const QVariantMap pack{{"path", "a"}};
+        model.setTargetPath("a");
+        model.setContext(pack, rows, false);
+        auto last = project();
+        last["sourceIds"] = QVariantMap{{"modrinth", "4999"}};
+        QElapsedTimer elapsed;
+        elapsed.start();
+        for (int i = 0; i < 10000; ++i)
+            QVERIFY(model.state(last).value("installed").toBool());
+        qInfo() << "10000 indexed badge reads over5000 mods ms" << elapsed.elapsed();
+        QVERIFY(elapsed.elapsed() < 1000);
+        QSignalSpy changes(&model, &BrowseInstalls::changed);
+        for (int i = 0; i < 100; ++i)
+            model.setContext(pack, rows, false);
+        QCOMPARE(changes.count(), 0);
+    }
     void exactReleaseHashesInformCardsAcrossProvidersWithoutTitleGuessing() {
         BrowseInstalls model(std::make_shared<DeferredVersionCatalogue>());
         auto file = row();

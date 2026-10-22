@@ -74,6 +74,7 @@ class ContentActionsTests : public QObject {
         ContentInstallRequest request;
         request.release.provider = "modrinth";
         request.release.projectId = "root";
+        request.release.filename = "root.jar";
         request.release.gameVersions = {"1.21.1"};
         request.release.loaders = {"fabric"};
         request.sourceIds = {{"modrinth", "root"}};
@@ -856,7 +857,12 @@ class ContentActionsTests : public QObject {
         QVERIFY(!files.remove(pack, {item}).ok);
         write(temp.path() + "/upload.jar", "upload");
         QVERIFY(files.importFiles(pack, {QUrl::fromLocalFile(temp.path() + "/upload.jar")}, "mods").ok);
-        QVERIFY(!files.importFiles(pack, {QUrl::fromLocalFile(temp.path() + "/upload.jar")}, "mods").ok);
+        write(temp.path() + "/upload.jar", "replacement");
+        const auto overwritten =
+            files.importFiles(pack, {QUrl::fromLocalFile(temp.path() + "/upload.jar")}, "mods");
+        QVERIFY2(overwritten.ok, qPrintable(overwritten.error));
+        QCOMPARE(read(root + "/mods/upload.jar"), QByteArray("replacement"));
+        QCOMPARE(read(overwritten.backupPath + "/mods/upload.jar"), QByteArray("upload"));
     }
     void managedToggleUpdatesTheExactPin() {
         QTemporaryDir temp;

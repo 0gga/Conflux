@@ -764,6 +764,7 @@ void ContentActions::install(const QVector<ContentInstallRequest> &requests, con
                     match = true;
             if (match) {
                 request.resolveDependencies = false;
+                request.installedPath = candidate.value("relativePath").toString();
                 row = candidate;
                 break;
             }

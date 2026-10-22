@@ -12,15 +12,13 @@
 
 namespace studio {
 ModInstaller::ModInstaller(QObject *parent, QUrl api)
-    : QObject(parent), m_network(this), m_api(std::move(api)) {}
+    : QObject(parent), m_network(this), m_download(this, api.host() == "127.0.0.1"), m_api(std::move(api)) {
+    connect(&m_download, &VerifiedDownload::progress, this, &ModInstaller::progress);
+}
 ModInstaller::~ModInstaller() {
     m_busy = false;
+    m_download.cancel();
     ++m_generation;
-    if (m_downloadFile) {
-        m_downloadFile->cancelWriting();
-        (void)m_downloadFile->commit();
-        m_downloadFile.reset();
-    }
     if (m_reply) {
         disconnect(m_reply, nullptr, this, nullptr);
         m_reply->abort();
@@ -31,13 +29,9 @@ void ModInstaller::fail(const QString &message) {
     if (!m_busy)
         return;
     m_busy = false;
+    m_download.cancel();
     m_applying = false;
     ++m_generation;
-    if (m_downloadFile) {
-        m_downloadFile->cancelWriting();
-        (void)m_downloadFile->commit();
-        m_downloadFile.reset();
-    }
     auto *reply = m_reply;
     m_reply = nullptr;
     if (reply)
@@ -46,6 +40,10 @@ void ModInstaller::fail(const QString &message) {
     emit finished({false, message, m_path});
 }
 void ModInstaller::cancel() {
+    if (cancellable() && m_download.busy()) {
+        m_download.cancel();
+        return;
+    }
     if (cancellable())
         fail("Mod installation cancelled. The pack manifest was not changed.");
 }
@@ -83,11 +81,12 @@ void ModInstaller::start(const QString &path, const Release &release, const QStr
     startBatch(path, {{release, title, projectIds}});
 }
 void ModInstaller::startBatch(const QString &path, const QVector<ContentInstallRequest> &requests,
-                              bool allowFabricBridge) {
+                              bool allowFabricBridge, bool referenceOnly) {
     if (m_busy)
         return;
     m_busy = true;
     m_applying = false;
+    m_referenceOnly = referenceOnly;
     ++m_generation;
     m_path = path;
     m_downloadIndex = 0;
@@ -127,8 +126,11 @@ void ModInstaller::startBatch(const QString &path, const QVector<ContentInstallR
     if (allowFabricBridge && QStringList{"forge", "neoforge"}.contains(m_loader))
         m_allowedLoaders << "fabric";
     m_rootIdentities.clear();
-    for (const auto &request : requests)
+    m_rootPaths.clear();
+    for (const auto &request : requests) {
         m_rootIdentities[request.release.projectId] = request.sourceIds;
+        m_rootPaths[request.release.projectId] = request.installedPath;
+    }
     m_staging = std::make_shared<QTemporaryDir>();
     if (!m_staging->isValid()) {
         fail("Could not create a temporary download folder.");
@@ -279,6 +281,8 @@ void ModInstaller::resolveNext() {
         for (const auto &release : m_resolved) {
             auto reference = QJsonObject::fromVariantMap(release.toVariant());
             reference.insert("projectTitle", m_titles.value(release.projectId, release.projectId));
+            if (!m_rootPaths.value(release.projectId).isEmpty())
+                reference.insert("confluxReplacePath", m_rootPaths.value(release.projectId));
             reference.insert(
                 "projectSourceIds",
                 m_rootIdentities.value(release.projectId, QJsonObject{{"modrinth", release.projectId}}));
@@ -388,6 +392,10 @@ void ModInstaller::downloadNext() {
         return;
     }
     const auto ref = m_references.at(m_downloadIndex++).toObject();
+    if (m_referenceOnly && ref.contains("confluxRetainedPath")) {
+        downloadNext();
+        return;
+    }
     if (ref.value("provider").toString() != "modrinth") {
         downloadNext();
         return;
@@ -429,77 +437,20 @@ void ModInstaller::downloadNext() {
         }));
         return;
     }
-    const auto file = std::make_shared<QSaveFile>(QDir(m_staging->path()).filePath(sha1 + ".jar"));
-    m_downloadFile = file;
-    if (!file->open(QIODevice::WriteOnly)) {
-        fail("Could not create a temporary mod file.");
-        return;
-    }
-    const bool useSha512 = !ref.value("sha512").toString().isEmpty();
-    const auto hash = std::make_shared<QCryptographicHash>(useSha512 ? QCryptographicHash::Sha512
-                                                                     : QCryptographicHash::Sha1);
-    const auto sha1Hash = std::make_shared<QCryptographicHash>(QCryptographicHash::Sha1);
-    const auto bytesWritten = std::make_shared<qint64>(0);
-    const auto expectedSize = ref.value("fileSize").toInteger();
     const auto generation = m_generation;
-    QNetworkRequest request(QUrl(ref.value("url").toString()));
-    request.setTransferTimeout(30000);
-    request.setHeader(QNetworkRequest::UserAgentHeader,
-                      "0gga/Conflux/0.1.0 (https://github.com/0gga/Conflux)");
-    auto *reply = m_network.get(request);
-    m_reply = reply;
-    const auto title = ref.value("projectTitle").toString();
-    emit progress("Downloading " + title + " · " + QString::number(m_downloadIndex) + "/" +
-                  QString::number(m_references.size()));
-    auto consume = [this, reply, file, hash, sha1Hash, bytesWritten, expectedSize, generation] {
-        if (!m_busy || m_generation != generation)
-            return;
-        const auto bytes = reply->readAll();
-        *bytesWritten += bytes.size();
-        if ((expectedSize > 0 && *bytesWritten > expectedSize) || file->write(bytes) != bytes.size()) {
-            fail("A download exceeded its expected size or could not be saved.");
-            return;
-        }
-        hash->addData(bytes);
-        sha1Hash->addData(bytes);
-    };
-    connect(reply, &QNetworkReply::readyRead, this, consume);
-    connect(reply, &QNetworkReply::downloadProgress, this,
-            [this, title, generation](qint64 received, qint64 total) {
-                if (m_busy && generation == m_generation && total > 0)
-                    emit progress("Downloading " + title + " · " + QString::number(received * 100 / total) +
-                                  "%");
-            });
-    connect(reply, &QNetworkReply::finished, this,
-            [this, reply, consume, file, hash, sha1Hash, bytesWritten, expectedSize, ref, sha1, useSha512,
-             generation] {
-                reply->deleteLater();
-                if (m_reply == reply)
-                    m_reply = nullptr;
-                if (!m_busy || generation != m_generation)
-                    return;
-                consume();
-                if (!m_busy)
-                    return;
-                if (reply->error() != QNetworkReply::NoError) {
-                    fail("Mod download failed: " + reply->errorString());
-                    return;
-                }
-                const auto expectedHash = ref.value(useSha512 ? "sha512" : "sha1").toString().toLower();
-                if ((expectedSize > 0 && *bytesWritten != expectedSize) ||
-                    QString::fromLatin1(hash->result().toHex()) != expectedHash ||
-                    QString::fromLatin1(sha1Hash->result().toHex()) != sha1) {
-                    fail("A downloaded mod did not match its published checksum. No pack changes were made.");
-                    return;
-                }
-                if (!file->commit()) {
-                    fail("Could not finish saving a verified download.");
-                    return;
-                }
-                m_downloadFile.reset();
-                downloadNext();
-            });
+    emit progress("Downloading " + ref.value("projectTitle").toString() + "…");
+    m_download.start(releaseFromVariant(ref.toVariantMap()), m_staging->path(), {},
+                     [this, generation](VerifiedDownloadResult result) {
+                         if (!m_busy || generation != m_generation)
+                             return;
+                         if (!result.error.isEmpty()) {
+                             fail(result.error);
+                             return;
+                         }
+                         downloadNext();
+                     });
 }
+
 void ModInstaller::apply() {
     m_applying = true;
     emit progress("Applying verified mod files…");
@@ -508,6 +459,7 @@ void ModInstaller::apply() {
     const auto staging = m_staging;
     const auto manifest = m_expected;
     const auto refs = m_references;
+    const auto referenceOnly = m_referenceOnly;
     connect(watcher, &QFutureWatcher<RepositoryResult>::finished, this, [this, watcher] {
         const auto result = watcher->result();
         watcher->deleteLater();
@@ -516,8 +468,8 @@ void ModInstaller::apply() {
         m_staging.reset();
         emit finished(result);
     });
-    watcher->setFuture(QtConcurrent::run([path, staging, manifest, refs] {
-        return PackRepository::applyInstallation(path, manifest, refs, staging->path());
+    watcher->setFuture(QtConcurrent::run([path, staging, manifest, refs, referenceOnly] {
+        return PackRepository::applyInstallation(path, manifest, refs, staging->path(), referenceOnly);
     }));
 }
 } // namespace studio

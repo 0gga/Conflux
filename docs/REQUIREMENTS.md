@@ -134,3 +134,6 @@ Main tab groups retain their outer capsule; subtabs have no surrounding containe
 Changelogs represent content versions, combining duplicate releases for different Minecraft versions and loaders. All versions lists every content version and its changelog in one scrollable history, separated by horizontal lines, without accordions. Version links open the corresponding content-version entry; exact release metadata and installation behavior stay unchanged.
 
 Keep the running task at the top of the task overview, followed by queued work and terminal history. Provide Clear finished for completed/failed tasks without removing or cancelling active work. Updating unlocked content must not attempt to replace unrelated unchanged files or be blocked by those files' locks or existing project-identity ambiguity.
+
+
+Updating or downloading content with an existing filename should overwrite it silently, preserving content locks, safe paths, backups and atomic replacement. Audit and optimize the complete installation/update/loading flow, and add performance and state regression tests. The owner reported a collision at mods/better_modlist-21.1.5.jar, slow updates and multi-second mod loading on 2026-10-22.

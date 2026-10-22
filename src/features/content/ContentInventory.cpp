@@ -1,18 +1,23 @@
 #include "ContentInventory.h"
 #include "ConfigAssociation.h"
+#include "platform/ContentFileCache.h"
 #include "platform/PackFileStore.h"
 #include <QDir>
 #include <QFile>
 #include <functional>
 namespace studio {
 ContentSnapshot ContentInventory::scan(const QVariantMap &pack) const {
+    return collect(pack, true);
+}
+ContentSnapshot ContentInventory::collect(const QVariantMap &pack, bool includeConfigs) const {
     ContentSnapshot result;
     result.pack = pack;
-    const QDir root(pack.value("path").toString());
-    if (NativePackFileStore::resolve(root.path(), {}).isEmpty()) {
+    const auto canonicalRoot = NativePackFileStore::resolve(pack.value("path").toString(), {});
+    if (canonicalRoot.isEmpty()) {
         result.unavailable = true;
         return result;
     }
+    const QDir root(canonicalRoot);
     QMap<QString, QVariantMap> pins;
     for (const auto &item : pack.value("mods").toList()) {
         const auto pin = item.toMap();
@@ -21,7 +26,9 @@ ContentSnapshot ContentInventory::scan(const QVariantMap &pack) const {
     QVariantList mods;
     auto append = [&](const QFileInfo &file, const QString &category) {
         const auto relative = root.relativeFilePath(file.absoluteFilePath());
-        if (NativePackFileStore::resolve(root.path(), relative).isEmpty())
+        // Callers enumerate only a freshly resolved, contained parent. Do not resolve
+        // every config's entire ancestor chain again; still reject linked/private leaves.
+        if (file.isSymLink() || file.isJunction() || file.fileName() == ".git" || file.fileName() == ".env")
             return;
         QVariantMap row{{"title", file.completeBaseName()},
                         {"fileName", file.fileName()},
@@ -33,11 +40,13 @@ ContentSnapshot ContentInventory::scan(const QVariantMap &pack) const {
                         {"provider", ""},
                         {"directory", file.isDir()}};
         if (category == "mods") {
-            const auto meta = m_mods->read(file.absoluteFilePath());
+            const auto meta = ContentFileCache::instance().metadata(
+                file.absoluteFilePath(), "mod:" + QString::number(quintptr(m_mods.get())),
+                [&] { return m_mods->read(file.absoluteFilePath()); });
             for (auto it = meta.begin(); it != meta.end(); ++it)
                 if (!it.value().toString().isEmpty() || it.value().metaType().id() != QMetaType::QString)
                     row[it.key()] = it.value();
-            const bool enabled = !file.fileName().endsWith(".disabled");
+            const bool enabled = !file.fileName().endsWith(".disabled", Qt::CaseInsensitive);
             row["enabled"] = enabled;
             if (!enabled)
                 row["status"] = "Disabled";
@@ -57,15 +66,20 @@ ContentSnapshot ContentInventory::scan(const QVariantMap &pack) const {
                 row["version"] = "";
             mods.append(row);
         } else if (category == "shaderpacks" || category == "resourcepacks" || category == "datapacks") {
-            QByteArray icon;
-            if (file.isDir()) {
-                QFile input(NativePackFileStore::resolve(root.path(), relative + "/pack.png"));
-                if (!input.fileName().isEmpty() && input.open(QIODevice::ReadOnly) &&
-                    input.size() <= 1024 * 1024)
-                    icon = input.readAll();
-            } else
-                icon = m_archives->readEntries(file.absoluteFilePath(), {"pack.png"}).value("pack.png");
-            row["icon"] = rasterIcon(icon);
+            const auto iconMetadata =
+                ContentFileCache::instance().metadata(file.absoluteFilePath(), "pack-icon", [&] {
+                    QByteArray icon;
+                    if (file.isDir()) {
+                        QFile input(NativePackFileStore::resolve(root.path(), relative + "/pack.png"));
+                        if (!input.fileName().isEmpty() && input.open(QIODevice::ReadOnly) &&
+                            input.size() <= 1024 * 1024)
+                            icon = input.readAll();
+                    } else
+                        icon =
+                            m_archives->readEntries(file.absoluteFilePath(), {"pack.png"}).value("pack.png");
+                    return QVariantMap{{"icon", rasterIcon(icon)}};
+                });
+            row["icon"] = iconMetadata.value("icon");
         }
         result.files.append(row);
     };
@@ -76,8 +90,8 @@ ContentSnapshot ContentInventory::scan(const QVariantMap &pack) const {
         const auto filters = QDir::Files | QDir::NoSymLinks | QDir::NoDotAndDotDot |
                              (category == "mods" ? QDir::Filters{} : QDir::Dirs);
         for (const auto &file : QDir(path).entryInfoList(filters, QDir::Name)) {
-            if (category == "mods" && !file.fileName().endsWith(".jar") &&
-                !file.fileName().endsWith(".jar.disabled"))
+            if (category == "mods" && !file.fileName().endsWith(".jar", Qt::CaseInsensitive) &&
+                !file.fileName().endsWith(".jar.disabled", Qt::CaseInsensitive))
                 continue;
             if (result.files.size() >= 5000) {
                 result.limited = true;
@@ -86,6 +100,8 @@ ContentSnapshot ContentInventory::scan(const QVariantMap &pack) const {
             append(file, category);
         }
     }
+    if (!includeConfigs)
+        return result;
     const ConfigAssociation associations(mods);
     std::function<void(const QString &, int)> configs = [&](const QString &relative, int depth) {
         if (depth > 5) {

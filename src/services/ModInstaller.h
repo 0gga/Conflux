@@ -1,11 +1,11 @@
 #pragma once
 #include "PackRepository.h"
 #include "domain/Catalogue.h"
+#include "platform/VerifiedDownload.h"
 #include <QJsonDocument>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QQueue>
-#include <QSaveFile>
 #include <QSet>
 #include <QTemporaryDir>
 #include <functional>
@@ -26,7 +26,7 @@ class ModInstaller : public QObject {
     void start(const QString &path, const Release &release, const QString &title,
                const QJsonObject &projectIds);
     void startBatch(const QString &path, const QVector<ContentInstallRequest> &requests,
-                    bool allowFabricBridge = false);
+                    bool allowFabricBridge = false, bool referenceOnly = false);
     void cancel();
   signals:
     void progress(QString status);
@@ -37,6 +37,9 @@ class ModInstaller : public QObject {
         QString projectId, versionId;
     };
     QNetworkAccessManager m_network;
+    VerifiedDownload m_download;
+    bool m_referenceOnly = false;
+    QMap<QString, QString> m_rootPaths;
     QUrl m_api;
     QNetworkReply *m_reply = nullptr;
     int m_generation = 0, m_downloadIndex = 0;
@@ -53,7 +56,6 @@ class ModInstaller : public QObject {
     QJsonArray m_references;
     QMap<QString, QJsonObject> m_rootIdentities;
     std::shared_ptr<QTemporaryDir> m_staging;
-    std::shared_ptr<QSaveFile> m_downloadFile;
     void fail(const QString &message);
     void get(const QUrl &url, std::function<void(QJsonDocument)> callback);
     bool addResolved(const Release &release);

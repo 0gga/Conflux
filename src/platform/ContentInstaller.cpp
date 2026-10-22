@@ -1,6 +1,7 @@
 #include "ContentInstaller.h"
 #include "ContentAccess.h"
 #include "domain/ContentCompatibility.h"
+#include "domain/ContentTypes.h"
 #include "platform/PackFileStore.h"
 #include <QDir>
 #include <QFile>
@@ -10,12 +11,13 @@
 #include <filesystem>
 namespace studio {
 ContentInstaller::ContentInstaller(std::shared_ptr<const NativeContentStore> files, QObject *parent,
-                                   bool local)
-    : QObject(parent),
-      m_installer(this, local ? QUrl("http://127.0.0.1/") : QUrl("https://api.modrinth.com/v2/")),
-      m_assets(files, this, local), m_files(std::move(files)) {
+                                   bool local, QUrl apiRoot)
+    : QObject(parent), m_installer(this, !apiRoot.isEmpty() ? apiRoot
+                                         : local            ? QUrl("http://127.0.0.1/")
+                                                            : QUrl("https://api.modrinth.com/v2/")),
+      m_download(this, local), m_files(std::move(files)) {
+    connect(&m_download, &VerifiedDownload::progress, this, &ContentInstaller::progress);
     connect(&m_installer, &ModInstaller::progress, this, &ContentInstaller::progress);
-    connect(&m_assets, &AssetInstaller::progress, this, &ContentInstaller::progress);
     connect(&m_installer, &ModInstaller::finished, this,
             [this](const RepositoryResult &result) { finishBatch({result.ok, result.error}); });
 }
@@ -28,6 +30,9 @@ void ContentInstaller::finish(ContentWriteResult result) {
     m_pack.clear();
     m_targetPack.clear();
     m_batches.clear();
+    m_directRequests.clear();
+    m_directMods = {};
+    m_directAssets = {};
     m_preparing = false;
     m_committing = false;
     if (callback)
@@ -41,14 +46,21 @@ void ContentInstaller::finishBatch(ContentWriteResult result) {
     }
     if (!result.error.isEmpty())
         m_warnings << result.error;
-    const auto current = PackRepository::inspectContent(m_pack.value("path").toString());
-    if (!current.ok) {
-        finish({false, current.error});
-        return;
-    }
-    m_pack["mods"] = current.manifest.value("mods").toArray().toVariantList();
-    m_pack["assets"] = current.manifest.value("assets").toArray().toVariantList();
-    startNextBatch();
+    const auto stage = m_stage;
+    const auto path = m_pack.value("path").toString();
+    auto *watcher = new QFutureWatcher<RepositoryResult>(this);
+    connect(watcher, &QFutureWatcher<RepositoryResult>::finished, this, [this, watcher] {
+        const auto current = watcher->result();
+        watcher->deleteLater();
+        if (!current.ok) {
+            finish({false, current.error});
+            return;
+        }
+        m_pack["mods"] = current.manifest.value("mods").toArray().toVariantList();
+        m_pack["assets"] = current.manifest.value("assets").toArray().toVariantList();
+        startNextBatch();
+    });
+    watcher->setFuture(QtConcurrent::run([stage, path] { return PackRepository::inspectContent(path); }));
 }
 void ContentInstaller::startNextBatch() {
     if (m_cancelled) {
@@ -81,7 +93,7 @@ void ContentInstaller::startNextBatch() {
         const auto current = PackRepository::inspectContent(path);
         if (!current.ok)
             return ContentWriteResult{false, current.error};
-        return files->commitStagedContent(pack, rows, path, current.manifest, shallow);
+        return files->commitStagedContent(pack, rows, path, current.manifest, shallow, true);
     }));
 }
 void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows,
@@ -90,7 +102,34 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
         callback({false, "Another content operation is in progress."});
         return;
     }
-    for (const auto &request : requests)
+    if (requests.isEmpty()) {
+        callback({false, "Choose content to install first."});
+        return;
+    }
+    for (const auto &request : requests) {
+        if (!request.release.gameVersions.contains(pack.value("minecraft").toString())) {
+            callback({false, "The selected version does not support this instance's Minecraft version."});
+            return;
+        }
+        if (contentCategory(request.contentType).isEmpty() ||
+            !request.release.filename.endsWith(request.contentType == "mod" ? ".jar" : ".zip",
+                                               Qt::CaseInsensitive)) {
+            callback({false, "Choose a supported content archive."});
+            return;
+        }
+        for (const auto &value : rows) {
+            const auto row = value.toMap();
+            bool selected =
+                !request.installedPath.isEmpty() && row.value("relativePath") == request.installedPath;
+            const auto ids = row.value("sourceIds").toMap();
+            for (auto it = request.sourceIds.begin(); it != request.sourceIds.end(); ++it)
+                selected |= !it.value().toString().isEmpty() &&
+                            ids.value(it.key()).toString() == it.value().toString();
+            if (selected && (row.value("locked").toBool() || row.value("frozen").toBool())) {
+                callback({false, "Unlock this content before changing it."});
+                return;
+            }
+        }
         if (!request.resolveDependencies) {
             if (!request.release.gameVersions.contains(pack.value("minecraft").toString())) {
                 callback({false, "The selected version does not support this instance's Minecraft version."});
@@ -123,6 +162,7 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
                 return;
             }
         }
+    }
     m_callback = std::move(callback);
     m_targetPack = pack;
     m_targetRows = rows;
@@ -134,6 +174,20 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
         if (!request.resolveDependencies)
             m_shallowProjects.insert(request.release.projectId);
     m_committing = false;
+    bool direct = !requests.isEmpty();
+    for (const auto &request : requests)
+        direct &= !request.resolveDependencies || request.contentType != "mod";
+    if (direct) {
+        m_directRequests = requests;
+        m_directIndex = 0;
+        m_stage = std::make_shared<QTemporaryDir>();
+        if (!m_stage->isValid()) {
+            finish({false, "Could not create the download workspace."});
+            return;
+        }
+        downloadDirect();
+        return;
+    }
     QVector<ContentInstallRequest> mods;
     for (const auto &request : requests) {
         if (request.contentType == "mod")
@@ -205,20 +259,6 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
                 stagedRelative = "mods/" + hash + ".jar" + (row.value("enabled").toBool() ? "" : ".disabled");
                 ref["sha1"] = hash;
             }
-            const auto source = NativePackFileStore::resolve(pack.value("path").toString(), relative),
-                       destination = QDir(result.path).filePath(stagedRelative);
-            if (source.isEmpty() || !QDir().mkpath(QFileInfo(destination).absolutePath()))
-                return ContentFileState{pack, {}, "Could not prepare content staging."};
-            std::error_code error;
-#ifdef Q_OS_WIN
-            std::filesystem::create_hard_link(std::filesystem::path(source.toStdWString()),
-                                              std::filesystem::path(destination.toStdWString()), error);
-#else
-            std::filesystem::create_hard_link(std::filesystem::path(source.toStdString()),
-                                              std::filesystem::path(destination.toStdString()), error);
-#endif
-            if (error && !QFile::copy(source, destination))
-                return ContentFileState{pack, {}, "Could not stage " + relative};
             if (!ref.isEmpty()) {
                 ref["confluxRetainedPath"] = relative;
                 ref["installPath"] = stagedRelative;
@@ -249,11 +289,137 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
 }
 void ContentInstaller::installBatch(const QVector<ContentInstallRequest> &requests) {
     if (requests.size() == 1 && requests.first().contentType != "mod") {
-        m_assets.install(m_pack, m_rows, requests.first(),
-                         [this](ContentWriteResult result) { finishBatch(std::move(result)); });
+        const auto request = requests.first();
+        const auto category = contentCategory(request.contentType);
+        if (request.resolveDependencies && !request.release.requiredDependencies.isEmpty()) {
+            finish({false, "This ZIP requires unsupported dependencies."});
+            return;
+        }
+        const auto stage = m_stage;
+        const auto path = m_pack.value("path").toString();
+        const auto directory = QDir(path).filePath(category);
+        if (!QDir().mkpath(directory)) {
+            finish({false, "Could not create the download folder."});
+            return;
+        }
+        m_download.start(
+            request.release, directory, request.contentType,
+            [this, stage, path, request, category](VerifiedDownloadResult download) {
+                if (!download.error.isEmpty()) {
+                    finish({false, download.error});
+                    return;
+                }
+                auto ref = QJsonObject::fromVariantMap(request.release.toVariant());
+                ref["projectTitle"] = request.title;
+                ref["projectSourceIds"] = request.sourceIds;
+                ref["category"] = category;
+                ref["installPath"] = category + '/' + QFileInfo(download.path).fileName();
+                if (!request.installedPath.isEmpty())
+                    ref["confluxReplacePath"] = request.installedPath;
+                auto *watcher = new QFutureWatcher<RepositoryResult>(this);
+                connect(watcher, &QFutureWatcher<RepositoryResult>::finished, this, [this, watcher] {
+                    auto result = watcher->result();
+                    watcher->deleteLater();
+                    finishBatch({result.ok, result.error});
+                });
+                watcher->setFuture(QtConcurrent::run([stage, path, request, ref] {
+                    auto current = PackRepository::inspectContent(path);
+                    if (!current.ok)
+                        return current;
+                    QJsonArray assets;
+                    for (const auto &v : current.manifest.value("assets").toArray()) {
+                        const auto old = v.toObject();
+                        if (old.value("provider") != request.release.provider ||
+                            old.value("projectId") != request.release.projectId)
+                            assets << old;
+                    }
+                    assets << ref;
+                    return PackRepository::updateContentReferences(
+                        path, current.manifest, current.manifest.value("mods").toArray(), assets);
+                }));
+            });
         return;
     }
     m_installer.startBatch(m_pack.value("path").toString(), requests,
-                           hasFabricBridge(m_pack.value("loader").toString(), m_rows));
+                           hasFabricBridge(m_pack.value("loader").toString(), m_rows), true);
+}
+void ContentInstaller::downloadDirect() {
+    if (m_cancelled) {
+        finish({false, "Installation cancelled."});
+        return;
+    }
+    if (m_directIndex == m_directRequests.size()) {
+        commitDirect();
+        return;
+    }
+    const auto request = m_directRequests[m_directIndex++];
+    if (request.contentType != "mod" && request.resolveDependencies &&
+        !request.release.requiredDependencies.isEmpty()) {
+        finish({false, "This pack requires dependencies that cannot be installed automatically."});
+        return;
+    }
+    emit progress("Downloading " + request.title + "…");
+    const auto category = contentCategory(request.contentType);
+    const auto directory = m_stage->path() + '/' + category;
+    if (!QDir().mkpath(directory)) {
+        finish({false, "Could not create the download folder."});
+        return;
+    }
+    QString reuse;
+    for (const auto &value : m_targetRows) {
+        const auto row = value.toMap();
+        if (row.value("category").toString() == category &&
+            row.value("sha1").toString().compare(request.release.sha1, Qt::CaseInsensitive) == 0) {
+            reuse = NativePackFileStore::resolve(m_targetPack.value("path").toString(),
+                                                 row.value("relativePath").toString());
+            if (!reuse.isEmpty())
+                break;
+        }
+    }
+    m_download.start(
+        request.release, directory, request.contentType,
+        [this, request, category](VerifiedDownloadResult result) {
+            if (!result.error.isEmpty()) {
+                finish({false, result.error});
+                return;
+            }
+            auto ref = QJsonObject::fromVariantMap(request.release.toVariant());
+            ref["projectTitle"] = request.title;
+            ref["projectSourceIds"] = request.sourceIds;
+            ref["installPath"] = category + '/' + QFileInfo(result.path).fileName();
+            if (!request.installedPath.isEmpty())
+                ref["confluxReplacePath"] = request.installedPath;
+            if (request.contentType == "mod")
+                m_directMods << ref;
+            else {
+                ref["category"] = contentCategory(request.contentType);
+                m_directAssets << ref;
+            }
+            downloadDirect();
+        },
+        reuse);
+}
+void ContentInstaller::commitDirect() {
+    if (m_cancelled) {
+        finish({false, "Installation cancelled."});
+        return;
+    }
+    m_committing = true;
+    emit progress("Applying verified content…");
+    const auto stage = m_stage;
+    const auto files = m_files;
+    const auto pack = m_targetPack;
+    const auto rows = m_targetRows;
+    const QJsonObject manifest{{"mods", m_directMods}, {"assets", m_directAssets}};
+    const auto shallow = m_shallowProjects;
+    auto *watcher = new QFutureWatcher<ContentWriteResult>(this);
+    connect(watcher, &QFutureWatcher<ContentWriteResult>::finished, this, [this, watcher] {
+        auto result = watcher->result();
+        watcher->deleteLater();
+        finish(result);
+    });
+    watcher->setFuture(QtConcurrent::run([stage, files, pack, rows, manifest, shallow] {
+        return files->commitStagedContent(pack, rows, stage->path(), manifest, shallow, true);
+    }));
 }
 } // namespace studio

@@ -19,8 +19,12 @@ class ContentInventory final : public IContentInventory {
                      std::shared_ptr<const IArchiveReader> archives)
         : m_mods(std::move(mods)), m_archives(std::move(archives)) {}
     ContentSnapshot scan(const QVariantMap &) const override;
+    ContentSnapshot scanContent(const QVariantMap &pack) const {
+        return collect(pack, false);
+    }
 
   private:
+    ContentSnapshot collect(const QVariantMap &, bool includeConfigs) const;
     std::shared_ptr<const IModMetadataReader> m_mods;
     std::shared_ptr<const IArchiveReader> m_archives;
 };

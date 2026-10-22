@@ -42,6 +42,7 @@ struct ContentInstallRequest {
     QJsonObject sourceIds;
     QString contentType = "mod";
     bool resolveDependencies = true;
+    QString installedPath;
 };
 // Only explicit, reviewed provider:id -> shared identity mappings may collapse projects.
 QVector<Project> mergeProjects(const QVector<Project> &projects,

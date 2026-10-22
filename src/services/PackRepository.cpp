@@ -24,7 +24,8 @@ static bool managedModPath(const QString &relative, const QString &hash) {
            (relative == "mods/" + hash + ".jar" || relative == "mods/" + hash + ".jar.disabled");
 }
 RepositoryResult PackRepository::applyInstallation(const QString &path, const QJsonObject &expected,
-                                                   const QJsonArray &references, const QString &staging) {
+                                                   const QJsonArray &references, const QString &staging,
+                                                   bool referenceOnly) {
     auto current = inspectContent(path);
     if (!current.ok)
         return current;
@@ -54,6 +55,8 @@ RepositoryResult PackRepository::applyInstallation(const QString &path, const QJ
         }
         const auto destination = QDir(path).filePath(relative);
         keep.insert(relative);
+        if (referenceOnly && ref.contains("confluxRetainedPath"))
+            continue;
         if (QFileInfo::exists(destination)) {
             if (QFileInfo(destination).isSymLink() || fileHash(destination) != hash) {
                 rollback();

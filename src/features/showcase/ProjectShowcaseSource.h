@@ -11,6 +11,11 @@ class IInstalledModIdentity {
   public:
     virtual ~IInstalledModIdentity() = default;
     virtual InstalledModIdentity inspect(const QVariantMap &pack, const QVariantMap &file) const = 0;
+    // The file store supplies a fingerprint-verified hash, avoiding another read of the same JAR.
+    virtual InstalledModIdentity inspectVerified(const QVariantMap &pack, const QVariantMap &file,
+                                                 const QString &) const {
+        return inspect(pack, file);
+    }
 };
 class IProjectShowcaseSource {
   public:

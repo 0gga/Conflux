@@ -10,7 +10,7 @@ QString ContentLockRegistry::packKey(const QString &path) {
     return key;
 }
 QString ContentLockRegistry::pathKey(QString path) {
-    if (path.endsWith(".disabled"))
+    if (path.endsWith(".disabled", Qt::CaseInsensitive))
         path.chop(9);
 #ifdef Q_OS_WIN
     path = path.toCaseFolded();

@@ -26,9 +26,12 @@ int ContentActions::actionableUpdateCount() const {
     return count;
 }
 ContentInstallRequest ContentActions::updateRequest(const QVariantMap &row) const {
-    return {releaseFromVariant(row.value("updateRelease").toMap()), row.value("title").toString(),
+    return {releaseFromVariant(row.value("updateRelease").toMap()),
+            row.value("title").toString(),
             QJsonObject::fromVariantMap(row.value("sourceIds").toMap()),
-            categoryType(row.value("category").toString()), false};
+            categoryType(row.value("category").toString()),
+            false,
+            row.value("relativePath").toString()};
 }
 void ContentActions::update(const QString &path) {
     const auto row = find(path);

@@ -39,11 +39,20 @@ PackContentResult PackContentInspector::inspect(const QVariantMap &pack) const {
                       "require a game launch. Config ownership is a suggestion.";
     return result;
 }
+static std::shared_ptr<const ContentInventory> defaultInventory() {
+    static const auto inventory = [] {
+        auto archives = std::make_shared<ZipArchiveReader>();
+        return std::make_shared<ContentInventory>(std::make_shared<ModMetadataReader>(archives), archives);
+    }();
+    return inventory;
+}
 std::shared_ptr<const IPackContentInspector> defaultPackInspector() {
-    auto archives = std::make_shared<ZipArchiveReader>();
-    auto mods = std::make_shared<ModMetadataReader>(archives);
-    return std::make_shared<PackContentInspector>(std::make_shared<ContentInventory>(mods, archives),
-                                                  defaultDiagnosticRules());
+    static const auto inspector =
+        std::make_shared<PackContentInspector>(defaultInventory(), defaultDiagnosticRules());
+    return inspector;
+}
+QVariantList PackContent::contentFiles(const QVariantMap &pack) {
+    return defaultInventory()->scanContent(pack).files;
 }
 PackContentResult PackContent::scan(const QVariantMap &pack) {
     return defaultPackInspector()->inspect(pack);

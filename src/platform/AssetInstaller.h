@@ -1,9 +1,7 @@
 #pragma once
 #include "NativeContentStore.h"
+#include "VerifiedDownload.h"
 #include "features/content/ContentPorts.h"
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QPointer>
 namespace studio {
 // ZIP downloads have a separate lifecycle from mod dependency resolution.
 class AssetInstaller final : public QObject {
@@ -15,15 +13,14 @@ class AssetInstaller final : public QObject {
                  IContentInstaller::Callback);
     void cancel();
     bool cancellable() const {
-        return !m_reply.isNull();
+        return m_download.busy();
     }
   signals:
     void progress(QString);
 
   private:
-    QNetworkAccessManager m_network;
-    QPointer<QNetworkReply> m_reply;
+    VerifiedDownload m_download;
     std::shared_ptr<const NativeContentStore> m_files;
-    bool m_active = false, m_allowLocal = false;
+    bool m_active = false;
 };
 } // namespace studio

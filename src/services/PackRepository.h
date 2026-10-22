@@ -22,7 +22,8 @@ class PackRepository {
     static RepositoryResult updateContentReferences(const QString &path, const QJsonObject &expected,
                                                     const QJsonArray &mods, const QJsonArray &assets);
     static RepositoryResult applyInstallation(const QString &path, const QJsonObject &expectedManifest,
-                                              const QJsonArray &references, const QString &stagingDirectory);
+                                              const QJsonArray &references, const QString &stagingDirectory,
+                                              bool referenceOnly = false);
     static QString slug(const QString &name);
 
   private:

@@ -23,10 +23,13 @@ qt_add_library(pack_foundation STATIC
     src/services/GalleryImages.h src/services/GalleryImages.cpp
     src/services/InstallationDiscovery.h src/services/InstallationDiscovery.cpp
     src/services/ModInstaller.h src/services/ModInstaller.cpp
+    src/platform/VerifiedDownload.h src/platform/VerifiedDownload.cpp
     src/services/PackRepository.h src/services/PackRepository.cpp)
 target_include_directories(pack_foundation PUBLIC src)
 target_link_libraries(pack_foundation PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Sql Qt6::Concurrent)
-qt_add_library(pack_storage STATIC src/platform/PackFileStore.h src/platform/PackFileStore.cpp src/platform/ContentAccess.h src/platform/ContentAccess.cpp)
+target_link_libraries(pack_foundation PRIVATE miniz)
+qt_add_library(pack_storage STATIC src/platform/PackFileStore.h src/platform/PackFileStore.cpp src/platform/ContentAccess.h src/platform/ContentAccess.cpp
+    src/platform/ContentFileCache.h src/platform/ContentFileCache.cpp)
 target_include_directories(pack_storage PUBLIC src)
 target_link_libraries(pack_storage PUBLIC Qt6::Core)
 qt_add_library(conflux_content STATIC
@@ -149,6 +152,9 @@ if(BUILD_TESTING)
     qt_add_executable(content-transaction-tests tests/ContentTransactionTests.cpp)
     target_link_libraries(content-transaction-tests PRIVATE conflux_desktop Qt6::Test)
     add_test(NAME content-transactions COMMAND content-transaction-tests -o "${CMAKE_CURRENT_BINARY_DIR}/content-transaction-results.txt,txt")
+    qt_add_executable(content-pipeline-tests tests/ContentPipelineTests.cpp)
+    target_link_libraries(content-pipeline-tests PRIVATE conflux_desktop miniz Qt6::Test)
+    add_test(NAME content-pipeline COMMAND content-pipeline-tests -o "${CMAKE_CURRENT_BINARY_DIR}/content-pipeline-results.txt,txt")
     qt_add_executable(status-tests tests/StatusTests.cpp)
     target_link_libraries(status-tests PRIVATE conflux_desktop Qt6::Test)
     add_test(NAME status COMMAND status-tests -o "${CMAKE_CURRENT_BINARY_DIR}/status-results.txt,txt")

@@ -27,5 +27,6 @@ std::shared_ptr<const IPackContentInspector> defaultPackInspector();
 class PackContent {
   public:
     static PackContentResult scan(const QVariantMap &pack);
+    static QVariantList contentFiles(const QVariantMap &pack);
 };
 } // namespace studio

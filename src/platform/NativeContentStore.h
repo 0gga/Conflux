@@ -19,8 +19,8 @@ class NativeContentStore final : public IContentFileStore {
     ContentWriteResult applyStaged(const QVariantMap &, const QVariantList &expected, const QString &stage,
                                    const QJsonObject &manifest) const;
     ContentWriteResult commitStagedContent(const QVariantMap &, const QVariantList &, const QString &,
-                                           const QJsonObject &,
-                                           const QSet<QString> &shallowProjects = {}) const;
+                                           const QJsonObject &, const QSet<QString> &shallowProjects = {},
+                                           bool selectedOnly = false) const;
     ContentWriteResult restoreLocked(const QVariantMap &, const QVariantMap &) const override;
     ContentWriteResult installAsset(const QVariantMap &, const QVariantList &, const ContentInstallRequest &,
                                     const QString &verifiedFile) const;
@@ -29,8 +29,7 @@ class NativeContentStore final : public IContentFileStore {
     struct Edit {
         QString from, to, source, expectedSha1;
     };
-    ContentWriteResult apply(const QVariantMap &, const QList<Edit> &,
-                             const QJsonArray *replacementPins = nullptr,
+    ContentWriteResult apply(const QVariantMap &, QList<Edit>, const QJsonArray *replacementPins = nullptr,
                              const QJsonArray *replacementAssets = nullptr) const;
     std::shared_ptr<const IInstalledModIdentity> m_identity;
     QString m_backupRoot;

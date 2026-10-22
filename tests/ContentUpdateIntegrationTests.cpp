@@ -33,7 +33,7 @@ class ContentUpdateIntegrationTests : public QObject {
                 ? QJsonDocument(
                       QJsonObject{{"schemaVersion", 1}, {"id", id}, {"version", QString::number(version)}})
                       .toJson()
-                : QByteArray("{\"pack\":{\"pack_format\":34,\"description\":\"Fixture ") +
+                : QByteArray("{\"pack\":{\"pack_format\":34,\"description\":\"Fixture ") + id.toUtf8() + ' ' +
                       QByteArray::number(version) + "\"}}";
         const auto name = category == "mods"          ? "fabric.mod.json"
                           : category == "shaderpacks" ? "shaders/fixture.fsh"

@@ -1,5 +1,6 @@
 #include "NativeContentStore.h"
 #include "ContentAccess.h"
+#include "ContentFileCache.h"
 #include "LauncherContentState.h"
 #include "domain/ContentTypes.h"
 #include "platform/PackFileStore.h"
@@ -17,6 +18,13 @@
 #include <QStandardPaths>
 #include <QUuid>
 namespace studio {
+static QString contentKey(const QString &path) {
+#ifdef Q_OS_WIN
+    return path.toCaseFolded();
+#else
+    return path;
+#endif
+}
 static QString sha1File(const QString &path) {
     if (path.isEmpty())
         return {};
@@ -44,11 +52,15 @@ static bool atomicCopy(const QString &from, const QString &to) {
     return output.commit();
 }
 static bool contentPath(const QString &relative) {
+    static const QSet<QString> categories{"mods", "resourcepacks", "shaderpacks", "datapacks"};
+    static const QRegularExpression invalid("[<>:\"\\\\|?*\\x00-\\x1f]");
+    static const QRegularExpression reserved("^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\\.|$)",
+                                             QRegularExpression::CaseInsensitiveOption);
     const auto parts = relative.split('/');
-    return parts.size() == 2 &&
-           QStringList{"mods", "resourcepacks", "shaderpacks", "datapacks"}.contains(parts.first()) &&
-           !parts.last().isEmpty() && parts.last() != "." && parts.last() != ".." &&
-           !parts.last().contains(QRegularExpression("[<>:\"\\\\|?*]"));
+    return parts.size() == 2 && categories.contains(parts.first()) && !parts.last().isEmpty() &&
+           parts.last() != "." && parts.last() != ".." && !parts.last().endsWith('.') &&
+           !parts.last().endsWith(' ') && !parts.last().contains(invalid) &&
+           !reserved.match(parts.last()).hasMatch();
 }
 NativeContentStore::NativeContentStore(std::shared_ptr<const IInstalledModIdentity> identity, QString backups,
                                        std::shared_ptr<ContentLockRegistry> locks)
@@ -77,8 +89,7 @@ ContentFileState NativeContentStore::reload(const QVariantMap &pack, const QVari
     }
     if (!inspectInventory)
         return {current, previous, {}};
-    const auto inventory = PackContent::scan(current);
-    return {current, snapshot(current, inventory.files), {}};
+    return {current, snapshot(current, PackContent::contentFiles(current)), {}};
 }
 QVariantList NativeContentStore::snapshot(const QVariantMap &pack, const QVariantList &files) const {
     ContentAccess access(pack.value("path").toString());
@@ -86,36 +97,40 @@ QVariantList NativeContentStore::snapshot(const QVariantMap &pack, const QVarian
         return {};
     const auto sourceRows = pack.contains("sourceContent") ? pack.value("sourceContent").toList()
                                                            : LauncherContentState::read(pack);
+    QHash<QString, QVariantMap> sourceIndex;
+    for (const auto &value : sourceRows) {
+        const auto row = value.toMap();
+        const auto path = row.value("relativePath").toString();
+        sourceIndex[path + '\n' + row.value("sha1").toString()] = row;
+        if (!path.endsWith(".disabled", Qt::CaseInsensitive))
+            sourceIndex[path + ".disabled\n" + row.value("sha1").toString()] = row;
+    }
     QVariantList rows;
     for (const auto &value : files) {
         auto row = value.toMap();
         if (row.value("category") == "configs")
             continue;
         const auto relative = row.value("relativePath").toString();
-        row["enabled"] = !relative.endsWith(".disabled");
+        row["enabled"] = !relative.endsWith(".disabled", Qt::CaseInsensitive);
         row["external"] = true;
         if (!row.value("directory").toBool() && contentPath(relative)) {
             const auto path = NativePackFileStore::resolve(pack.value("path").toString(), relative);
             if (path.isEmpty() || !QFileInfo(path).isFile())
                 continue;
-            row["sha1"] = sha1File(path);
+            row["sha1"] = ContentFileCache::instance().sha1(path);
             if (row.value("sha1").toString().isEmpty())
                 continue;
-            for (const auto &entry : sourceRows) {
-                const auto source = entry.toMap();
-                if ((source.value("relativePath") == relative ||
-                     source.value("relativePath").toString() + ".disabled" == relative) &&
-                    source.value("sha1") == row.value("sha1")) {
-                    row["sourceIds"] = source.value("sourceIds");
-                    row["launcherLocked"] = source.value("launcherLocked");
-                    row["provider"] = source.value("provider");
-                    row["projectId"] = source.value("projectId");
-                    row["external"] = false;
-                }
+            const auto source = sourceIndex.value(relative + '\n' + row.value("sha1").toString());
+            if (!source.isEmpty()) {
+                row["sourceIds"] = source.value("sourceIds");
+                row["launcherLocked"] = source.value("launcherLocked");
+                row["provider"] = source.value("provider");
+                row["projectId"] = source.value("projectId");
+                row["external"] = false;
             }
             if (row.value("category") == "mods" && m_identity) {
-                const auto identity = m_identity->inspect(pack, row);
-                QVariantMap ids;
+                const auto identity = m_identity->inspectVerified(pack, row, row.value("sha1").toString());
+                QVariantMap ids = row.value("sourceIds").toMap();
                 for (auto it = identity.sourceIds.begin(); it != identity.sourceIds.end(); ++it)
                     ids[it.key()] = it.value();
                 row["sourceIds"] = ids;
@@ -133,7 +148,8 @@ QVariantList NativeContentStore::snapshot(const QVariantMap &pack, const QVarian
         if (row.value("category") != "mods")
             for (const auto &value : pack.value("assets").toList()) {
                 const auto pin = value.toMap();
-                if (pin.value("installPath") == relative && pin.value("sha1") == row.value("sha1")) {
+                if (contentKey(pin.value("installPath").toString()) == contentKey(relative) &&
+                    pin.value("sha1") == row.value("sha1")) {
                     row["sourceIds"] = pin.value("projectSourceIds");
                     row["installedRelease"] = pin;
                     row["projectId"] = pin.value("projectId");
@@ -147,7 +163,7 @@ QVariantList NativeContentStore::snapshot(const QVariantMap &pack, const QVarian
     }
     return rows;
 }
-ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, const QList<Edit> &edits,
+ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, QList<Edit> edits,
                                              const QJsonArray *replacementPins,
                                              const QJsonArray *replacementAssets) const {
     ContentAccess access(pack.value("path").toString(), ContentAccess::Write);
@@ -158,6 +174,23 @@ ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, const QLis
     const auto root = QFileInfo(pack.value("path").toString()).canonicalFilePath();
     if (root.isEmpty())
         return {false, "The pack folder is unavailable."};
+    // A known same-name destination is an atomic replacement, including its backup and lock checks.
+    QSet<QString> removals;
+    for (const auto &edit : edits)
+        if (!edit.from.isEmpty() && edit.to.isEmpty())
+            removals.insert(contentKey(edit.from));
+    for (auto &edit : edits) {
+        if (edit.source.isEmpty() || !edit.from.isEmpty() || removals.contains(contentKey(edit.to)))
+            continue;
+        const auto destination = NativePackFileStore::resolve(root, edit.to);
+        if (!destination.isEmpty() && QFileInfo(destination).isFile()) {
+            edit.from = edit.to;
+            if (edit.expectedSha1.isEmpty())
+                edit.expectedSha1 = sha1File(destination);
+        } else if (!edit.expectedSha1.isEmpty()) {
+            return {false, "The destination changed before replacement. Refresh and retry."};
+        }
+    }
     QJsonObject originalManifest;
     if (pack.value("managed").toBool()) {
         const auto current = PackRepository::inspectContent(root);
@@ -173,7 +206,8 @@ ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, const QLis
         for (const auto &value : sourceRows) {
             const auto source = value.toMap();
             if (source.value("launcherLocked").toBool() &&
-                (source.value("relativePath") == edit.from || source.value("relativePath") == edit.to)) {
+                (contentKey(source.value("relativePath").toString()) == contentKey(edit.from) ||
+                 contentKey(source.value("relativePath").toString()) == contentKey(edit.to))) {
                 if (edit.from.isEmpty() && !QFileInfo::exists(QDir(root).filePath(edit.to)) &&
                     !edit.source.isEmpty() && sha1File(edit.source) == source.value("sha1").toString())
                     continue;
@@ -189,7 +223,7 @@ ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, const QLis
     QSet<QString> targets, removedPaths;
     for (const auto &edit : edits)
         if (!edit.from.isEmpty() && edit.to.isEmpty())
-            removedPaths.insert(edit.from);
+            removedPaths.insert(contentKey(edit.from));
     for (const auto &edit : edits) {
         if ((!edit.from.isEmpty() && !contentPath(edit.from)) ||
             (!edit.to.isEmpty() && !contentPath(edit.to)))
@@ -201,15 +235,15 @@ ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, const QLis
                 return {false, "Content changed outside Conflux. Refresh before making this change."};
         }
         if (!edit.to.isEmpty()) {
-            if (targets.contains(edit.to))
+            if (targets.contains(contentKey(edit.to)))
                 return {false, "Two files would have the same destination."};
-            targets.insert(edit.to);
+            targets.insert(contentKey(edit.to));
             const auto parent = edit.to.section('/', 0, -2);
             const auto existingParent = NativePackFileStore::resolve(root, parent);
             if (existingParent.isEmpty() && QFileInfo::exists(QDir(root).filePath(parent)))
                 return {false, "The content folder is linked or unsafe."};
-            if (QFileInfo::exists(QDir(root).filePath(edit.to)) && edit.to != edit.from &&
-                !removedPaths.contains(edit.to))
+            if (QFileInfo::exists(QDir(root).filePath(edit.to)) &&
+                contentKey(edit.to) != contentKey(edit.from) && !removedPaths.contains(contentKey(edit.to)))
                 return {false, "A file already exists at " + edit.to + ". Remove or rename it first."};
         }
         if (!edit.source.isEmpty() &&
@@ -275,6 +309,11 @@ ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, const QLis
                              : "Content changed; recovery needs attention. Backups: " + backup,
                     backup, !restored};
         }
+        if (edit.from.isEmpty() && !edit.to.isEmpty() && QFileInfo::exists(to)) {
+            const bool restored = rollback();
+            return {false, "The destination changed during this operation. Refresh and retry.", backup,
+                    !restored};
+        }
         if (!edit.to.isEmpty())
             QDir().mkpath(QFileInfo(to).absolutePath());
         bool ok = true;
@@ -305,7 +344,7 @@ ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, const QLis
                         removed = true;
                     else {
                         pin["installPath"] = edit.to;
-                        pin["enabled"] = !edit.to.endsWith(".disabled");
+                        pin["enabled"] = !edit.to.endsWith(".disabled", Qt::CaseInsensitive);
                     }
                 }
             if (!removed)
@@ -321,15 +360,34 @@ ContentWriteResult NativeContentStore::apply(const QVariantMap &pack, const QLis
                         removed = true;
                     else {
                         pin["installPath"] = edit.to;
-                        pin["enabled"] = !edit.to.endsWith(".disabled");
+                        pin["enabled"] = !edit.to.endsWith(".disabled", Qt::CaseInsensitive);
                     }
                 }
             if (!removed)
                 assets << pin;
         }
+        QMap<QString, QString> written;
+        for (const auto &edit : edits)
+            if (!edit.source.isEmpty())
+                written[contentKey(edit.to)] = sha1File(edit.source);
+        const auto clean = [&](const QJsonArray &refs) {
+            QJsonArray kept;
+            QSet<QString> seen;
+            for (auto it = refs.constEnd(); it != refs.constBegin();) {
+                const auto ref = (*--it).toObject();
+                const auto path = ref.value("installPath").toString();
+                if (seen.contains(contentKey(path)) ||
+                    (written.contains(contentKey(path)) &&
+                     written.value(contentKey(path)) != ref.value("sha1").toString()))
+                    continue;
+                seen.insert(contentKey(path));
+                kept.prepend(ref);
+            }
+            return kept;
+        };
         const auto result = PackRepository::updateContentReferences(
-            root, originalManifest, replacementPins ? *replacementPins : updated,
-            replacementAssets ? *replacementAssets : assets);
+            root, originalManifest, clean(replacementPins ? *replacementPins : updated),
+            clean(replacementAssets ? *replacementAssets : assets));
         if (!result.ok) {
             const bool restored = rollback();
             return {false, result.error + (restored ? " Files were restored." : " Check backups: " + backup),
@@ -352,7 +410,7 @@ ContentWriteResult NativeContentStore::setEnabledBatch(const QVariantMap &pack, 
             return {false, "Unlock this content before changing it."};
         if (row.value("directory").toBool() || row.value("sha1").toString().isEmpty())
             return {false, "Only verified content files can be enabled or disabled."};
-        const bool currentlyEnabled = !path.endsWith(".disabled");
+        const bool currentlyEnabled = !path.endsWith(".disabled", Qt::CaseInsensitive);
         if (currentlyEnabled == enabled)
             continue;
         const auto target = enabled ? path.chopped(9) : path + ".disabled";
@@ -442,7 +500,7 @@ ContentWriteResult NativeContentStore::applyStaged(const QVariantMap &pack, cons
                             (!old.isEmpty() && !old.value("enabled").toBool() ? ".disabled" : "");
         auto managedRef = ref;
         managedRef["installPath"] = target;
-        managedRef["enabled"] = !target.endsWith(".disabled");
+        managedRef["enabled"] = !target.endsWith(".disabled", Qt::CaseInsensitive);
         managedPins << managedRef;
         if (!old.isEmpty() && old.value("sha1").toString() == hash &&
             (!pack.value("managed").toBool() || old.value("relativePath").toString() == target))
@@ -520,7 +578,7 @@ ContentWriteResult NativeContentStore::installAsset(const QVariantMap &pack, con
         ref["installPath"] = target;
         ref["projectTitle"] = request.title;
         ref["projectSourceIds"] = request.sourceIds;
-        ref["enabled"] = !target.endsWith(".disabled");
+        ref["enabled"] = !target.endsWith(".disabled", Qt::CaseInsensitive);
         pins << ref;
     }
     return apply(pack, edits, nullptr, pack.value("managed").toBool() ? &pins : nullptr);
@@ -556,7 +614,8 @@ ContentWriteResult NativeContentStore::restoreLocked(const QVariantMap &pack,
 ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pack,
                                                            const QVariantList &expected, const QString &stage,
                                                            const QJsonObject &manifest,
-                                                           const QSet<QString> &shallowProjects) const {
+                                                           const QSet<QString> &shallowProjects,
+                                                           bool selectedOnly) const {
     ContentAccess access(pack.value("path").toString(), ContentAccess::Write);
     if (!access.ok())
         return {false, access.error()};
@@ -571,7 +630,7 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
             originalRows.insert(path, row);
         }
     }
-    for (const auto &value : snapshot(pack, PackContent::scan(pack).files)) {
+    for (const auto &value : snapshot(pack, PackContent::contentFiles(pack))) {
         const auto row = value.toMap();
         const auto path = row.value("relativePath").toString();
         if (contentPath(path) && !row.value("directory").toBool())
@@ -579,7 +638,7 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
     }
     if (beforeHashes != actualHashes)
         return {false, "Content changed during download. Nothing was applied; refresh and retry."};
-    const auto stageFiles = PackContent::scan({{"path", stage}, {"loader", pack.value("loader")}}).files;
+    const auto stageFiles = PackContent::contentFiles({{"path", stage}, {"loader", pack.value("loader")}});
     QMap<QString, int> beforeIds, afterIds;
     QSet<QString> disabledProjects, disabledVersions;
     for (const auto &value : expected) {
@@ -600,10 +659,6 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
             !row.value("modId").toString().isEmpty())
             ++afterIds[row.value("modId").toString()];
     }
-    for (auto it = afterIds.cbegin(); it != afterIds.cend(); ++it)
-        if (it.value() > qMax(1, beforeIds.value(it.key())))
-            return {false, "This transaction would introduce duplicate mod ID " + it.key() +
-                               ". Nothing was applied."};
     const auto sourceLocks = LauncherContentState::read(pack);
     QList<Edit> removals, additions;
     QJsonArray mods, assets;
@@ -611,13 +666,13 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
     for (const auto &kind : {QString("mods"), QString("assets")})
         for (const auto &value : manifest.value(kind).toArray()) {
             auto ref = value.toObject();
+            const auto replacePath = ref.take("confluxReplacePath").toString();
             const auto provider = ref.value("provider").toString(), id = ref.value("projectId").toString(),
                        hash = ref.value("sha1").toString();
             const auto category = kind == "mods" ? QString("mods") : ref.value("category").toString();
             const auto file = ref.value("filename").toString();
             const auto source = NativePackFileStore::resolve(stage, ref.value("installPath").toString());
-            if (hash.isEmpty() || source.isEmpty() || sha1File(source) != hash ||
-                !contentPath(category + '/' + file))
+            if (hash.isEmpty() || !contentPath(category + '/' + file))
                 return {false, "Staged content failed final verification. Nothing was applied."};
             if (ref.contains("confluxRetainedPath")) {
                 const auto originalPath = ref.take("confluxRetainedPath").toString();
@@ -635,6 +690,8 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
                     assets << ref;
                 continue;
             }
+            if (source.isEmpty() || sha1File(source) != hash)
+                return {false, "Staged content failed final verification. Nothing was applied."};
             bool unchangedInput = false;
             for (const auto &value : expected)
                 if (value.toMap().value("sha1").toString() == hash)
@@ -661,9 +718,11 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
                 for (auto it = ids.cbegin(); it != ids.cend(); ++it)
                     if (!it.value().toString().isEmpty() && installedIds.value(it.key()) == it.value())
                         same = true;
-                if (same || (installedIds.isEmpty() &&
-                             row.value("relativePath").toString() == ref.value("installPath").toString() &&
-                             row.value("sha1").toString() == hash)) {
+                if ((!replacePath.isEmpty() && row.value("relativePath").toString() == replacePath) ||
+                    (replacePath.isEmpty() &&
+                     (same || (installedIds.isEmpty() &&
+                               row.value("relativePath").toString() == ref.value("installPath").toString() &&
+                               row.value("sha1").toString() == hash)))) {
                     old = row;
                     ++matches;
                 }
@@ -671,6 +730,8 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
             if (matches > 1)
                 return {false,
                         "Multiple installed files match one project. Review content before replacing it."};
+            if (!replacePath.isEmpty() && old.isEmpty())
+                return {false, "The selected content no longer exists. Refresh before updating it."};
             QString target = category + '/' +
                              (category == "mods" && pack.value("managed").toBool() ? hash + ".jar" : file);
             if (!old.isEmpty() && !old.value("enabled").toBool())
@@ -698,8 +759,16 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
                 (old.value("locked").toBool() || old.value("frozen").toBool() ||
                  (m_locks && m_locks->projectLocked(root, provider, id))))
                 return {false, "A locked project or dependency would be changed. Nothing was applied."};
+            QString destinationHash;
+            for (auto it = originalRows.cbegin(); it != originalRows.cend(); ++it)
+                if (contentKey(it.key()) == contentKey(target)) {
+                    destinationHash = it.value().value("sha1").toString();
+                    if (!unchanged &&
+                        (it.value().value("locked").toBool() || it.value().value("frozen").toBool()))
+                        return {false, "A locked destination would be changed. Nothing was applied."};
+                }
             ref["installPath"] = target;
-            ref["enabled"] = !target.endsWith(".disabled");
+            ref["enabled"] = !target.endsWith(".disabled", Qt::CaseInsensitive);
             if (kind == "mods")
                 mods << ref;
             else
@@ -713,7 +782,7 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
                 replaced.insert(path);
                 removals << Edit{path, {}, {}, old.value("sha1").toString()};
             }
-            additions << Edit{{}, target, source, {}};
+            additions << Edit{{}, target, source, destinationHash};
         }
     if (pack.value("managed").toBool()) {
         const auto original = PackRepository::inspectContent(root);
@@ -723,13 +792,17 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
             auto &refs = kind == "mods" ? mods : assets;
             for (const auto &value : original.manifest.value(kind).toArray()) {
                 const auto old = value.toObject();
-                if (beforeHashes.contains(old.value("installPath").toString()))
+                if (!selectedOnly && beforeHashes.contains(old.value("installPath").toString()))
+                    continue;
+                if (selectedOnly && replaced.contains(old.value("installPath").toString()))
                     continue;
                 bool included = false;
                 for (const auto &entry : refs) {
                     const auto ref = entry.toObject();
-                    if (ref.value("provider") == old.value("provider") &&
-                        ref.value("projectId") == old.value("projectId"))
+                    if (selectedOnly ? contentKey(ref.value("installPath").toString()) ==
+                                           contentKey(old.value("installPath").toString())
+                                     : (ref.value("provider") == old.value("provider") &&
+                                        ref.value("projectId") == old.value("projectId")))
                         included = true;
                 }
                 if (!included)
@@ -737,6 +810,46 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
             }
         }
     }
+    if (selectedOnly) {
+        auto counts = beforeIds;
+        for (const auto &edit : removals) {
+            const auto row = originalRows.value(edit.from);
+            if (row.value("enabled").toBool() && !row.value("modId").toString().isEmpty())
+                --counts[row.value("modId").toString()];
+        }
+        for (const auto &edit : additions) {
+            if (!edit.to.startsWith("mods/") || edit.to.endsWith(".disabled", Qt::CaseInsensitive))
+                continue;
+            QVariantMap overwritten;
+            bool alreadyRemoved = false;
+            for (auto it = originalRows.cbegin(); it != originalRows.cend(); ++it)
+                if (contentKey(it.key()) == contentKey(edit.to)) {
+                    overwritten = it.value();
+                    alreadyRemoved = replaced.contains(it.key());
+                    break;
+                }
+            if (!alreadyRemoved && overwritten.value("enabled").toBool() &&
+                !overwritten.value("modId").toString().isEmpty())
+                --counts[overwritten.value("modId").toString()];
+        }
+        // Only selected files that will actually be written contribute new IDs.
+        // Reinstalling identical bytes leaves the original ID count unchanged.
+        for (const auto &edit : additions) {
+            if (!edit.to.startsWith("mods/") || edit.to.endsWith(".disabled", Qt::CaseInsensitive))
+                continue;
+            for (const auto &value : stageFiles) {
+                const auto row = value.toMap();
+                if (QDir(stage).filePath(row.value("relativePath").toString()) == edit.source &&
+                    !row.value("modId").toString().isEmpty())
+                    ++counts[row.value("modId").toString()];
+            }
+        }
+        afterIds = counts;
+    }
+    for (auto it = afterIds.cbegin(); it != afterIds.cend(); ++it)
+        if (it.value() > qMax(1, beforeIds.value(it.key())))
+            return {false, "This transaction would introduce duplicate mod ID " + it.key() +
+                               ". Nothing was applied."};
     if (removals.isEmpty() && additions.isEmpty() && !pack.value("managed").toBool())
         return {true, {}};
     return apply(pack, removals + additions, pack.value("managed").toBool() ? &mods : nullptr,

@@ -53,7 +53,7 @@ static bool sameProject(const QVariantMap &a, const QVariantMap &b) {
     return false;
 }
 QVariantList reconcileContentRows(const QVariantList &actual, const QVariantList &previous,
-                                  const QVariantList &predictions) {
+                                  const QVariantList &predictions, bool indexedMetadata) {
     QHash<QPair<QString, QString>, QVariantMap> hashes, paths;
     QSet<QPair<QString, QString>> ambiguousHashes;
     for (const auto &value : previous + predictions) {
@@ -93,10 +93,38 @@ QVariantList reconcileContentRows(const QVariantList &actual, const QVariantList
         const auto same = path.value("sha1").toString() == hash        ? path
                           : ambiguousHashes.contains({category, hash}) ? QVariantMap{}
                                                                        : hashes.value({category, hash});
-        if (!hash.isEmpty() && !same.isEmpty())
-            for (const auto &key : metadata)
-                if (same.contains(key))
-                    row[key] = same.value(key);
+        if (!hash.isEmpty() && !same.isEmpty()) {
+            const bool identityKnown =
+                !row.value("sourceIds").toMap().isEmpty() || !row.value("installedRelease").toMap().isEmpty();
+            for (const auto &key : metadata) {
+                if (key == "sourceIds") {
+                    auto ids = same.value(key).toMap();
+                    const auto fresh = row.value(key).toMap();
+                    for (auto it = fresh.cbegin(); it != fresh.cend(); ++it)
+                        if (!it.value().toString().isEmpty())
+                            ids.insert(it.key(), it.value());
+                    if (!ids.isEmpty())
+                        row[key] = ids;
+                } else if (key == "updateRelease" && row.contains("updateAvailable") &&
+                           !row.value("updateAvailable").toBool()) {
+                    row.remove(key);
+                } else {
+                    const bool missing = !row.contains(key) || !row.value(key).isValid() ||
+                                         (row.value(key).typeId() == QMetaType::QString &&
+                                          row.value(key).toString().isEmpty()) ||
+                                         (row.value(key).typeId() == QMetaType::QVariantMap &&
+                                          row.value(key).toMap().isEmpty());
+                    // A raw filesystem refresh may borrow its unchanged file's presentation.
+                    // Fresh index results are authoritative, including explicit false update flags.
+                    const bool identityField = key == "external" || key == "provider" || key == "projectId";
+                    const bool preferPrevious = !(identityField ? identityKnown : indexedMetadata) &&
+                                                key != "installedRelease" && key != "updateRelease" &&
+                                                key != "updateAvailable";
+                    if (same.contains(key) && (missing || preferPrevious))
+                        row[key] = same.value(key);
+                }
+            }
+        }
         auto old = path;
         if (old.isEmpty() && !same.isEmpty())
             old = same;

@@ -115,11 +115,11 @@ Item {
                                 background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius }
                                 contentItem: ColumnLayout {
                                     spacing: 2
-                                    ActionButton { Layout.fillWidth: true; text: entry.modelData.hidden ? "Restore content" : "Hide content"; iconName: entry.modelData.hidden ? "restore" : "hide"; subtle: true; alignLeft: true; onClicked: { rowMenu.close();root.controller.hide(entry.modelData.relativePath,!entry.modelData.hidden) } }
-                                    ActionButton { Layout.fillWidth: true; text: "Show file"; iconName: "folder"; subtle: true; alignLeft: true; onClicked: { root.showFilesRequested(entry.modelData.relativePath); rowMenu.close() } }
-                                    ActionButton { Layout.fillWidth: true; objectName: "copyContentLink"; text: "Copy link"; iconName: "copy"; subtle: true; alignLeft: true; enabled: !!entry.modelData.projectUrl; onClicked: { root.controller.copyLink(entry.modelData.relativePath); rowMenu.close() } }
+                                    MenuOption { Layout.fillWidth: true; text: entry.modelData.hidden ? "Restore content" : "Hide content"; iconName: entry.modelData.hidden ? "restore" : "hide"; subtle: true; alignLeft: true; onClicked: { rowMenu.close();root.controller.hide(entry.modelData.relativePath,!entry.modelData.hidden) } }
+                                    MenuOption { Layout.fillWidth: true; text: "Show file"; iconName: "folder"; subtle: true; alignLeft: true; onClicked: { root.showFilesRequested(entry.modelData.relativePath); rowMenu.close() } }
+                                    MenuOption { Layout.fillWidth: true; objectName: "copyContentLink"; text: "Copy link"; iconName: "copy"; subtle: true; alignLeft: true; enabled: !!entry.modelData.projectUrl; onClicked: { root.controller.copyLink(entry.modelData.relativePath); rowMenu.close() } }
                                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.border; Layout.topMargin: 5; Layout.bottomMargin: 5 }
-                                    ActionButton { Layout.fillWidth: true; text: entry.modelData.frozen ? "Unfreeze version" : "Freeze version"; iconName: "lock"; subtle: true; alignLeft: true; enabled: !!entry.modelData.projectId || !!entry.modelData.sha1; onClicked: { root.controller.freeze(entry.modelData.relativePath,!entry.modelData.frozen); rowMenu.close() } }
+                                    MenuOption { Layout.fillWidth: true; text: entry.modelData.frozen ? "Unfreeze version" : "Freeze version"; iconName: "lock"; subtle: true; alignLeft: true; enabled: !!entry.modelData.projectId || !!entry.modelData.sha1; onClicked: { root.controller.freeze(entry.modelData.relativePath,!entry.modelData.frozen); rowMenu.close() } }
                                 }
                             }
                         }

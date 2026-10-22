@@ -11,6 +11,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QProcess>
+#include <QScopeGuard>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QTemporaryDir>
@@ -224,6 +225,8 @@ class FoundationTests : public QObject {
         QVERIFY(temp.isValid());
         const auto pack = PackRepository::create(temp.path(), "../../My pack; no shell", "1.21.1", "fabric");
         QVERIFY2(pack.ok, qPrintable(pack.error));
+        QVERIFY(!pack.gitEnabled);
+        QVERIFY(!QFileInfo::exists(pack.path + "/.git"));
         QCOMPARE(QFileInfo(pack.path).absolutePath(), QDir(temp.path()).absolutePath());
         const auto original = QJsonDocument(pack.manifest).toJson();
         const auto duplicate =
@@ -258,7 +261,7 @@ class FoundationTests : public QObject {
     }
     void gitCommitStagesOnlyOwnedFiles() {
         QTemporaryDir temp;
-        const auto pack = PackRepository::create(temp.path(), "History", "1.21.1", "fabric");
+        const auto pack = PackRepository::create(temp.path(), "History", "1.21.1", "fabric", true);
         QVERIFY(pack.ok);
         runGit(pack.path, {"config", "user.name", "Foundation Test"});
         runGit(pack.path, {"config", "user.email", "foundation@example.invalid"});
@@ -276,6 +279,42 @@ class FoundationTests : public QObject {
         QVERIFY(!PackRepository::commit(pack.path, "Must refuse unrelated staged file").ok);
         QCOMPARE(runGit(pack.path, {"rev-list", "--count", "HEAD"}).trimmed(), QByteArray("1"));
         QVERIFY(!PackRepository::commit(pack.path, "").ok);
+    }
+    void packCreationAndInspectionDoNotRequireAGitExecutable() {
+        QTemporaryDir temp;
+        const auto previous = qgetenv("PATH");
+        const auto restore = qScopeGuard([previous] { qputenv("PATH", previous); });
+        qputenv("PATH", temp.path().toUtf8());
+        const auto pack = PackRepository::create(temp.path(), "Offline", "1.21.1", "fabric");
+        QVERIFY2(pack.ok, qPrintable(pack.error));
+        QVERIFY(!pack.gitEnabled);
+        const auto inspected = PackRepository::inspect(pack.path);
+        QVERIFY2(inspected.ok, qPrintable(inspected.error));
+        QVERIFY(inspected.history.isEmpty());
+        QVERIFY(!QFileInfo::exists(pack.path + "/.git"));
+    }
+    void packsWorkWithoutGitAndSetupDoesNotRewriteContent() {
+        QTemporaryDir temp;
+        const auto pack = PackRepository::create(temp.path(), "Without history", "1.21.1", "neoforge");
+        QVERIFY2(pack.ok, qPrintable(pack.error));
+        QVERIFY(!QFileInfo::exists(pack.path + "/.git"));
+        const auto before = QJsonDocument(pack.manifest).toJson();
+        QVERIFY(!PackRepository::commit(pack.path, "Requires opt-in").ok);
+        QVERIFY(!PackRepository::enableGit(pack.path, "", "invalid").ok);
+        QVERIFY(!QFileInfo::exists(pack.path + "/.git"));
+        auto tracked = PackRepository::enableGit(pack.path, "Local Test", "test@example.invalid");
+        QVERIFY2(tracked.ok, qPrintable(tracked.error));
+        QVERIFY(tracked.gitEnabled);
+        QCOMPARE(QJsonDocument(tracked.manifest).toJson(), before);
+        QCOMPARE(runGit(pack.path, {"config", "--local", "user.name"}).trimmed(), QByteArray("Local Test"));
+        QCOMPARE(runGit(pack.path, {"config", "--local", "user.email"}).trimmed(),
+                 QByteArray("test@example.invalid"));
+        auto withoutHistory = PackRepository::inspect(pack.path, false);
+        QVERIFY(withoutHistory.ok);
+        QVERIFY(withoutHistory.gitEnabled);
+        QVERIFY(withoutHistory.history.isEmpty());
+        QVERIFY(!PackRepository::gitIdentityError("Bad\nName", "test@example.invalid").isEmpty());
+        QVERIFY(!PackRepository::gitIdentityError("Name", "not an email").isEmpty());
     }
     void malformedManifestIsRejected() {
         QTemporaryDir temp;

@@ -35,6 +35,7 @@ ApplicationController::ApplicationController(QObject *parent, QString packsRootO
             m_activePack.insert("path", result.path);
             m_activePack.insert("managed", true);
             m_activePack.insert("provider", "conflux");
+            m_activePack.insert("gitEnabled", result.gitEnabled);
             m_activeMods = result.manifest.value("mods").toArray().toVariantList();
             m_gitStatus = result.status;
             m_history = result.history;
@@ -117,6 +118,7 @@ void ApplicationController::refreshPacks() {
             continue;
         map.insert("path", folder.absoluteFilePath());
         map.insert("modCount", map.value("mods").toList().size());
+        map.insert("gitEnabled", QFileInfo::exists(QDir(folder.absoluteFilePath()).filePath(".git")));
         m_packs.append(map);
     }
     emit stateChanged();
@@ -255,12 +257,15 @@ void ApplicationController::refreshActivePack() {
                     m_activePack["path"] = path;
                     m_activePack["managed"] = true;
                     m_activePack["provider"] = "conflux";
+                    m_activePack["gitEnabled"] = result.gitEnabled;
                     m_activeMods = result.manifest.value("mods").toArray().toVariantList();
                     m_gitStatus = result.status;
                     m_history = result.history;
                     emit stateChanged();
                 });
-        watcher->setFuture(QtConcurrent::run([path] { return PackRepository::inspect(path); }));
+        const bool historyEnabled = gitEnabled();
+        watcher->setFuture(QtConcurrent::run(
+            [path, historyEnabled] { return PackRepository::inspect(path, historyEnabled); }));
     }
     refreshLibrary();
 }
@@ -316,6 +321,7 @@ void ApplicationController::runRepository(std::function<RepositoryResult()> oper
             m_activePack.insert("path", result.path);
             m_activePack.insert("managed", true);
             m_activePack.insert("provider", "conflux");
+            m_activePack.insert("gitEnabled", result.gitEnabled);
             m_activeMods = result.manifest.value("mods").toArray().toVariantList();
             m_gitStatus = result.status;
             m_history = result.history;
@@ -335,14 +341,58 @@ void ApplicationController::runRepository(std::function<RepositoryResult()> oper
 }
 void ApplicationController::createPack(const QString &name, const QString &game, const QString &loader) {
     const auto root = packsRoot();
-    runRepository([root, name, game, loader] { return PackRepository::create(root, name, game, loader); },
-                  true);
+    const bool track = gitEnabled();
+    const auto author = gitAuthorName(), email = gitAuthorEmail();
+    runRepository(
+        [root, name, game, loader, track, author, email] {
+            auto created = PackRepository::create(root, name, game, loader);
+            if (!created.ok || !track)
+                return created;
+            const auto tracked = PackRepository::enableGit(created.path, author, email);
+            if (tracked.ok)
+                return tracked;
+            created.error = "The modpack was created, but Git setup failed: " + tracked.error;
+            return created;
+        },
+        true);
+}
+void ApplicationController::configureGit(bool enabled, const QString &name, const QString &email) {
+    const auto error = enabled ? PackRepository::gitIdentityError(name, email) : QString{};
+    if (!error.isEmpty()) {
+        reportContentError(error);
+        return;
+    }
+    ++m_activeRefreshGeneration;
+    m_activeRefreshPending = false;
+    m_settings->setValue("git/enabled", enabled);
+    m_settings->setValue("git/authorName", name.trimmed());
+    m_settings->setValue("git/authorEmail", email.trimmed());
+    m_notice.clear();
+    if (!enabled) {
+        m_gitStatus.clear();
+        m_history.clear();
+    }
+    emit gitConfigurationChanged();
+    emit stateChanged();
+}
+void ApplicationController::enablePackGit() {
+    if (!gitEnabled() || !m_activePack.value("managed").toBool())
+        return;
+    const auto path = m_activePack.value("path").toString();
+    const auto author = gitAuthorName(), email = gitAuthorEmail();
+    for (const auto &pack : m_packs)
+        if (pack.toMap().value("path").toString() == path) {
+            runRepository([path, author, email] { return PackRepository::enableGit(path, author, email); });
+            return;
+        }
 }
 void ApplicationController::openPack(const QString &path) {
     // UI can open only packs inventoried in our own managed root.
     for (const auto &pack : m_packs)
         if (pack.toMap().value("path").toString() == path) {
-            runRepository([path] { return PackRepository::inspect(path); }, true);
+            const bool historyEnabled = gitEnabled();
+            runRepository([path, historyEnabled] { return PackRepository::inspect(path, historyEnabled); },
+                          true);
             return;
         }
 }
@@ -372,7 +422,7 @@ void ApplicationController::removeMod(const QString &provider, const QString &pr
             [path, provider, projectId] { return PackRepository::remove(path, provider, projectId); });
 }
 void ApplicationController::saveChanges(const QString &message) {
-    if (!m_activePack.value("managed").toBool())
+    if (!gitEnabled() || !m_activePack.value("managed").toBool())
         return;
     const auto path = m_activePack.value("path").toString();
     if (!path.isEmpty())

@@ -32,6 +32,7 @@ void ReleaseFilters::setContext(const QString &identity, const QVariantList &gro
     }
     m_groups = groups;
     m_options = calculateOptions();
+    reconcileSelections();
     m_rows = calculateRows();
     emit changed();
 }
@@ -61,8 +62,19 @@ void ReleaseFilters::configure(const QVariantMap &changes) {
         }
     }
     if (dirty) {
+        reconcileSelections();
         m_rows = calculateRows();
         emit changed();
+    }
+}
+void ReleaseFilters::reconcileSelections() {
+    for (const auto &key : {QString("loaders")}) {
+        const auto available = m_options.value(key).toStringList();
+        if (available.isEmpty())
+            continue; // Empty/loading contexts do not erase defaults or drafts.
+        auto selected = m_filters.value(key).toStringList();
+        selected.removeIf([&available](const QString &value) { return !available.contains(value); });
+        m_filters[key] = selected;
     }
 }
 QVariantMap ReleaseFilters::calculateOptions() const {

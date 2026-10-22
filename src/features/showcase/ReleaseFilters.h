@@ -27,6 +27,7 @@ class ReleaseFilters final : public QObject {
     void changed();
 
   private:
+    void reconcileSelections();
     QVariantList calculateRows() const;
     QVariantMap calculateOptions() const;
     QString m_identity;

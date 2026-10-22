@@ -236,7 +236,10 @@ class ContentUpdateIntegrationTests : public QObject {
         corrupt = false;
         content.operations()->retry(taskId(content, QString("fixture%1").arg(failureAt)));
         QTRY_VERIFY_WITH_TIMEOUT(!content.busy(), 15000);
-        QCOMPARE(downloads, 4);
+        QVERIFY2(downloads == 4,
+                 qPrintable(QJsonDocument(QJsonArray::fromVariantList(content.operations()->entries()))
+                                .toJson(QJsonDocument::Compact)));
+
         QCOMPARE(content.operations()->failedCount(), 0);
         QVERIFY(!QFileInfo::exists(root + '/' + paths[failureAt]));
         QCOMPARE(

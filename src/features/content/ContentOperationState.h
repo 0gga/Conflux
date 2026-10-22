@@ -18,7 +18,7 @@ struct ContentOperation {
 QString contentRowKey(const QVariantMap &);
 QVariantMap contentInstallPrediction(const ContentInstallRequest &, const QVariantMap &pack, QVariantMap row);
 QVariantList reconcileContentRows(const QVariantList &actual, const QVariantList &previous,
-                                  const QVariantList &predictions = {});
+                                  const QVariantList &predictions = {}, bool indexedMetadata = false);
 QVariantList projectContentOperations(QVariantList, const QList<ContentOperation> &);
 QVariantList resolveContentTargets(const QVariantList &, const QStringList &);
 } // namespace studio

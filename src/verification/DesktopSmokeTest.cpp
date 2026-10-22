@@ -141,6 +141,7 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                     fail("Project render failed");
                     return;
                 }
+                controller.configureGit(true, "Conflux Verification", "verification@example.invalid");
                 controller.createPack("UI verification pack", "1.21.1", "fabric");
                 break;
             case 3:

@@ -1,6 +1,7 @@
 #pragma once
 #include "features/content/ContentOperationQueue.h"
 #include "features/content/ContentPorts.h"
+#include <QHash>
 #include <QObject>
 #include <QSet>
 #include <memory>
@@ -13,15 +14,24 @@ class BrowseInstalls final : public QObject {
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
     Q_PROPERTY(bool connectorAvailable READ connectorAvailable NOTIFY changed)
     Q_PROPERTY(QString notice READ notice NOTIFY changed)
+    Q_PROPERTY(int revision READ revision NOTIFY changed)
   public:
     explicit BrowseInstalls(std::shared_ptr<IContentCatalogue>, QObject *parent = nullptr);
     void setContext(const QVariantMap &, const QVariantList &, bool indexing);
     void setTargetPath(const QString &);
+    void rememberReleases(const QVariantMap &project, const QVariantList &groups);
+    QVariantList inventory() const {
+        return m_rows;
+    }
+    int revision() const {
+        return m_revision;
+    }
     void setCurseforgeKey(const QByteArray &key) {
         m_catalogue->setCurseforgeKey(key);
         const bool enabled = !key.trimmed().isEmpty();
         if (enabled != m_curseforgeEnabled) {
             m_curseforgeEnabled = enabled;
+            ++m_revision;
             emit changed();
         }
     }
@@ -60,6 +70,8 @@ class BrowseInstalls final : public QObject {
     bool m_indexing = false;
     bool m_curseforgeEnabled = false;
     int m_lookupGeneration = 0;
+    int m_revision = 0;
+    QHash<QString, QVariantMap> m_verifiedIdentities;
     ContentOperationQueue m_lookups;
     QSet<QString> m_pendingLookups;
     QString lookupKey(const QVariantMap &) const;

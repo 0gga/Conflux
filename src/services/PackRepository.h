@@ -6,12 +6,16 @@ struct RepositoryResult {
     bool ok = false;
     QString error, path, status, history;
     QJsonObject manifest;
+    bool gitEnabled = false;
 };
 class PackRepository {
   public:
     static RepositoryResult create(const QString &root, const QString &name, const QString &gameVersion,
-                                   const QString &loader);
-    static RepositoryResult inspect(const QString &path);
+                                   const QString &loader, bool initializeGit = false);
+    static RepositoryResult inspect(const QString &path, bool includeHistory = true);
+    static RepositoryResult enableGit(const QString &path, const QString &authorName = {},
+                                      const QString &authorEmail = {});
+    static QString gitIdentityError(const QString &authorName, const QString &authorEmail);
     // Verified manifest/ownership only; content transactions do not need Git presentation data.
     static RepositoryResult inspectContent(const QString &path);
     static RepositoryResult pin(const QString &path, const QJsonObject &reference);

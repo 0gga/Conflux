@@ -54,6 +54,20 @@ class ShowcaseTests : public QObject {
         QCOMPARE(file.write(data), data.size());
     }
   private slots:
+    void platformCountsOnlyIncludeAvailablePlatforms() {
+        ReleaseFilters filters;
+        const QVariantMap release{{"provider", "modrinth"},
+                                  {"gameVersions", QStringList{"1.21.1"}},
+                                  {"loaders", QStringList{"neoforge"}}};
+        const QVariantList groups{QVariantMap{{"label", "Version"}, {"variants", QVariantList{release}}}};
+        filters.setContext("only-neoforge", groups, {"1.21.1"}, {"neoforge", "fabric"});
+        QCOMPARE(filters.filters().value("loaders").toStringList(), QStringList{"neoforge"});
+        QCOMPARE(filters.rows().size(), 1);
+        filters.configure({{"loaders", QStringList{"forge", "neoforge"}}});
+        QCOMPARE(filters.filters().value("loaders").toStringList(), QStringList{"neoforge"});
+        filters.configure({{"versions", QStringList{"1.20.1"}}});
+        QVERIFY(filters.rows().isEmpty()); // An unavailable Minecraft target must not broaden compatibility.
+    }
 
     void openPublishesOneSeededStateAndReusesFormattedDescriptions() {
         auto source = std::make_shared<ShowcaseFixture>();
@@ -254,7 +268,8 @@ class ShowcaseTests : public QObject {
             "href='https://example.invalid/community'><img src='https://example.invalid/community.png' "
             "alt='Community'></a> <img "
             "src='https://example.invalid/source.png'></p>\n\n<br>![Divider](https://example.invalid/"
-            "divider.png)\n\n### Features\n- **Visible text**\n\n| Game | Status |\n| --- | --- |\n| 1.21.1 "
+            "divider.png)\n\n### Features\n- **Visible text**\n\n| Game | Status |\n| --- | --- |\n| "
+            "1.21.1 "
             "| Supported |\n\n```xml\n<keep>This is code</keep>\n```",
             true);
         QVERIFY(rendered.html.contains("Visible text"));
@@ -295,7 +310,8 @@ class ShowcaseTests : public QObject {
         const auto html = renderDescription(
             "![Header](https://example.invalid/banner.png)\n\n<p align=\"center\"><a "
             "href=\"https://example.invalid\"><img "
-            "src=\"https://example.invalid/button.png\"></a></p>\n\n<br>![Divider](https://example.invalid/"
+            "src=\"https://example.invalid/button.png\"></a></p>\n\n<br>![Divider](https://"
+            "example.invalid/"
             "divider.png)\n\n**Readable description**\n\n### Features\n- First feature\n- Second "
             "feature\n\n<table><tr><td>Compatibility</td></tr></table>",
             true);

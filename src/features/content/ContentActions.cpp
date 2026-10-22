@@ -104,114 +104,89 @@ void ContentActions::refresh(bool checkUpdates) {
     emit changed();
     auto *watcher = new QFutureWatcher<ContentFileState>(this);
     const QPointer<ContentActions> guard(this);
-    connect(
-        watcher, &QFutureWatcher<QVariantList>::finished, this,
-        [this, guard, watcher, generation, checkUpdates, previous] {
-            const auto state = watcher->result();
-            const auto rows = state.rows;
-            watcher->deleteLater();
-            if (generation != m_generation)
-                return;
-            if (!state.error.isEmpty()) {
-                m_busy = false;
-                reject(state.error, "Reading content");
-                return;
-            }
-            m_pack = state.pack;
-            ++m_lockRevision;
-            auto result = rows;
-            QVariantList unidentified;
-            const QStringList metadata{"sourceIds",        "external",      "provider",        "projectId",
-                                       "installedRelease", "updateRelease", "updateAvailable", "projectUrl",
-                                       "author",           "authorIcon",    "environment",     "openSource",
-                                       "authorIds",        "authors"};
-            // Prefer an unchanged path/hash pair; a shared binary alone can be ambiguous.
-            QHash<QPair<QString, QString>, QVariantMap> previousByHash, previousByPath;
-            QSet<QPair<QString, QString>> ambiguousHashes;
-            previousByHash.reserve(previous.size());
-            for (const auto &value : previous) {
-                const auto row = value.toMap();
-                const auto hash = row.value("sha1").toString();
-                const auto key = qMakePair(row.value("category").toString(), hash);
-                previousByPath.insert(
-                    {row.value("category").toString(), row.value("relativePath").toString()}, row);
-                if (!hash.isEmpty()) {
-                    if (previousByHash.contains(key))
-                        ambiguousHashes.insert(key);
-                    previousByHash.insert(key, row);
-                }
-            }
-            for (int i = 0; i < result.size(); ++i) {
-                auto row = result.at(i).toMap();
-                const auto key = qMakePair(row.value("category").toString(), row.value("sha1").toString());
-                auto old = previousByPath.value(
-                    {row.value("category").toString(), row.value("relativePath").toString()});
-                if (row.value("sha1").toString().isEmpty())
-                    old.clear();
-                else if (old.value("sha1") != row.value("sha1"))
-                    old = ambiguousHashes.contains(key) ? QVariantMap{} : previousByHash.value(key);
-                if (!old.isEmpty())
-                    for (const auto &key : metadata)
-                        if (old.contains(key))
-                            row[key] = old.value(key);
-                if (old.isEmpty())
-                    unidentified << row;
-                result[i] = row;
-            }
-            const auto done = [guard, generation, checkUpdates](QVariantList rows, QString error) {
-                if (!guard || generation != guard->m_generation)
+    connect(watcher, &QFutureWatcher<QVariantList>::finished, this,
+            [this, guard, watcher, generation, checkUpdates, previous] {
+                const auto state = watcher->result();
+                const auto rows = state.rows;
+                watcher->deleteLater();
+                if (generation != m_generation)
                     return;
-                guard->m_rows = reconcileContentRows(rows, guard->m_rows);
-                guard->m_busy = false;
-                if (checkUpdates)
-                    guard->m_checkUpdatesPending = false;
-                guard->m_notice = error;
-                guard->m_activity = error.isEmpty() ? "idle" : "error";
-                guard->applyPreferences();
-                QSet<QString> available;
-                for (const auto &value : rows)
-                    available.insert(value.toMap().value("relativePath").toString());
-                QStringList retained;
-                for (const auto &path : guard->m_selected)
-                    if (available.contains(path))
-                        retained << path;
-                guard->m_selected = retained;
-                emit guard->changed();
-            };
-            m_rows = reconcileContentRows(result, previous);
-            applyPreferences();
-            emit changed();
-            if (checkUpdates || !unidentified.isEmpty()) {
-                const auto lookup = checkUpdates ? result : unidentified;
-                m_catalogue->refresh(
-                    lookup, m_pack.value("minecraft").toString(),
-                    compatibleLoaders(m_pack.value("loader").toString(), result).join('|'),
-                    [done, result, checkUpdates](QVariantList indexed, QString error) mutable {
-                        if (checkUpdates) {
-                            done(indexed, error);
-                            return;
-                        }
-                        QHash<QPair<QString, QString>, QVariantMap> indexedByPath;
-                        indexedByPath.reserve(indexed.size());
-                        for (const auto &entry : indexed) {
-                            const auto row = entry.toMap();
-                            const auto key =
-                                qMakePair(row.value("relativePath").toString(), row.value("sha1").toString());
-                            if (!indexedByPath.contains(key))
-                                indexedByPath.insert(key, row);
-                        }
-                        for (auto &value : result) {
-                            const auto row = value.toMap();
-                            const auto item = indexedByPath.constFind(qMakePair(
-                                row.value("relativePath").toString(), row.value("sha1").toString()));
-                            if (item != indexedByPath.cend())
-                                value = *item;
-                        }
-                        done(result, error);
-                    });
-            } else
-                done(result, {});
-        });
+                if (!state.error.isEmpty()) {
+                    m_busy = false;
+                    reject(state.error, "Reading content");
+                    return;
+                }
+                m_pack = state.pack;
+                ++m_lockRevision;
+                auto result = reconcileContentRows(rows, previous);
+                QVariantList unidentified;
+                QSet<QPair<QString, QString>> knownFiles;
+                for (const auto &value : previous) {
+                    const auto row = value.toMap();
+                    knownFiles.insert({row.value("category").toString(), row.value("sha1").toString()});
+                }
+                for (const auto &value : result) {
+                    const auto row = value.toMap();
+                    const auto key =
+                        qMakePair(row.value("category").toString(), row.value("sha1").toString());
+                    if (!knownFiles.contains(key) || (row.value("sourceIds").toMap().isEmpty() &&
+                                                      row.value("installedRelease").toMap().isEmpty()))
+                        unidentified << row;
+                }
+                const auto done = [guard, generation, checkUpdates](QVariantList rows, QString error) {
+                    if (!guard || generation != guard->m_generation)
+                        return;
+                    guard->m_rows = reconcileContentRows(rows, guard->m_rows, {}, true);
+                    guard->m_busy = false;
+                    if (checkUpdates)
+                        guard->m_checkUpdatesPending = false;
+                    guard->m_notice = error;
+                    guard->m_activity = error.isEmpty() ? "idle" : "error";
+                    guard->applyPreferences();
+                    QSet<QString> available;
+                    for (const auto &value : rows)
+                        available.insert(value.toMap().value("relativePath").toString());
+                    QStringList retained;
+                    for (const auto &path : guard->m_selected)
+                        if (available.contains(path))
+                            retained << path;
+                    guard->m_selected = retained;
+                    emit guard->changed();
+                };
+                m_rows = reconcileContentRows(result, previous);
+                applyPreferences();
+                emit changed();
+                if (checkUpdates || !unidentified.isEmpty()) {
+                    const auto lookup = checkUpdates ? result : unidentified;
+                    m_catalogue->refresh(
+                        lookup, m_pack.value("minecraft").toString(),
+                        compatibleLoaders(m_pack.value("loader").toString(), result).join('|'),
+                        [done, result, checkUpdates](QVariantList indexed, QString error) mutable {
+                            if (checkUpdates) {
+                                done(indexed, error);
+                                return;
+                            }
+                            QHash<QPair<QString, QString>, QVariantMap> indexedByPath;
+                            indexedByPath.reserve(indexed.size());
+                            for (const auto &entry : indexed) {
+                                const auto row = entry.toMap();
+                                const auto key = qMakePair(row.value("relativePath").toString(),
+                                                           row.value("sha1").toString());
+                                if (!indexedByPath.contains(key))
+                                    indexedByPath.insert(key, row);
+                            }
+                            for (auto &value : result) {
+                                const auto row = value.toMap();
+                                const auto item = indexedByPath.constFind(qMakePair(
+                                    row.value("relativePath").toString(), row.value("sha1").toString()));
+                                if (item != indexedByPath.cend())
+                                    value = *item;
+                            }
+                            done(result, error);
+                        });
+                } else
+                    done(result, {});
+            });
     watcher->setFuture(QtConcurrent::run([files, pack, inventory] {
         try {
             return files->reload(pack, inventory, true);

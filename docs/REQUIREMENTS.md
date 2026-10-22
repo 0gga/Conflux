@@ -7,8 +7,8 @@ Source: direct owner requests in the 2026-10-19 Codex conversation, preserved in
 - Modrinth is the primary reference for UI, functionality and overall experience.
 - Show installations from both Modrinth and CurseForge apps.
 - Use publicly available APIs from both platforms.
-- Make each modpack its own user-owned Git repository.
-- Provide GitHub login and all normal Git operations through the UI.
+- Git history is optional and off by default. Configure identity and enable it in Settings; ordinary modpack creation and content use must work without Git installed.
+- GitHub login and remote Git operations remain future scope; optional local Git history is configured in Settings.
 - Offer merged, Modrinth-only and CurseForge-only content views.
 - Display one entry for the same mod across platforms; always prioritize Modrinth when merging.
 - Use Modrinth descriptions for shared projects.
@@ -147,3 +147,9 @@ For content with multiple authors, each author's name must be independently clic
 The owner requests a polished, responsive Discover catalogue at 1920x1080, rounded viewport corners without square card edges, predictable Hide installed / Show hidden interactions, more integration tests and 100% coverage. Keep the content list usable at smaller sizes and supported interface/filter scales; controls must stay inside their containers. Use compact filter access when a sidebar would crowd the results. Hidden-only mode must let users find and restore hidden installed content; the saved Hide installed preference resumes when leaving that mode. Preserve per-instance/type compatibility, exact provider identities and page/scroll restoration without stale asynchronous replies replacing current intent. Measure coverage and retain uncovered paths honestly; a passing suite does not establish 100% coverage.
 
 Recent content dates: the owner requires coarse elapsed hours through and including 24 hours everywhere content dates appear. Release rows retain the readable calendar date and append the hour age; card ages use the same boundary and their date hints preserve the date. Do not discard provider publication times or invent hourly precision for date-only values.
+
+## Library, shared menus and installed identity (2026-10-22)
+
+Library owns New modpack and instance navigation; do not repeat permanent Modpack/New modpack sidebar entries. Align instance rows with header/search right edges, remove modpack counts, and put instance actions in a three-dot menu including Open instance folder and Hide/Restore. Create modpack uses a searchable Minecraft release list and loader icons, without Git or marketing explanations. Keep concise action labels suitable for nontechnical users.
+
+All dropdown options fill their available popup width. Ordinary options have no nested outline; the selected option may use an accent outline. Platform selected counts include only available platforms. Installed badges use verified platform identities and exact binary hashes across providers; stale metadata must never erase fresh identification.

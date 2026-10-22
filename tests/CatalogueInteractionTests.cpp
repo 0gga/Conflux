@@ -1,5 +1,7 @@
 #include "CatalogueFixtures.h"
+#include "ContentFixtures.h"
 #include "features/explore/BrowseCatalogue.h"
+#include "features/explore/BrowseInstalls.h"
 #include "features/preferences/ContentVisibility.h"
 #include "theme/Appearance.h"
 #include <QFontDatabase>
@@ -46,6 +48,7 @@ Item {
     id: shell
     required property var catalogueModel
     property real uiScale: 1
+    property var browseModel: null
     function hasGlyph(name) { return !!Glyphs.markup[name] }
     Rectangle { anchors.fill: parent; color: Theme.colors.background }
     QtObject { id: fakeApp; property var libraryPacks: [{title:"Fixture",path:"fixture",provider:"modrinth"}]; property bool navigationBusy: false }
@@ -56,7 +59,7 @@ Item {
         x: 216 * shell.uiScale; y: 40 * shell.uiScale
         width: shell.width / shell.uiScale - 216; height: shell.height / shell.uiScale - 40
         scale: shell.uiScale; transformOrigin: Item.TopLeft
-        app: fakeApp; content: fakeContent; browse: fakeBrowse; catalogue: shell.catalogueModel; worlds: null; targetPath: "fixture"
+        app: fakeApp; content: fakeContent; browse: shell.browseModel || fakeBrowse; catalogue: shell.catalogueModel; worlds: null; targetPath: "fixture"
     }
 })QML";
 #endif
@@ -77,6 +80,112 @@ Item {
         return root;
     }
   private slots:
+    void dropdownRowsFillTheirPopupAndOnlySelectionHasAnOutline() {
+#ifndef Q_MOC_RUN
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData(
+            R"QML(import QtQuick
+import "components"
+Item { SelectBox { objectName:"sizeSelect";x:20;y:20;width:220;model:["10 per page","20 per page","50 per page","100 per page"];currentIndex:1 } })QML",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/MenuSizingFixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> root(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY(root);
+        QQuickWindow window;
+        window.resize(600, 400);
+        root->setParentItem(window.contentItem());
+        root->setSize(window.size());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *select = item(root.get(), "sizeSelect");
+        QVERIFY(select);
+        QSignalSpy activated(select, SIGNAL(activated(int)));
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(select));
+        QTRY_VERIFY(item(window.contentItem(), "selectBoxOption-0"));
+        auto *option = item(window.contentItem(), "selectBoxOption-0"),
+             *selected = item(window.contentItem(), "selectBoxOption-1");
+        QVERIFY(selected);
+        auto *background = qvariant_cast<QQuickItem *>(option->property("background"));
+        auto *selectedBackground = qvariant_cast<QQuickItem *>(selected->property("background"));
+        QVERIFY(background && selectedBackground);
+        QCOMPARE(QQmlProperty(background, "border.width").read().toInt(), 0);
+        QCOMPARE(QQmlProperty(selectedBackground, "border.width").read().toInt(), 1);
+        QCOMPARE(option->width(), option->parentItem()->parentItem()->width());
+        auto *text = qvariant_cast<QQuickItem *>(option->property("contentItem"));
+        QVERIFY(text);
+        QVERIFY(!text->property("truncated").toBool());
+        QVERIFY(window.grabWindow().save(QStringLiteral(CONFLUX_TEST_ARTIFACT_DIR) +
+                                         "/shared-dropdown-options.png"));
+        auto *next = item(window.contentItem(), "selectBoxOption-2");
+        QVERIFY(next);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(next));
+        QTRY_COMPARE(select->property("currentIndex").toInt(), 2);
+        QCOMPARE(activated.count(), 1);
+#endif
+    }
+    void creationUsesSearchableVersionsAndIndependentLoaderIcons() {
+#ifndef Q_MOC_RUN
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData(
+            R"QML(import QtQuick
+import QtQuick.Controls
+import "components"
+Item {
+ id:root
+ property var created:[]
+ property var versions:["1.21.11","1.21.1","1.21","1.20.1","1.19.4","1.18.2","1.17.1","1.16.5","1.15.2","1.14.4","1.13.2"]
+ QtObject { id:applicationModel;property bool repositoryBusy:false;function createPack(name,game,loader){root.created=[name,game,loader]} }
+ QtObject { id:catalogueModel;property var options:({versions:root.versions});function loadOptions(){} }
+ CreatePackDialog { id:dialog;parent:Overlay.overlay;app:applicationModel;catalogue:catalogueModel }
+ function display(){dialog.open()}
+})QML",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/CreationFixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> root(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY2(root, qPrintable(component.errorString()));
+        QQuickWindow window;
+        window.resize(1080, 720);
+        root->setParentItem(window.contentItem());
+        root->setSize(window.size());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QVERIFY(QMetaObject::invokeMethod(root.get(), "display"));
+        QTRY_VERIFY(item(window.contentItem(), "packNameInput"));
+        auto *name = item(window.contentItem(), "packNameInput");
+        name->forceActiveFocus();
+        for (char c : QByteArray("Friendly pack"))
+            QTest::keyClick(&window, c);
+        auto *version = item(window.contentItem(), "createPackVersion");
+        QVERIFY(version);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(version));
+        QTRY_VERIFY(item(window.contentItem(), "searchableSelectSearch"));
+        auto *search = item(window.contentItem(), "searchableSelectSearch");
+        for (char c : QByteArray("1211"))
+            QTest::keyClick(&window, c);
+        QTRY_VERIFY(item(window.contentItem(), "searchableSelectOption-1.21.1"));
+        QCOMPARE(search->property("text").toString(), QString("1211"));
+        QTest::keyClick(&window, Qt::Key_Return);
+        QTRY_COMPARE(version->property("value").toString(), QString("1.21.1"));
+        auto *loader = item(window.contentItem(), "createPackLoader");
+        QVERIFY(loader);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(loader));
+        QTRY_VERIFY(item(window.contentItem(), "searchableSelectOption-neoforge"));
+        auto *neo = item(window.contentItem(), "searchableSelectOption-neoforge");
+        QVERIFY(item(neo, "brandBadgeImage"));
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(neo));
+        QTRY_COMPARE(loader->property("value").toString(), QString("neoforge"));
+        auto *confirm = item(window.contentItem(), "createPackConfirm");
+        QVERIFY(confirm);
+        QVERIFY(confirm->isEnabled());
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(confirm));
+        QTRY_COMPARE(root->property("created").value<QJSValue>().toVariant().toList(),
+                     QVariantList({"Friendly pack", "1.21.1", "neoforge"}));
+        QVERIFY(window.grabWindow().save(QStringLiteral(CONFLUX_TEST_ARTIFACT_DIR) +
+                                         "/library-create-dialog.png"));
+#endif
+    }
     void installedContentVersionPickerAcceptsDownloadableCurseforgeVersions() {
 #ifndef Q_MOC_RUN
         QQmlEngine engine;
@@ -112,6 +221,40 @@ Item {
         root->setProperty("releaseRows", QVariantList{release});
         QTRY_VERIFY(!button->isEnabled());
 #endif
+    }
+    void installedCardReactsWhenOnlyInventoryRevisionChanges() {
+        auto source = std::make_shared<catalogue_test::Search>(1);
+        BrowseCatalogue catalogue(
+            source, std::make_shared<ContentVisibility>(std::make_shared<catalogue_test::Settings>()));
+        catalogue.setContext("fixture", {}, {});
+        QTRY_VERIFY(!catalogue.busy());
+        BrowseInstalls browse(std::make_shared<ContentCatalogueFixture>());
+        browse.setTargetPath("fixture");
+        const QVariantMap pack{{"path", "fixture"}, {"loader", "neoforge"}};
+        browse.setContext(pack, {}, false);
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(1366, 768);
+        auto root = page(engine, catalogue, window, 1);
+        QVERIFY(root);
+        root->setProperty("browseModel", QVariant::fromValue(&browse));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTRY_VERIFY(item(root.get(), "browseInstallButton"));
+        auto *button = item(root.get(), "browseInstallButton");
+        QCOMPARE(button->property("text").toString(), QString("Install"));
+        QVERIFY(button->isEnabled());
+        const QVariantMap row{{"category", "mods"},
+                              {"relativePath", "mods/fixture.jar.disabled"},
+                              {"sha1", "exact-binary"},
+                              {"enabled", false},
+                              {"sourceIds", QVariantMap{{"modrinth", "0"}, {"curseforge", "42"}}}};
+        browse.setContext(pack, {row}, false); // ready and busy deliberately remain unchanged.
+        QTRY_COMPARE(button->property("text").toString(), QString("Installed \u00b7 disabled"));
+        QVERIFY(!button->isEnabled());
+        browse.setContext(pack, {}, false);
+        QTRY_COMPARE(button->property("text").toString(), QString("Install"));
+        QVERIFY(button->isEnabled());
     }
     void delayedResultsDoNotReplaceAnUnsubmittedSearchDraft() {
         auto source = std::make_shared<catalogue_test::Search>();

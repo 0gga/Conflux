@@ -6,6 +6,25 @@
 #include <QPointer>
 #include <algorithm>
 namespace studio {
+static QVariantMap verifiedRowProjects(const QVariantMap &row) {
+    auto ids = row.value("sourceIds").toMap();
+    const auto release = row.value("installedRelease").toMap();
+    const auto hash = row.value("sha1").toString();
+    const auto pinnedHash = release.value("sha1").toString();
+    if (!hash.isEmpty() && !pinnedHash.isEmpty() && hash.compare(pinnedHash, Qt::CaseInsensitive) != 0)
+        return ids;
+    for (const auto &source : {row, release}) {
+        const auto mapped = source.value("projectSourceIds").toMap();
+        for (auto it = mapped.cbegin(); it != mapped.cend(); ++it)
+            if (!it.value().toString().isEmpty())
+                ids.insert(it.key(), it.value());
+        const auto provider = source.value("provider").toString(),
+                   project = source.value("projectId").toString();
+        if ((provider == "modrinth" || provider == "curseforge") && !project.isEmpty())
+            ids.insert(provider, project);
+    }
+    return ids;
+}
 BrowseInstalls::BrowseInstalls(std::shared_ptr<IContentCatalogue> source, QObject *parent)
     : QObject(parent), m_catalogue(std::move(source)) {}
 void BrowseInstalls::setContext(const QVariantMap &pack, const QVariantList &rows, bool busy) {
@@ -14,7 +33,19 @@ void BrowseInstalls::setContext(const QVariantMap &pack, const QVariantList &row
     }
     m_pack = pack;
     m_rows = rows;
+    for (auto &value : m_rows) {
+        auto row = value.toMap();
+        auto ids = verifiedRowProjects(row);
+        const auto learned = m_verifiedIdentities.value(row.value("sha1").toString().toLower());
+        for (auto it = learned.cbegin(); it != learned.cend(); ++it)
+            if (!ids.contains(it.key()) || ids.value(it.key()) == it.value())
+                ids.insert(it.key(), it.value());
+        if (!ids.isEmpty())
+            row["sourceIds"] = ids;
+        value = row;
+    }
     m_indexing = busy;
+    ++m_revision;
     emit changed();
 }
 void BrowseInstalls::setTargetPath(const QString &path) {
@@ -22,7 +53,60 @@ void BrowseInstalls::setTargetPath(const QString &path) {
         return;
     m_target = path;
     m_notice.clear();
+    ++m_revision;
     emit changed();
+}
+void BrowseInstalls::rememberReleases(const QVariantMap &project, const QVariantList &groups) {
+    if (!ready() || groups.isEmpty())
+        return;
+    QHash<QString, QVariantMap> present;
+    for (const auto &value : m_rows) {
+        const auto row = value.toMap();
+        if (categoryType(row.value("category").toString()) != project.value("type", "mod").toString() &&
+            !(project.value("type") == "datapack" && row.value("category") == "mods"))
+            continue;
+        const auto hash = row.value("sha1").toString().toLower();
+        if (!hash.isEmpty())
+            present.insert(hash, verifiedRowProjects(row));
+    }
+    bool changed = false;
+    for (const auto &value : groups)
+        for (const auto &variant : value.toMap().value("variants").toList()) {
+            const auto release = variant.toMap();
+            const auto hash = release.value("sha1").toString().toLower();
+            if (hash.isEmpty() || !present.contains(hash))
+                continue;
+            auto ids = project.value("sourceIds").toMap();
+            if (ids.isEmpty())
+                ids.insert(project.value("provider").toString(), project.value("id"));
+            const auto provider = release.value("provider").toString(),
+                       id = release.value("projectId").toString();
+            if (!provider.isEmpty() && !id.isEmpty())
+                ids.insert(provider, id);
+            auto known = present.value(hash);
+            const auto learned = m_verifiedIdentities.value(hash);
+            for (auto it = learned.cbegin(); it != learned.cend(); ++it)
+                known.insert(it.key(), it.value());
+            bool ambiguous = false;
+            for (auto it = ids.cbegin(); it != ids.cend(); ++it)
+                if (known.contains(it.key()) && known.value(it.key()) != it.value())
+                    ambiguous = true;
+            if (ambiguous)
+                continue;
+            for (auto it = ids.cbegin(); it != ids.cend(); ++it)
+                if (!it.value().toString().isEmpty())
+                    known.insert(it.key(), it.value());
+            if (learned != known) {
+                if (m_verifiedIdentities.size() >= 2048)
+                    m_verifiedIdentities.clear();
+                m_verifiedIdentities.insert(hash, known);
+                changed = true;
+            }
+        }
+    if (changed) {
+        const auto rows = m_rows;
+        setContext(m_pack, rows, m_indexing);
+    }
 }
 QVariantMap BrowseInstalls::state(const QVariantMap &project) const {
     QVariantMap out{{"installed", false},
@@ -50,7 +134,8 @@ QVariantMap BrowseInstalls::state(const QVariantMap &project) const {
             continue;
         const auto known = row.value("sourceIds").toMap();
         for (auto it = ids.cbegin(); it != ids.cend(); ++it)
-            if (!it.value().toString().isEmpty() && known.value(it.key()) == it.value()) {
+            if (!it.value().toString().isEmpty() &&
+                known.value(it.key()).toString() == it.value().toString()) {
                 out["locked"] = row.value("locked").toBool();
                 out["installed"] = true;
                 out["canInstall"] = false;
@@ -95,6 +180,7 @@ bool BrowseInstalls::installed(const QVariantMap &release, const QString &type) 
 void BrowseInstalls::installVersion(const QVariantMap &release, const QVariantMap &project) {
     if (release.value("provider") == "curseforge" && !m_curseforgeEnabled) {
         m_notice = "Connect an approved CurseForge API key in Settings.";
+        ++m_revision;
         emit changed();
         emit operationFailed(m_notice);
         return;
@@ -109,6 +195,7 @@ void BrowseInstalls::installVersion(const QVariantMap &release, const QVariantMa
     if (hasDataPackFormatConflict(targetCategory, project.value("sourceIds").toMap(), m_rows)) {
         m_notice = "This project is installed in another format. Remove that copy before switching between "
                    "ZIP and mod variants.";
+        ++m_revision;
         emit changed();
         return;
     }
@@ -119,6 +206,7 @@ void BrowseInstalls::installVersion(const QVariantMap &release, const QVariantMa
         release.value("filename").toString().endsWith(".jar", Qt::CaseInsensitive))
         target["type"] = "mod";
     m_notice.clear();
+    ++m_revision;
     emit changed();
     emit installRequested(release, target);
 }
@@ -132,6 +220,7 @@ QString BrowseInstalls::lookupKey(const QVariantMap &project) const {
 void BrowseInstalls::cancelPending() {
     ++m_lookupGeneration;
     m_pendingLookups.clear();
+    ++m_revision;
     emit changed();
 }
 void BrowseInstalls::install(const QVariantMap &project) {
@@ -144,6 +233,7 @@ void BrowseInstalls::install(const QVariantMap &project) {
     const int generation = m_lookupGeneration;
     m_pendingLookups.insert(key);
     m_notice.clear();
+    ++m_revision;
     emit changed();
     m_lookups.enqueue([this, project, key, pack, rows, loaders,
                        generation](ContentOperationQueue::Completion done) {
@@ -195,6 +285,7 @@ void BrowseInstalls::install(const QVariantMap &project) {
                     guard->m_notice = failure;
                     emit guard->operationFailed(failure);
                 }
+                ++guard->m_revision;
                 emit guard->changed();
                 done();
             });

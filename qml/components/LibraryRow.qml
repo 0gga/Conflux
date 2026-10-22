@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Layouts
 import Conflux.Style
 
 Rectangle {
@@ -15,6 +16,7 @@ Rectangle {
     signal activated()
     signal exploreRequested()
     signal hideRequested()
+    signal folderRequested()
     implicitHeight: Appearance.values.libraryRowHeight
     radius: ControlStyle.panelRadius
     color: hover.hovered ? Theme.colors.panel : Theme.colors.card
@@ -40,17 +42,30 @@ Rectangle {
     Item {
         id: sourceColumn; objectName: "libraryRowSourceColumn"
         anchors.right: explore.left; anchors.rightMargin: 20; anchors.verticalCenter: parent.verticalCenter
-        width: 118; height: 26
-        SourceBadge { anchors.left: parent.left; source: row.source }
+        width: row.width < 650 ? 32 : 118; height: 26
+        SourceBadge { anchors.left: parent.left; source: row.source; iconOnly: row.width < 650 }
     }
     ActionButton {
         id: explore; objectName: "libraryRowExplore"
-        anchors.right: hide.left; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
-        width: 154; text: "Explore content"; iconName: "compass"; subtle: true; onClicked: row.exploreRequested()
+        anchors.right: more.left; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
+        width: row.width < 620 ? 40 : 154; text: row.width < 620 ? "" : "Explore content"; hint: "Explore content"; iconName: "compass"; subtle: true; onClicked: row.exploreRequested()
     }
-    ActionButton {
-        id: hide; objectName: "libraryRowHide"
+    PopupButton {
+        id: more; objectName: "libraryRowMore"; popup: menu
         anchors.right: parent.right; anchors.rightMargin: 16; anchors.verticalCenter: parent.verticalCenter
-        width: 40; implicitWidth: 40; iconName: row.hiddenPack ? "restore" : "hide"; hint: row.hiddenPack ? "Restore pack" : "Hide pack"; subtle: true; onClicked: row.hideRequested()
+        width: 40; implicitWidth: 40; iconName: "more"; hint: "Modpack actions"; subtle: true
+    }
+    FocusPopup {
+        id: menu; objectName: "libraryRowMenu"; parent: more
+        x: more.width-width; y: more.height+6; width: 240; padding: 6
+        background: Rectangle { radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border }
+        contentItem: ColumnLayout {
+            spacing: 2
+            MenuOption { Layout.fillWidth: true; text: "Open modpack"; iconName: "content"; subtle: true; alignLeft: true; selectionOutlineOnly: true; onClicked: { menu.close(); row.activated() } }
+            MenuOption { Layout.fillWidth: true; text: "Explore content"; iconName: "compass"; subtle: true; alignLeft: true; selectionOutlineOnly: true; onClicked: { menu.close(); row.exploreRequested() } }
+            MenuOption { objectName: "libraryRowFolder"; Layout.fillWidth: true; text: "Open instance folder"; iconName: "folder"; subtle: true; alignLeft: true; selectionOutlineOnly: true; onClicked: { menu.close(); row.folderRequested() } }
+            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.border }
+            MenuOption { objectName: "libraryRowHide"; Layout.fillWidth: true; text: row.hiddenPack ? "Restore modpack" : "Hide modpack"; iconName: row.hiddenPack ? "restore" : "hide"; subtle: true; alignLeft: true; selectionOutlineOnly: true; onClicked: { menu.close(); row.hideRequested() } }
+        }
     }
 }

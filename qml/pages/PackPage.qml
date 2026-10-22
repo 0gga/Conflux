@@ -48,7 +48,7 @@ Item {
             entries: [{key:"content",label:"Content",icon:"content"},{key:"configs",label:"Configs",icon:"config"},{key:"files",label:"Files",icon:"folder"},{key:"logs",label:"Logs",icon:"logs"},{key:"worlds",label:"Worlds",icon:"world"}]
             current: root.section; onSelected: function(key) { root.sectionRequested(key) }
         }
-        GitPanel { visible: !!root.workspace.pack.managed && root.section === "content"; Layout.fillWidth: true; status: root.app.gitStatus; history: root.app.history; busy: root.app.repositoryBusy; onSaveRequested: function(message) { root.app.saveChanges(message) } }
+        GitPanel { visible: !!root.workspace.pack.managed && root.app.gitEnabled === true && !!root.app.activePack.gitEnabled && root.section === "content"; Layout.fillWidth: true; status: root.app.gitStatus; history: root.app.history; busy: root.app.repositoryBusy; onSaveRequested: function(message) { root.app.saveChanges(message) } }
         RowLayout {
             visible: root.app.installationStatus.length > 0 && root.section === "content"; Layout.fillWidth: true
             Icon { name: "download" }
@@ -76,8 +76,8 @@ Item {
         background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius }
         contentItem: ColumnLayout {
             spacing: 2
-            ActionButton { Layout.fillWidth: true; text: "Open pack folder"; iconName: "folder"; subtle: true; alignLeft: true; onClicked: { root.app.openFolder(root.workspace.pack.path); packMenu.close() } }
-            ActionButton { Layout.fillWidth: true; text: "Refresh content"; iconName: "refresh"; subtle: true; alignLeft: true; enabled: !root.session.content.busy; onClicked: { root.workspace.refresh(); root.session.content.refresh(); packMenu.close() } }
+            MenuOption { Layout.fillWidth: true; text: "Open pack folder"; iconName: "folder"; subtle: true; alignLeft: true; selectionOutlineOnly: true; onClicked: { root.app.openFolder(root.workspace.pack.path); packMenu.close() } }
+            MenuOption { Layout.fillWidth: true; text: "Refresh content"; iconName: "refresh"; subtle: true; alignLeft: true; selectionOutlineOnly: true; enabled: !root.session.content.busy; onClicked: { root.workspace.refresh(); root.session.content.refresh(); packMenu.close() } }
         }
     }
     FocusPopup {

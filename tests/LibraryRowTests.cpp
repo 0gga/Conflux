@@ -5,12 +5,21 @@
 #include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QSignalSpy>
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 Q_IMPORT_QML_PLUGIN(Conflux_StylePlugin)
 
 class LibraryRowTests : public QObject {
     Q_OBJECT
+    static QQuickItem *visibleItem(QQuickItem *root, const QString &name) {
+        if (root->objectName() == name && root->isVisible())
+            return root;
+        for (auto *child : root->childItems())
+            if (auto *found = visibleItem(child, name))
+                return found;
+        return nullptr;
+    }
   private slots:
     void initTestCase() {
         QQuickStyle::setStyle("Basic");
@@ -58,7 +67,7 @@ class LibraryRowTests : public QObject {
                 auto *detail = row->findChild<QQuickItem *>("libraryRowDetails");
                 auto *badge = row->findChild<QQuickItem *>("libraryRowSourceColumn");
                 auto *explore = row->findChild<QQuickItem *>("libraryRowExplore");
-                auto *hide = row->findChild<QQuickItem *>("libraryRowHide");
+                auto *hide = row->findChild<QQuickItem *>("libraryRowMore");
                 auto *compatibility = row->findChild<QQuickItem *>("libraryRowCompatibility");
                 auto *minecraft = row->findChild<QQuickItem *>("compatibilityMinecraft");
                 auto *loader = row->findChild<QQuickItem *>("compatibilityLoader");
@@ -85,6 +94,83 @@ class LibraryRowTests : public QObject {
                     QDir(artifacts).filePath("library-rows-" + QString::number(width) + ".png")));
             }
         }
+    }
+    void libraryEdgesAndInstanceMenuStayConsistent() {
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData(
+            R"QML(import QtQuick
+import Conflux.Style
+import "pages"
+Item {
+ id:root
+ Rectangle { anchors.fill:parent;color:Theme.colors.background }
+ property string openedFolder:""
+ property int opened:0
+ QtObject { id:applicationModel;property var libraryPacks:[{title:"Create: Takeoff",path:"fixture",provider:"modrinth",gameVersion:"1.21.1",loader:"neoforge",modCount:310,hidden:false}];property int visiblePackCount:libraryPacks.filter(function(p){return !p.hidden}).length;property int hiddenPackCount:libraryPacks.length-visiblePackCount;property bool libraryBusy:false;property bool repositoryBusy:false;function refreshLibrary(){} function openFolder(path){root.openedFolder=path} function setPackHidden(path,hidden){const rows=libraryPacks.slice();rows[0]=Object.assign({},rows[0],{hidden:hidden});libraryPacks=rows} }
+ LibraryPage { id:page;objectName:"libraryPage";anchors.fill:parent;app:applicationModel;onPackRequested:function(path,explore){root.opened++} }
+})QML",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/LibraryFixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> root(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY2(root, qPrintable(component.errorString()));
+        QQuickWindow window;
+        root->setParentItem(window.contentItem());
+        window.resize(1080, 720);
+        root->setSize(window.size());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        for (int width : {540, 720, 1080, 1600}) {
+            window.setWidth(width);
+            root->setWidth(width);
+            QTest::qWait(30);
+            auto *more = visibleItem(root.get(), "libraryRowMore"),
+                 *search = visibleItem(root.get(), "librarySearch"),
+                 *refresh = visibleItem(root.get(), "libraryRefresh");
+            QVERIFY(more && search && refresh && visibleItem(root.get(), "libraryCreate"));
+            auto *row = more->parentItem();
+            const auto edge = row->mapToItem(root.get(), QPointF(row->width(), 0)).x();
+            QVERIFY(window.grabWindow().save(QStringLiteral(CONFLUX_QML_SOURCE_DIR) +
+                                             "/../artifacts/library-page-" + QString::number(width) +
+                                             ".png"));
+            QVERIFY(qAbs(edge - search->mapToItem(root.get(), QPointF(search->width(), 0)).x()) < 1);
+            QVERIFY(qAbs(edge - refresh->mapToItem(root.get(), QPointF(refresh->width(), 0)).x()) < 1);
+            for (const auto &source : {"all", "conflux", "modrinth", "curseforge"}) {
+                auto *choice = visibleItem(root.get(), QString("librarySource-") + source);
+                QVERIFY(choice);
+                const auto *content = qvariant_cast<QQuickItem *>(choice->property("contentItem"));
+                QVERIFY(content);
+                QVERIFY(content->width() >= content->implicitWidth());
+            }
+            QVERIFY(edge <= width - 31);
+        }
+        auto *more = visibleItem(root.get(), "libraryRowMore");
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          more->mapToScene(QPointF(20, 20)).toPoint());
+        QTRY_VERIFY(visibleItem(window.contentItem(), "libraryRowFolder"));
+        QCOMPARE(root->property("opened").toInt(), 0);
+        auto *folder = visibleItem(window.contentItem(), "libraryRowFolder");
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          folder->mapToScene(QPointF(40, 20)).toPoint());
+        QTRY_COMPARE(root->property("openedFolder").toString(), QString("fixture"));
+        QCOMPARE(root->property("opened").toInt(), 0);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          more->mapToScene(QPointF(20, 20)).toPoint());
+        QTRY_VERIFY(visibleItem(window.contentItem(), "libraryRowHide"));
+        auto *hide = visibleItem(window.contentItem(), "libraryRowHide");
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          hide->mapToScene(QPointF(40, 20)).toPoint());
+        QTRY_VERIFY(!visibleItem(root.get(), "libraryRowMore"));
+        auto *page = root->findChild<QQuickItem *>("libraryPage");
+        QVERIFY(page);
+        page->setProperty("hiddenTab", true);
+        QTRY_VERIFY(visibleItem(root.get(), "libraryRowMore"));
+        more = visibleItem(root.get(), "libraryRowMore");
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                          more->mapToScene(QPointF(20, 20)).toPoint());
+        QTRY_VERIFY(visibleItem(window.contentItem(), "libraryRowHide"));
+        QCOMPARE(visibleItem(window.contentItem(), "libraryRowHide")->property("text").toString(),
+                 QString("Restore modpack"));
     }
 };
 QTEST_MAIN(LibraryRowTests)

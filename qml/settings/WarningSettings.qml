@@ -8,7 +8,7 @@ ColumnLayout {
     spacing: 16
     RowLayout {
         Layout.fillWidth: true
-        ColumnLayout { Layout.fillWidth: true; spacing: 8; Text { text: "Warnings"; color: Theme.colors.text; font.pixelSize: 22; font.weight: Font.DemiBold } Text { Layout.fillWidth: true; text: "Choose what appears in pack review banners. Scans still run; these switches only change visibility."; color: Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.WordWrap } }
+        ColumnLayout { Layout.fillWidth: true; spacing: 8; Text { text: "Warnings"; color: Theme.colors.text; font.pixelSize: 22; font.weight: Font.DemiBold } }
         ActionButton { iconName: "refresh"; text: "Reset"; subtle: true; onClicked: root.preferences.reset() }
     }
     Repeater {

@@ -96,7 +96,7 @@ Item {
                             preferredLoader: root.browse.pack.loader || ""
                             selectedLoaders: root.catalogue.filters.loaders || []
                             hiddenMode: !!root.catalogue.filters.hidden
-                            installState: { const ready=root.browse.ready; const busy=root.browse.busy; const state=root.browse.state(modelData); const revision=root.content.lockRevision; const sourceLock=root.content.sourceLock(modelData); state.locked=!!state.locked || root.content.projectLocked(modelData); state.sourceLocked=!!sourceLock.launcherLocked;state.sourceMissing=!!sourceLock.missing;state.canInstall = state.canInstall && !root.app.navigationBusy && !state.locked; if(state.locked&&!state.installed)state.label="Locked"; return state }
+                            installState: { const inventoryRevision=root.browse.revision; const ready=root.browse.ready; const busy=root.browse.busy; const state=root.browse.state(modelData); const revision=root.content.lockRevision; const sourceLock=root.content.sourceLock(modelData); state.locked=!!state.locked || root.content.projectLocked(modelData); state.sourceLocked=!!sourceLock.launcherLocked;state.sourceMissing=!!sourceLock.missing;state.canInstall = state.canInstall && !root.app.navigationBusy && !state.locked; if(state.locked&&!state.installed)state.label="Locked"; return state }
                             onOpened: { root.catalogue.scrollPosition=results.contentY;root.showcaseRequested(modelData,"description") }
                             onVersionsRequested: { root.catalogue.scrollPosition=results.contentY;root.showcaseRequested(modelData,"versions") }
                             onAuthorRequested: function(author) { root.authorRequested(author) }

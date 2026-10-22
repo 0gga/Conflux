@@ -35,7 +35,7 @@ Rectangle {
             spacing: 2
             Repeater {
                 model: [{key:"names",label:"Project names",icon:"content"},{key:"files",label:"File names",icon:"file"},{key:"links",label:"Project links",icon:"external"},{key:"markdown",label:"Markdown links",icon:"copy"}]
-                delegate: ActionButton { required property var modelData; Layout.fillWidth: true; text: modelData.label; iconName: modelData.icon; subtle: true; alignLeft: true; onClicked: { root.controller.copySelected(modelData.key); shareMenu.close() } }
+                delegate: MenuOption { required property var modelData; Layout.fillWidth: true; text: modelData.label; iconName: modelData.icon; subtle: true; alignLeft: true; onClicked: { root.controller.copySelected(modelData.key); shareMenu.close() } }
             }
         }
     }

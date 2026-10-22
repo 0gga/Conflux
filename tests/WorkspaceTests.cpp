@@ -41,6 +41,42 @@ class WorkspaceTests : public QObject {
         QVERIFY(mz_zip_writer_end(&zip));
     }
   private slots:
+    void gitSettingsAreOptInAndNeverInitializeLauncherInstances() {
+        QTemporaryDir temp;
+        const auto settings = temp.filePath("settings.ini");
+        {
+            ApplicationController app(nullptr, temp.filePath("packs"), settings);
+            QVERIFY(!app.gitEnabled());
+            app.createPack("No Git needed", "1.21.1", "neoforge");
+            QTRY_VERIFY(!app.repositoryBusy());
+            const auto path = app.activePack().value("path").toString();
+            QVERIFY(!path.isEmpty());
+            QVERIFY(!QFileInfo::exists(path + "/.git"));
+            QVERIFY(!app.activePack().value("gitEnabled").toBool());
+            app.configureGit(true, "", "invalid");
+            QVERIFY(!app.gitEnabled());
+            QVERIFY(!app.notice().isEmpty());
+            app.configureGit(true, "UI Test", "ui@example.invalid");
+            QVERIFY(app.gitEnabled());
+            QVERIFY(
+                !QFileInfo::exists(path + "/.git")); // Saving preferences does not mutate existing instances.
+            app.enablePackGit();
+            QTRY_VERIFY(!app.repositoryBusy());
+            QVERIFY(app.activePack().value("gitEnabled").toBool());
+            QVERIFY(QFileInfo::exists(path + "/.git"));
+            app.configureGit(false, "UI Test", "ui@example.invalid");
+            QVERIFY(!app.gitEnabled());
+            QVERIFY(QFileInfo::exists(path + "/.git"));
+            app.refreshActivePack();
+            QTRY_VERIFY(!app.activeRefreshPending());
+            QVERIFY(app.activePack().value("gitEnabled").toBool());
+            QVERIFY(app.history().isEmpty());
+        }
+        ApplicationController reopened(nullptr, temp.filePath("packs"), settings);
+        QVERIFY(!reopened.gitEnabled());
+        QCOMPARE(reopened.gitAuthorName(), QString("UI Test"));
+        QCOMPARE(reopened.gitAuthorEmail(), QString("ui@example.invalid"));
+    }
     void inspectorExceptionsRetainTheLastPublishedFiles() {
         class Inspector : public studio::IPackContentInspector {
           public:
@@ -358,6 +394,8 @@ version = "1"
             QVERIFY(openedState.count() > 0);
             QVERIFY(!app.activePack().value("managed").toBool());
             const auto before = app.activePack();
+            app.configureGit(true, "Launcher Test", "launcher@example.invalid");
+            app.enablePackGit();
             app.saveChanges("blocked");
             app.removeMod("modrinth", "id");
             app.pinRelease(0);

@@ -42,6 +42,34 @@ class ContentOperationStateTests : public QObject {
         return rows;
     }
   private slots:
+    void freshIdentificationIsNotReplacedByOldEmptyMetadata() {
+        auto old = row("Identity");
+        old["sourceIds"] = QVariantMap{};
+        old["installedRelease"] = QVariantMap{};
+        old["updateAvailable"] = true;
+        auto fresh = old;
+        const QVariantMap ids{{"modrinth", "Sza3GgEL"}, {"curseforge", "42"}};
+        fresh["sourceIds"] = ids;
+        fresh["installedRelease"] =
+            QVariantMap{{"provider", "modrinth"}, {"projectId", "Sza3GgEL"}, {"id", "wkJ6vtdp"}};
+        fresh["provider"] = "modrinth";
+        fresh["projectId"] = "Sza3GgEL";
+        fresh["title"] = "Fresh project title";
+        fresh["updateAvailable"] = false;
+        fresh.remove("updateRelease");
+        const auto merged = reconcileContentRows({fresh}, {old}, {}, true).first().toMap();
+        QCOMPARE(merged.value("title"), fresh.value("title"));
+        QCOMPARE(merged.value("sourceIds").toMap(), ids);
+        QCOMPARE(merged.value("installedRelease"), fresh.value("installedRelease"));
+        QVERIFY(!merged.value("updateAvailable").toBool());
+        QVERIFY(!merged.contains("updateRelease"));
+        QCOMPARE(contentRowKey(merged), contentRowKey(old));
+        auto raw = fresh;
+        raw.remove("sourceIds");
+        raw.remove("installedRelease");
+        raw.remove("updateAvailable");
+        QCOMPARE(reconcileContentRows({raw}, {merged}).first().toMap().value("sourceIds").toMap(), ids);
+    }
     void predictionsPreserveExistingIdentityAndState_data() {
         QTest::addColumn<QString>("category");
         QTest::addColumn<bool>("managed");
@@ -118,6 +146,18 @@ class ContentOperationStateTests : public QObject {
                                               contentRowKey(rows[0].toMap()), "missing:key"}),
                  QVariantList({rows[0], rows[2]}));
     }
+    void launcherIdentityOnlyRefreshRetainsVerifiedPresentation() {
+        const auto previous = row("Friendly title");
+        auto raw = previous;
+        raw["title"] = "friendly-title-old.jar";
+        raw.remove("installedRelease");
+        raw.remove("updateRelease");
+        raw.remove("updateAvailable");
+        const auto merged = reconcileContentRows({raw}, {previous}).first().toMap();
+        QCOMPARE(merged.value("title"), previous.value("title"));
+        QCOMPARE(merged.value("sourceIds"), raw.value("sourceIds"));
+        QCOMPARE(merged.value("installedRelease"), previous.value("installedRelease"));
+    }
     void reconciliationDoesNotAttachOldIdentityToExternallyEditedBytes() {
         const auto old = row("A");
         auto actual = old;
@@ -145,7 +185,7 @@ class ContentOperationStateTests : public QObject {
     }
     void contentTransactionsDoNotSpawnGitStatusOrHistoryProcesses() {
         QTemporaryDir temp;
-        const auto created = PackRepository::create(temp.path(), "Fixture", "1.21.1", "fabric");
+        const auto created = PackRepository::create(temp.path(), "Fixture", "1.21.1", "fabric", true);
         QVERIFY(created.ok);
         const auto previousPath = qgetenv("PATH");
         const auto restore = qScopeGuard([previousPath] { qputenv("PATH", previousPath); });
@@ -160,14 +200,14 @@ class ContentOperationStateTests : public QObject {
         QVERIFY2(applied.ok, qPrintable(applied.error));
         QVERIFY(!PackRepository::inspect(created.path).ok); // Ordinary repository inspection still needs Git.
     }
-    void contentInspectionStillRejectsUnownedAndMalformedManifests() {
+    void contentInspectionRequiresAValidManifestWithoutRequiringGit() {
         QTemporaryDir temp;
         const auto path = temp.path() + "/pack.json";
         QFile file(path);
         QVERIFY(file.open(QIODevice::WriteOnly));
         file.write("{\"schemaVersion\":1,\"name\":\"Fixture\",\"mods\":[]}");
         file.close();
-        QVERIFY(!PackRepository::inspectContent(temp.path()).ok); // Missing Git ownership marker.
+        QVERIFY(PackRepository::inspectContent(temp.path()).ok); // Valid packs need no Git marker.
         QVERIFY(QDir().mkpath(temp.path() + "/.git"));
         QVERIFY(PackRepository::inspectContent(temp.path()).ok);
         QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));

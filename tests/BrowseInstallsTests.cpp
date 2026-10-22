@@ -30,6 +30,50 @@ class BrowseInstallsTests : public QObject {
                  QVariantMap{{"provider", "modrinth"}, {"projectId", "project"}, {"id", "version"}}}};
     }
   private slots:
+    void exactReleaseHashesInformCardsAcrossProvidersWithoutTitleGuessing() {
+        BrowseInstalls model(std::make_shared<DeferredVersionCatalogue>());
+        auto file = row();
+        file.remove("sourceIds");
+        file.remove("installedRelease");
+        model.setTargetPath("a");
+        model.setContext({{"path", "a"}}, {file}, false);
+        auto p = project();
+        p["sourceIds"] = QVariantMap{{"modrinth", "project"}, {"curseforge", "42"}};
+        QVERIFY(!model.state(p).value("installed").toBool());
+        auto release = QVariantMap{{"provider", "modrinth"}, {"projectId", "project"}, {"sha1", "hash"}};
+        const QVariantList groups{QVariantMap{{"variants", QVariantList{release}}}};
+        const int revision = model.revision();
+        model.rememberReleases(p, groups);
+        QVERIFY(model.revision() > revision);
+        QVERIFY(model.state(p).value("installed").toBool());
+        QVERIFY(!model.state(p).value("canInstall").toBool());
+        auto cf = p;
+        cf["provider"] = "curseforge";
+        cf["id"] = "42";
+        cf["sourceIds"] = QVariantMap{{"curseforge", "42"}};
+        QVERIFY(model.state(cf).value("installed").toBool());
+        model.setContext({{"path", "a"}}, {file}, false);
+        QVERIFY(model.state(cf).value("installed").toBool());
+        model.setTargetPath("b");
+        model.setContext({{"path", "b"}}, {}, false);
+        QVERIFY(!model.state(cf).value("installed").toBool());
+        file["sha1"] = "other binary";
+        model.setContext({{"path", "b"}}, {file}, false);
+        model.rememberReleases(p, groups);
+        QVERIFY(!model.state(cf).value("installed").toBool());
+    }
+    void verifiedPinsCountAsInstalledBeforeProviderMetadataArrives() {
+        BrowseInstalls model(std::make_shared<DeferredVersionCatalogue>());
+        auto file = row();
+        file.remove("sourceIds");
+        model.setTargetPath("a");
+        model.setContext({{"path", "a"}}, {file}, false);
+        QVERIFY(model.state(project()).value("installed").toBool());
+        file["installedRelease"] = QVariantMap{
+            {"provider", "modrinth"}, {"projectId", "project"}, {"id", "version"}, {"sha1", "stale-hash"}};
+        model.setContext({{"path", "a"}}, {file}, false);
+        QVERIFY(!model.state(project()).value("installed").toBool());
+    }
     void approvedCurseforgeOnlyProjectsCanInstallAndDisconnectUpdatesTheirState() {
         auto source = std::make_shared<DeferredVersionCatalogue>();
         BrowseInstalls model(source);

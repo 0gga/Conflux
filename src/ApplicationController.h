@@ -40,6 +40,9 @@ class ApplicationController : public QObject {
     Q_PROPERTY(QString modrinthRoot READ modrinthRoot NOTIFY stateChanged)
     Q_PROPERTY(QString curseforgeRoot READ curseforgeRoot NOTIFY stateChanged)
     Q_PROPERTY(QString packsRoot READ packsRoot CONSTANT)
+    Q_PROPERTY(bool gitEnabled READ gitEnabled NOTIFY gitConfigurationChanged)
+    Q_PROPERTY(QString gitAuthorName READ gitAuthorName NOTIFY gitConfigurationChanged)
+    Q_PROPERTY(QString gitAuthorEmail READ gitAuthorEmail NOTIFY gitConfigurationChanged)
   public:
     explicit ApplicationController(QObject *parent = nullptr, QString packsRootOverride = {},
                                    QString settingsFileOverride = {});
@@ -115,6 +118,17 @@ class ApplicationController : public QObject {
     QString modrinthRoot() const;
     QString curseforgeRoot() const;
     QString packsRoot() const;
+    bool gitEnabled() const {
+        return m_settings->value("git/enabled", false).toBool();
+    }
+    QString gitAuthorName() const {
+        return m_settings->value("git/authorName").toString();
+    }
+    QString gitAuthorEmail() const {
+        return m_settings->value("git/authorEmail").toString();
+    }
+    Q_INVOKABLE void configureGit(bool enabled, const QString &name, const QString &email);
+    Q_INVOKABLE void enablePackGit();
     Q_INVOKABLE void refreshLibrary();
     void refreshActivePack();
     bool activeRefreshPending() const {
@@ -157,6 +171,7 @@ class ApplicationController : public QObject {
     Q_INVOKABLE void clearNotice();
   signals:
     void stateChanged();
+    void gitConfigurationChanged();
     void packOpened();
     void exploreRequested();
     void curseforgeKeyConfigured(QByteArray key);

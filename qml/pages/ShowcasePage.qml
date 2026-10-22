@@ -92,8 +92,8 @@ Item {
                             property int variantIndex: 0
                             readonly property var release: modelData.variants[Math.min(variantIndex,modelData.variants.length - 1)] || ({})
                             readonly property string publishedLabel: ContentTime.dateLabel(release.published || "", ContentTime.now)
-                            readonly property bool installed: { const ready=root.browse.ready; const busy=root.browse.busy; return root.browse.installed(release,root.showcase.project.type || "mod") }
-                            readonly property bool groupInstalled: { const ready=root.browse.ready; const busy=root.browse.busy; return modelData.variants.some(function(item) { return root.browse.installed(item,root.showcase.project.type || "mod") }) }
+                            readonly property bool installed: { const inventoryRevision=root.browse.revision; const ready=root.browse.ready; const busy=root.browse.busy; return root.browse.installed(release,root.showcase.project.type || "mod") }
+                            readonly property bool groupInstalled: { const inventoryRevision=root.browse.revision; const ready=root.browse.ready; const busy=root.browse.busy; return modelData.variants.some(function(item) { return root.browse.installed(item,root.showcase.project.type || "mod") }) }
                             width: versionList.viewportWidth; height: Math.max(version.modelData.variants.length > 1 ? 148 : 112, versionInfo.implicitHeight + 32); radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border
                             RowLayout {
                                 anchors.fill: parent; anchors.margins: 16; spacing: 16

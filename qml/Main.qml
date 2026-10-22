@@ -120,16 +120,16 @@ ApplicationWindow {
                 }
                 }
                 Repeater {
-                    model: [{key:"library", label:"Library", icon:"library"}, {key:"discover", label:"Explore content", icon:"compass"}, {key:"workspace", label:"Modpack", icon:"content"}]
+                    model: [{key:"library", label:"Library", icon:"library"}, {key:"discover", label:"Explore content", icon:"compass"}]
                     delegate: NavigationButton {
                         required property var modelData
                         Layout.fillWidth: true
                         text: window.compactNavigation ? "" : modelData.label; hint: modelData.label; iconName: modelData.icon
-                        selected: window.page === modelData.key || (window.page === "showcase" && modelData.key === (window.session.navigation.route.modPath ? "workspace" : "discover"))
+                        objectName: "sidebar-" + modelData.key
+                        selected: window.page === modelData.key || (modelData.key === "library" && (window.page === "workspace" || (window.page === "showcase" && !!window.session.navigation.route.modPath))) || (modelData.key === "discover" && window.page === "showcase" && !window.session.navigation.route.modPath)
                         onClicked: window.navigate(modelData.key)
                     }
                 }
-                NavigationButton { Layout.fillWidth: true; text: window.compactNavigation ? "" : "New modpack"; hint: "New modpack"; iconName: "plus"; enabled: !window.session.editor.dirty && !window.session.editor.busy; onClicked: newPack.open() }
                 Item { Layout.fillHeight: true }
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.border; Layout.bottomMargin: 8 }
                 NavigationButton { Layout.fillWidth: true; text: window.compactNavigation ? "" : "Settings"; hint: "Settings"; iconName: "settings"; selected: window.page === "settings"; onClicked: window.navigate("settings") }
@@ -201,30 +201,6 @@ ApplicationWindow {
             }
         }
     }
-    FocusDialog {
-        id: newPack
-        modal: true; anchors.centerIn: parent; width: 470; padding: 28
-        title: "Create a modpack"
-        closePolicy: window.app.repositoryBusy ? Popup.NoAutoClose : Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius }
-        header: Text { text: newPack.title; color: Theme.colors.text; font.pixelSize: 23; font.weight: Font.DemiBold; padding: 28; bottomPadding: 6 }
-        ColumnLayout {
-            width: parent.width; spacing: 16
-            Text { Layout.fillWidth: true; text: "A new pack. A fresh Git history."; color: Theme.colors.muted; font.pixelSize: 13 }
-            SearchField { id: packName; objectName: "packNameInput"; Layout.fillWidth: true; placeholderText: "Name your modpack"; font.pixelSize: 15; maximumLength: 100 }
-            Text { text: "MINECRAFT VERSION"; color: Theme.colors.muted; font.pixelSize: 10; font.letterSpacing: 1.2 }
-            SearchField { id: gameVersion; Layout.fillWidth: true; text: "1.21.1"; placeholderText: "e.g. 1.21.1"; maximumLength: 24 }
-            Text { text: "MOD LOADER"; color: Theme.colors.muted; font.pixelSize: 10; font.letterSpacing: 1.2 }
-            SelectBox { id: packLoader; Layout.fillWidth: true; model: ["Fabric", "NeoForge", "Forge", "Quilt", "Vanilla"] }
-            Text { Layout.fillWidth: true; text: "Exact versions and required dependencies are tracked in Git. Downloaded mod files stay local."; color: Theme.colors.muted; font.pixelSize: 12; wrapMode: Text.WordWrap; lineHeight: 1.3 }
-            RowLayout {
-                Layout.fillWidth: true; Layout.topMargin: 8
-                ActionButton { text: "Cancel"; enabled: !window.app.repositoryBusy; subtle: true; onClicked: newPack.close() }
-                Item { Layout.fillWidth: true }
-                ActionButton { text: window.app.repositoryBusy ? "Creating…" : "Create modpack"; primary: true; enabled: packName.text.trim().length > 0 && !window.app.repositoryBusy; onClicked: window.app.createPack(packName.text, gameVersion.text, ["fabric","neoforge","forge","quilt","vanilla"][packLoader.currentIndex]) }
-            }
-        }
-        onOpened: packName.forceActiveFocus()
-    }
+    CreatePackDialog { id: newPack; app: window.app; catalogue: window.session.catalogue }
     }
 }

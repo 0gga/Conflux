@@ -160,7 +160,7 @@ RepositoryResult PackRepository::write(const QString &path, const QJsonObject &m
     return includeHistory ? inspect(path) : inspectContent(path);
 }
 RepositoryResult PackRepository::create(const QString &root, const QString &name, const QString &game,
-                                        const QString &loader) {
+                                        const QString &loader, bool initializeGit) {
     if (name.trimmed().isEmpty() ||
         !QRegularExpression("^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?$").match(game).hasMatch() ||
         !QStringList{"fabric", "forge", "neoforge", "quilt", "vanilla"}.contains(loader))
@@ -174,10 +174,6 @@ RepositoryResult PackRepository::create(const QString &root, const QString &name
     // mkdir is exclusive: a collision never overwrites an existing pack or arbitrary directory.
     if (!parent.mkdir(directory))
         return {false, "A folder with this pack name already exists. Choose another name.", path};
-    bool ok = false;
-    const auto output = git(path, {"init", "--initial-branch=main"}, &ok);
-    if (!ok)
-        return {false, output, path};
     QFile ignore(QDir(path).filePath(".gitignore"));
     if (!ignore.open(QIODevice::WriteOnly) ||
         ignore.write(
@@ -185,13 +181,20 @@ RepositoryResult PackRepository::create(const QString &root, const QString &name
             "\n.env\n*.jar\n") < 0)
         return {false, "Could not create the pack's .gitignore.", path};
     ignore.close();
-    return write(path, {{"schemaVersion", 1},
-                        {"id", QUuid::createUuid().toString(QUuid::WithoutBraces)},
-                        {"name", name.trimmed()},
-                        {"minecraft", game},
-                        {"loader", loader},
-                        {"loaderVersion", QJsonValue::Null},
-                        {"mods", QJsonArray{}}});
+    auto created = write(path, {{"schemaVersion", 1},
+                                {"id", QUuid::createUuid().toString(QUuid::WithoutBraces)},
+                                {"name", name.trimmed()},
+                                {"minecraft", game},
+                                {"loader", loader},
+                                {"loaderVersion", QJsonValue::Null},
+                                {"mods", QJsonArray{}}});
+    if (!created.ok || !initializeGit)
+        return created;
+    auto tracked = enableGit(path);
+    if (tracked.ok)
+        return tracked;
+    created.error = "The modpack was created, but Git setup failed: " + tracked.error;
+    return created;
 }
 RepositoryResult PackRepository::inspectContent(const QString &path) {
     QFile file(QDir(path).filePath("pack.json"));
@@ -203,13 +206,11 @@ RepositoryResult PackRepository::inspectContent(const QString &path) {
     if (error.error != QJsonParseError::NoError || manifest.value("schemaVersion").toInt() != 1 ||
         manifest.value("name").toString().isEmpty() || !manifest.value("mods").isArray())
         return {false, "The pack manifest is invalid or uses an unsupported schema.", path};
-    if (!QFileInfo::exists(QDir(path).filePath(".git")))
-        return {false, "The pack folder is not a Git repository.", path};
-    return {true, {}, path, {}, {}, manifest};
+    return {true, {}, path, {}, {}, manifest, QFileInfo::exists(QDir(path).filePath(".git"))};
 }
-RepositoryResult PackRepository::inspect(const QString &path) {
+RepositoryResult PackRepository::inspect(const QString &path, bool includeHistory) {
     auto current = inspectContent(path);
-    if (!current.ok)
+    if (!current.ok || !current.gitEnabled || !includeHistory)
         return current;
     bool ok;
     const auto status = git(path, {"status", "--short"}, &ok);
@@ -219,7 +220,44 @@ RepositoryResult PackRepository::inspect(const QString &path) {
     git(path, {"rev-parse", "--verify", "HEAD"}, &hasHead);
     const auto history = hasHead ? git(path, {"log", "-8", "--format=%h  %s"})
                                  : "No saved changes yet. Your first save creates the initial commit.";
-    return {true, {}, path, status, history, current.manifest};
+    return {true, {}, path, status, history, current.manifest, true};
+}
+QString PackRepository::gitIdentityError(const QString &name, const QString &email) {
+    if (name.trimmed().isEmpty() || name.size() > 200 || name.contains('\n') || name.contains('\r'))
+        return "Enter your name for Git history.";
+    if (email.size() > 254 ||
+        !QRegularExpression("^[^\\s<>@]+@[^\\s<>@]+$").match(email.trimmed()).hasMatch())
+        return "Enter an email address for Git history.";
+    return {};
+}
+RepositoryResult PackRepository::enableGit(const QString &path, const QString &name, const QString &email) {
+    auto current = inspectContent(path);
+    if (!current.ok)
+        return current;
+    if (!name.isEmpty() || !email.isEmpty()) {
+        const auto error = gitIdentityError(name, email);
+        if (!error.isEmpty())
+            return {false, error, path};
+    }
+    const auto gitPath = QDir(path).filePath(".git");
+    const QFileInfo gitInfo(gitPath);
+    if (gitInfo.isSymLink() || gitInfo.isJunction() || (gitInfo.exists() && !gitInfo.isDir()))
+        return {false, "Git setup requires a local repository folder.", path};
+    bool ok = false;
+    if (!current.gitEnabled) {
+        const auto output = git(path, {"init", "--initial-branch=main"}, &ok);
+        if (!ok)
+            return {false, output, path};
+    }
+    if (!name.isEmpty()) {
+        for (const auto &setting :
+             QList<QPair<QString, QString>>{{"user.name", name.trimmed()}, {"user.email", email.trimmed()}}) {
+            const auto output = git(path, {"config", "--local", setting.first, setting.second}, &ok);
+            if (!ok)
+                return {false, output, path};
+        }
+    }
+    return inspect(path);
 }
 RepositoryResult PackRepository::pin(const QString &path, const QJsonObject &reference) {
     auto current = inspect(path);
@@ -341,6 +379,8 @@ RepositoryResult PackRepository::commit(const QString &path, const QString &mess
     auto current = inspect(path);
     if (!current.ok)
         return current;
+    if (!current.gitEnabled)
+        return {false, "Set up Git history in Settings first.", path};
     if (message.trimmed().isEmpty())
         return {false, "Describe this change before saving.", path};
     bool ok;

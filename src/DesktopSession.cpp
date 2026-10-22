@@ -59,7 +59,7 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
         m_catalogue.setContext(target.isEmpty() ? QString("global") : target, versions, loaders,
                                m_navigation.route().value("author").toMap());
         if (m_browse.ready() && !m_browse.busy())
-            m_catalogue.setInstalled(m_content.inventory());
+            m_catalogue.setInstalled(m_browse.inventory());
     };
     connect(&m_browse, &BrowseInstalls::changed, this, updateBrowseContext);
     connect(&m_browsePreferences, &BrowsePreferences::changed, this, updateBrowseContext);
@@ -76,7 +76,10 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
             m_navigation.route().value("packPath").toString() + '|' + m_showcase.requestKey(),
             m_showcase.versions(), game.isEmpty() ? QStringList{} : QStringList{game}, loaders);
     };
-    connect(&m_showcase, &ProjectShowcase::changed, this, updateReleaseFilters);
+    connect(&m_showcase, &ProjectShowcase::changed, this, [this, updateReleaseFilters] {
+        m_browse.rememberReleases(m_showcase.project(), m_showcase.versions());
+        updateReleaseFilters();
+    });
     connect(&m_browse, &BrowseInstalls::changed, this, updateReleaseFilters);
     setCurseforgeKey(qgetenv("CURSEFORGE_API_KEY"));
     updateBrowseContext();

@@ -113,6 +113,8 @@ qt_add_executable(modpack-studio src/main.cpp src/ApplicationController.h src/Ap
 qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     QML_FILES
     qml/components/NotificationBanner.qml qml/components/ChangelogView.qml
+    qml/components/SearchableSelect.qml qml/components/CreatePackDialog.qml qml/settings/GitSettings.qml
+    qml/components/MenuList.qml qml/components/MenuOption.qml
     qml/Main.qml
     qml/pack/ConfigEditorPanel.qml
     qml/pack/ConfigField.qml

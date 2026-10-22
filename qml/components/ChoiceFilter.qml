@@ -27,7 +27,7 @@ PopupButton {
         ActionButton {
             objectName: "choiceFilterClear"
             visible: root.values.length > 0
-            iconName: "close"; hint: "Clear " + root.label.toLowerCase(); subtle: true; compact: true
+            iconName: "close"; hint: "Clear " + root.label.toLowerCase(); selectionOutlineOnly: true; subtle: true; compact: true
             implicitWidth: 24; implicitHeight: 24
             onClicked: { root.selectionRequested([]); menu.close() }
         }
@@ -36,7 +36,7 @@ PopupButton {
     }
     FocusPopup {
         id: menu; objectName: "choiceFilterMenu"
-        parent: root; y: root.height+5; width: Math.max(250,Math.min(360,root.width)); padding: 8; margins: 8
+        parent: root; y: root.height+5; width: root.width; padding: 8; margins: 8
         onOpened: if (search.visible) search.forceActiveFocus()
         onClosed: search.text = ""
         background: Rectangle { radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border }
@@ -50,20 +50,19 @@ PopupButton {
             RowLayout {
                 Layout.fillWidth: true
                 Text { objectName: "choiceFilterCount"; Layout.fillWidth: true; text: root.values.length + " selected"; color: Theme.colors.muted; font.pixelSize: 12; leftPadding: 8 }
-                ActionButton { objectName: "choiceFilterMenuClear"; text: "Clear"; subtle: true; compact: true; enabled: root.values.length>0; onClicked: root.selectionRequested([]) }
+                ActionButton { objectName: "choiceFilterMenuClear"; text: "Clear"; selectionOutlineOnly: true; subtle: true; compact: true; enabled: root.values.length>0; onClicked: root.selectionRequested([]) }
             }
             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.colors.border }
-            ContentListView {
+            MenuList {
                 id: options; objectName: "choiceFilterOptions"
-                outsideColor: Theme.colors.card; cornerRadius: 8
                 Layout.fillWidth: true; implicitHeight: Math.min(280,contentHeight); clip: true
                 model: TextSearch.filter(root.choices,search.text)
-                delegate: ActionButton {
+                delegate: MenuOption {
                     id: option
                     required property string modelData
                     objectName: "releaseFilterOption-" + modelData
-                    width: ListView.view.width; text: root.formatValue(modelData); compact: true; subtle: true; alignLeft: true
-                    selected: root.values.indexOf(modelData)!==-1
+                    width: options.optionWidth; text: root.formatValue(modelData); compact: true; subtle: true; alignLeft: true
+                    selected: root.values.indexOf(modelData)!==-1; selectionOutlineOnly: true
                     contentItem: RowLayout {
                         Text { Layout.fillWidth: true; text: option.text; color: option.foreground; font: option.font; elide: Text.ElideRight; textFormat: Text.PlainText }
                         Icon { name: "check"; visible: option.selected; size: 16; color: Theme.colors.accent }

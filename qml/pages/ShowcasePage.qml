@@ -15,11 +15,12 @@ Item {
     readonly property bool contentLocked: { const revision=contentController.lockRevision; return contentController.projectLocked(showcase.project) }
     readonly property var launcherLock: { const revision=contentController.lockRevision; return contentController.sourceLock(showcase.project) }
     property string tab: "description"
+    property string changelogMode: "latest"
     readonly property bool hasGallery: (showcase.gallery || []).length > 0
     readonly property string displayedTab: tab === "gallery" && !hasGallery ? "description" : tab
     function restoreAvailableTab() {
-        if (showcase && tab === "gallery" && !hasGallery && !showcase.busy)
-            Qt.callLater(function() { if (root.showcase && root.tab === "gallery" && !root.hasGallery && !root.showcase.busy) root.tabRequested("description") })
+        if (showcase && tab === "gallery" && !hasGallery && !showcase.busy && showcase.galleryBusy !== true)
+            Qt.callLater(function() { if (root.showcase && root.tab === "gallery" && !root.hasGallery && !root.showcase.busy && root.showcase.galleryBusy !== true) root.tabRequested("description") })
     }
     onTabChanged: restoreAvailableTab()
     Component.onCompleted: restoreAvailableTab()
@@ -51,56 +52,71 @@ Item {
         StackLayout {
             Layout.fillWidth: true; Layout.fillHeight: true
             currentIndex: ["description","gallery","versions","changelog"].indexOf(root.displayedTab)
-            BoundedScrollView {
-                id: descriptionScroll; clip: true
-                DescriptionView {
-                    width: descriptionScroll.availableWidth; blocks: root.showcase.descriptionBlocks || []
-                    onLinkActivated: function(url) { root.app.openWeb(url) }
-                    onImageRequested: function(url) { enlarged.show([url],0) }
-                }
-            }
             Item {
-                GalleryView { anchors.fill: parent; images: root.showcase.gallery; onImageRequested: function(index) { enlarged.show(root.showcase.gallery,index) } }
-            }
-            ColumnLayout {
-                spacing: 14
-                Flow {
-                    Layout.fillWidth: true; spacing: 6
-                    ChoiceFilter { objectName: "versionChannelFilter"; label: "Channel"; choices: root.releaseFilters.options.channels || []; values: root.releaseFilters.filters.channels; onSelectionRequested: function(selection) { root.releaseFilters.configure({channels:selection}) } }
-                    ChoiceFilter { searchable: true; label: "Game version"; choices: root.releaseFilters.options.versions || []; values: root.releaseFilters.filters.versions; onSelectionRequested: function(selection) { root.releaseFilters.configure({versions:selection}) } }
-                    ChoiceFilter { objectName: "versionPlatformFilter"; visible: (root.releaseFilters.options.loaders || []).length > 0; label: "Platform"; loaderNames: true; choices: root.releaseFilters.options.loaders || []; values: root.releaseFilters.filters.loaders; onSelectionRequested: function(selection) { root.releaseFilters.configure({loaders:selection}) } }
-                    SelectBox { implicitHeight: 36; model: ["All sources", "Modrinth", "CurseForge"]; currentIndex: ["all","modrinth","curseforge"].indexOf(root.releaseFilters.filters.source); onActivated: root.releaseFilters.configure({source:["all","modrinth","curseforge"][currentIndex]}) }
-                    ActionButton { text: "Clear"; subtle: true; compact: true; onClicked: root.releaseFilters.clear() }
+                Column {
+                    objectName: "descriptionSkeleton"
+                    visible: root.showcase.busy && !(root.showcase.descriptionBlocks || []).length
+                    width: Math.min(parent.width,720); spacing: 14
+                    Repeater { model: [0.65,1,0.9,0.75]; delegate: Rectangle { required property real modelData; width: parent.width*modelData; height: 14; radius: ControlStyle.controlRadius; color: Theme.colors.input } }
                 }
-                Text { visible: !root.showcase.busy && root.versions.length === 0; text: "No matching versions"; color: Theme.colors.muted; font.pixelSize: 13 }
-                ContentListView {
-                    id: versionList; Layout.fillWidth: true; Layout.fillHeight: true; spacing: 10; clip: true; model: root.versions;
-                    delegate: Rectangle {
-                        id: version; required property var modelData
-                        property int variantIndex: 0
-                        readonly property var release: modelData.variants[Math.min(variantIndex,modelData.variants.length - 1)] || ({})
-                        readonly property string publishedLabel: ContentTime.dateLabel(release.published || "", ContentTime.now)
-                        readonly property bool installed: { const ready=root.browse.ready; const busy=root.browse.busy; return root.browse.installed(release,root.showcase.project.type || "mod") }
-                        readonly property bool groupInstalled: { const ready=root.browse.ready; const busy=root.browse.busy; return modelData.variants.some(function(item) { return root.browse.installed(item,root.showcase.project.type || "mod") }) }
-                        width: versionList.viewportWidth; height: Math.max(version.modelData.variants.length > 1 ? 148 : 112, versionInfo.implicitHeight + 32); radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border
-                        RowLayout {
-                            anchors.fill: parent; anchors.margins: 16; spacing: 16
-                            ColumnLayout {
-                                id: versionInfo; Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: 8
-                                ContentLink { objectName:"releaseChangelogLink";onClicked:{root.showcase.selectChangelog(version.release);changelog.mode="all";root.tabRequested("changelog")} Layout.fillWidth: true; text: version.modelData.label; color: Theme.colors.text; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
-                                CompatibilityBadges { minecraft: (version.release.gameVersions || []).filter(function(value) { return root.releaseFilters.filters.versions.indexOf(value)!==-1 })[0] || (version.release.gameVersions || [])[0] || ""; loader: (version.release.loaders || []).filter(function(value) { return root.releaseFilters.filters.loaders.indexOf(value)!==-1 })[0] || (version.release.loaders || []).filter(function(value) { return value !== "minecraft" && value !== "datapack" })[0] || "" }
-                                Text { objectName: "releasePublished"; Layout.fillWidth: true; text: (version.release.channel || "release").charAt(0).toUpperCase() + (version.release.channel || "release").slice(1) + (version.publishedLabel.length ? " · " + version.publishedLabel : ""); color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
-                                SelectBox { visible: version.modelData.variants.length > 1; Layout.fillWidth: true; model: version.modelData.variants.map(function(row) { return (row.provider === "modrinth" ? "Modrinth" : "CurseForge") + " · " + row.filename }); onActivated: version.variantIndex = currentIndex }
+                BoundedScrollView {
+                    id: descriptionScroll; anchors.fill: parent; clip: true
+                    DescriptionView {
+                        width: descriptionScroll.availableWidth; blocks: root.showcase.descriptionBlocks || []
+                        onLinkActivated: function(url) { root.app.openWeb(url) }
+                        onImageRequested: function(url) { enlarged.show([url],0) }
+                    }
+                }
+            }
+            Loader {
+                active: root.visible && root.displayedTab === "gallery"; asynchronous: true
+                sourceComponent: GalleryView { images: root.showcase.gallery; onImageRequested: function(index) { enlarged.show(root.showcase.gallery,index) } }
+            }
+            Loader {
+                active: root.visible && root.displayedTab === "versions"; asynchronous: true
+                sourceComponent: ColumnLayout {
+                    spacing: 14
+                    Flow {
+                        Layout.fillWidth: true; spacing: 6
+                        ChoiceFilter { objectName: "versionChannelFilter"; label: "Channel"; choices: root.releaseFilters.options.channels || []; values: root.releaseFilters.filters.channels; onSelectionRequested: function(selection) { root.releaseFilters.configure({channels:selection}) } }
+                        ChoiceFilter { searchable: true; label: "Game version"; choices: root.releaseFilters.options.versions || []; values: root.releaseFilters.filters.versions; onSelectionRequested: function(selection) { root.releaseFilters.configure({versions:selection}) } }
+                        ChoiceFilter { objectName: "versionPlatformFilter"; visible: (root.releaseFilters.options.loaders || []).length > 0; label: "Platform"; loaderNames: true; choices: root.releaseFilters.options.loaders || []; values: root.releaseFilters.filters.loaders; onSelectionRequested: function(selection) { root.releaseFilters.configure({loaders:selection}) } }
+                        SelectBox { implicitHeight: 36; model: ["All sources", "Modrinth", "CurseForge"]; currentIndex: ["all","modrinth","curseforge"].indexOf(root.releaseFilters.filters.source); onActivated: root.releaseFilters.configure({source:["all","modrinth","curseforge"][currentIndex]}) }
+                        ActionButton { text: "Clear"; subtle: true; compact: true; onClicked: root.releaseFilters.clear() }
+                    }
+                    Text { visible: !root.showcase.busy && root.versions.length === 0; text: "No matching versions"; color: Theme.colors.muted; font.pixelSize: 13 }
+                    ContentListView {
+                        id: versionList; Layout.fillWidth: true; Layout.fillHeight: true; spacing: 10; clip: true; model: root.versions;
+                        delegate: Rectangle {
+                            id: version; required property var modelData
+                            property int variantIndex: 0
+                            readonly property var release: modelData.variants[Math.min(variantIndex,modelData.variants.length - 1)] || ({})
+                            readonly property string publishedLabel: ContentTime.dateLabel(release.published || "", ContentTime.now)
+                            readonly property bool installed: { const ready=root.browse.ready; const busy=root.browse.busy; return root.browse.installed(release,root.showcase.project.type || "mod") }
+                            readonly property bool groupInstalled: { const ready=root.browse.ready; const busy=root.browse.busy; return modelData.variants.some(function(item) { return root.browse.installed(item,root.showcase.project.type || "mod") }) }
+                            width: versionList.viewportWidth; height: Math.max(version.modelData.variants.length > 1 ? 148 : 112, versionInfo.implicitHeight + 32); radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border
+                            RowLayout {
+                                anchors.fill: parent; anchors.margins: 16; spacing: 16
+                                ColumnLayout {
+                                    id: versionInfo; Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: 8
+                                    ContentLink { objectName:"releaseChangelogLink";onClicked:{root.showcase.selectChangelog(version.release);root.changelogMode="all";root.tabRequested("changelog")} Layout.fillWidth: true; text: version.modelData.label; color: Theme.colors.text; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
+                                    CompatibilityBadges { minecraft: (version.release.gameVersions || []).filter(function(value) { return root.releaseFilters.filters.versions.indexOf(value)!==-1 })[0] || (version.release.gameVersions || [])[0] || ""; loader: (version.release.loaders || []).filter(function(value) { return root.releaseFilters.filters.loaders.indexOf(value)!==-1 })[0] || (version.release.loaders || []).filter(function(value) { return value !== "minecraft" && value !== "datapack" })[0] || "" }
+                                    Text { objectName: "releasePublished"; Layout.fillWidth: true; text: (version.release.channel || "release").charAt(0).toUpperCase() + (version.release.channel || "release").slice(1) + (version.publishedLabel.length ? " · " + version.publishedLabel : ""); color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
+                                    SelectBox { visible: version.modelData.variants.length > 1; Layout.fillWidth: true; model: version.modelData.variants.map(function(row) { return (row.provider === "modrinth" ? "Modrinth" : "CurseForge") + " · " + row.filename }); onActivated: version.variantIndex = currentIndex }
+                                }
+                                SourceBadge { source: version.release.provider || "modrinth"; iconOnly: true }
+                                Text { visible: version.groupInstalled && !version.installed; text: "Installed"; color: Theme.colors.accent; font.pixelSize: 12 }
+                                ActionButton { objectName: "installReleaseButton"; text: version.installed ? "Installed" : "Install version"; iconName: version.installed ? "check" : "plus"; primary: !version.installed; visible: version.release.provider === "modrinth" || version.release.provider === "curseforge"; hint: version.release.provider === "curseforge" && !root.app.curseforgeEnabled ? "Connect CurseForge in Settings" : !version.release.url ? "The author has not made this file available for download" : ""; enabled: root.browse.ready && !root.browse.busy && !root.app.navigationBusy && (version.release.provider !== "curseforge" || root.app.curseforgeEnabled) && !!version.release.url && !!version.release.sha1 && !root.browse.state(root.showcase.project).locked && !root.contentLocked && !version.installed; onClicked: root.browse.installVersion(version.release,root.showcase.project) }
+                                ActionButton { text: "View release"; onClicked: root.app.openWeb(version.release.pageUrl) }
                             }
-                            SourceBadge { source: version.release.provider || "modrinth"; iconOnly: true }
-                            Text { visible: version.groupInstalled && !version.installed; text: "Installed"; color: Theme.colors.accent; font.pixelSize: 12 }
-                            ActionButton { objectName: "installReleaseButton"; text: version.installed ? "Installed" : "Install version"; iconName: version.installed ? "check" : "plus"; primary: !version.installed; visible: version.release.provider === "modrinth" || version.release.provider === "curseforge"; hint: version.release.provider === "curseforge" && !root.app.curseforgeEnabled ? "Connect CurseForge in Settings" : !version.release.url ? "The author has not made this file available for download" : ""; enabled: root.browse.ready && !root.browse.busy && !root.app.navigationBusy && (version.release.provider !== "curseforge" || root.app.curseforgeEnabled) && !!version.release.url && !!version.release.sha1 && !root.browse.state(root.showcase.project).locked && !root.contentLocked && !version.installed; onClicked: root.browse.installVersion(version.release,root.showcase.project) }
-                            ActionButton { text: "View release"; onClicked: root.app.openWeb(version.release.pageUrl) }
                         }
                     }
                 }
             }
-            ChangelogView {id:changelog;showcase:root.showcase;onLinkActivated:function(url){root.app.openWeb(url)};onImageRequested:function(url){enlarged.show([url],0)}}
+            Loader {
+                active: root.visible && root.displayedTab === "changelog"; asynchronous: true
+                sourceComponent: ChangelogView { showcase: root.showcase; mode: root.changelogMode; onModeChanged: root.changelogMode=mode; onLinkActivated: function(url) {root.app.openWeb(url)}; onImageRequested: function(url) {enlarged.show([url],0)} }
+            }
         }
     }
     GalleryViewer { id: enlarged; onExternalRequested: function(url) { root.app.openWeb(url) } }

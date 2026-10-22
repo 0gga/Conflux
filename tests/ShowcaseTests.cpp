@@ -55,6 +55,40 @@ class ShowcaseTests : public QObject {
     }
   private slots:
 
+    void openPublishesOneSeededStateAndReusesFormattedDescriptions() {
+        auto source = std::make_shared<ShowcaseFixture>();
+        ProjectShowcase showcase(source, std::make_shared<IdentityFixture>());
+        QSignalSpy changed(&showcase, &ProjectShowcase::changed);
+        const QVariantMap seed{{"provider", "modrinth"}, {"id", "project"}, {"title", "Seed title"}};
+        showcase.openProject({}, seed);
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(showcase.project().value("title").toString(), QString("Seed title"));
+        Project project;
+        project.id = "project";
+        project.provider = "modrinth";
+        source->pending.last()(project, {});
+        ProjectDetail detail;
+        detail.description = "# Cached description\n\nReadable text.";
+        source->detail(detail);
+        QTRY_VERIFY(!showcase.busy());
+        const auto original = showcase.descriptionBlocks();
+        QVERIFY(!original.isEmpty());
+        showcase.close();
+        showcase.openProject({}, seed);
+        source->pending.last()(project, {});
+        source->detail(detail);
+        // The content hash hits the bounded parsed cache synchronously.
+        QCOMPARE(showcase.descriptionBlocks(), original);
+        QTRY_VERIFY(!showcase.busy());
+        detail.description = "# Changed text";
+        showcase.close();
+        showcase.openProject({}, seed);
+        source->pending.last()(project, {});
+        source->detail(detail);
+        QTRY_VERIFY(!showcase.busy());
+        QVERIFY(showcase.descriptionBlocks() != original);
+    }
+
     void closingDuringDescriptionFormattingDiscardsTheWorkerResult() {
         auto source = std::make_shared<ShowcaseFixture>();
         ProjectShowcase showcase(source, std::make_shared<IdentityFixture>());
@@ -97,6 +131,7 @@ class ShowcaseTests : public QObject {
         ProjectDetail detail;
         detail.releases = {older, latest};
         source->detail(detail);
+        QTRY_VERIFY(!showcase.busy());
         QVERIFY(showcase.changelogRelease().isEmpty());
         QCOMPARE(showcase.changelogVersions().first().toMap().value("id").toString(), QString("new"));
         showcase.selectChangelog(older.toVariant());

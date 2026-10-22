@@ -1,11 +1,14 @@
 #include "GalleryImages.h"
 #include "domain/Catalogue.h"
 #include <QBuffer>
+#include <QFutureWatcher>
 #include <QImageReader>
 #include <QSet>
+#include <QtConcurrent>
 #include <memory>
 namespace studio {
-void GalleryImages::load(QStringList urls, int generation) {
+void GalleryImages::cancel() {
+    ++m_epoch;
     for (auto &reply : m_replies)
         if (reply) {
             reply->disconnect(this);
@@ -13,6 +16,10 @@ void GalleryImages::load(QStringList urls, int generation) {
             reply->deleteLater();
         }
     m_replies.clear();
+}
+void GalleryImages::load(QStringList urls, int generation) {
+    cancel();
+    const int epoch = m_epoch;
     urls.removeDuplicates();
     struct Batch {
         QStringList urls, errors;
@@ -31,11 +38,20 @@ void GalleryImages::load(QStringList urls, int generation) {
     auto pump = std::make_shared<std::function<void()>>();
     // A weak reference prevents a self-owning callback cycle after the batch ends.
     const std::weak_ptr<std::function<void()>> weakPump = pump;
-    *pump = [this, batch, generation, weakPump] {
+    *pump = [this, batch, generation, epoch, weakPump] {
+        if (epoch != m_epoch)
+            return;
         while (batch->pending < 4 && batch->next < batch->urls.size()) {
             const int index = batch->next++;
-            const QUrl url(batch->urls.at(index));
-            if (url.scheme() != "https" || !url.userInfo().isEmpty()) {
+            const auto address = batch->urls.at(index);
+            if (const auto *cached = m_cache.object(address); cached && cached->expires > m_clock.elapsed()) {
+                batch->hashes[index] = cached->hash;
+                continue;
+            }
+            const QUrl url(address);
+            if ((url.scheme() != "https" &&
+                 !(m_allowLoopback && url.scheme() == "http" && url.host() == "127.0.0.1")) ||
+                !url.userInfo().isEmpty()) {
                 batch->failed.insert(index);
                 continue;
             }
@@ -51,27 +67,40 @@ void GalleryImages::load(QStringList urls, int generation) {
                     reply->abort();
             });
             auto next = weakPump.lock();
-            connect(reply, &QNetworkReply::finished, this, [this, reply, batch, index, next] {
+            connect(reply, &QNetworkReply::finished, this, [this, reply, batch, index, next, epoch, address] {
                 const auto bytes = reply->readAll();
-                QBuffer buffer;
-                buffer.setData(bytes);
-                buffer.open(QIODevice::ReadOnly);
-                QImageReader reader(&buffer);
-                const auto size = reader.size();
-                if (reply->error() == QNetworkReply::NoError && bytes.size() <= 8 * 1024 * 1024 &&
-                    size.isValid() && size.width() <= 4096 && size.height() <= 4096) {
-                    const auto hash = decodedImageFingerprint(bytes);
-                    if (!hash.isEmpty())
-                        batch->hashes[index] = hash;
-                    else
-                        batch->failed.insert(index);
-                } else
-                    batch->failed.insert(index);
-                --batch->pending;
+                const bool valid =
+                    reply->error() == QNetworkReply::NoError && bytes.size() <= 8 * 1024 * 1024;
                 m_replies.removeAll(reply);
                 reply->deleteLater();
-                if (next)
-                    (*next)();
+                auto *watcher = new QFutureWatcher<QByteArray>(this);
+                connect(watcher, &QFutureWatcherBase::finished, this,
+                        [this, watcher, batch, index, next, epoch, address] {
+                            const auto hash = watcher->result();
+                            watcher->deleteLater();
+                            if (epoch != m_epoch)
+                                return;
+                            if (!hash.isEmpty()) {
+                                batch->hashes[index] = hash;
+                                m_cache.insert(address, new Fingerprint{hash, m_clock.elapsed() + 300000});
+                            } else
+                                batch->failed.insert(index);
+                            --batch->pending;
+                            if (next)
+                                (*next)();
+                        });
+                watcher->setFuture(QtConcurrent::run([bytes, valid]() -> QByteArray {
+                    if (!valid)
+                        return {};
+                    QBuffer buffer;
+                    buffer.setData(bytes);
+                    buffer.open(QIODevice::ReadOnly);
+                    QImageReader reader(&buffer);
+                    const auto size = reader.size();
+                    if (!size.isValid() || size.width() > 4096 || size.height() > 4096)
+                        return {};
+                    return decodedImageFingerprint(bytes);
+                }));
             });
         }
         if (batch->pending || batch->next < batch->urls.size())

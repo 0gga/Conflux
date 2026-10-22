@@ -3,6 +3,7 @@
 #include <QFutureWatcher>
 #include <QPointer>
 #include <QRegularExpression>
+#include <QSet>
 #include <QTimer>
 #include <QtConcurrent>
 #include <algorithm>
@@ -52,36 +53,53 @@ void VersionChangelogs::clear() {
     emit selectionChanged();
 }
 void VersionChangelogs::setReleases(const QVector<Release> &releases) {
-    clear();
+    setGroups(groupReleases(releases));
+}
+QVector<VersionChangelogs::Group> VersionChangelogs::groupReleases(const QVector<Release> &releases) {
+    QVector<Group> entries;
+    QSet<QString> aliases;
     auto sorted = releases;
     std::stable_sort(sorted.begin(), sorted.end(),
                      [](const Release &a, const Release &b) { return a.published > b.published; });
-    beginResetModel();
     QHash<QString, int> groups;
     for (const auto &release : sorted) {
         const auto alias = release.provider + ':' + release.id;
-        if (release.id.isEmpty() || m_aliases.contains(alias))
+        if (release.id.isEmpty() || aliases.contains(alias))
             continue;
         const auto label = contentVersion(release);
         const auto key = label.isEmpty() ? alias : label.toCaseFolded();
         auto position = groups.value(key, -1);
         if (position < 0) {
-            position = m_entries.size();
+            position = entries.size();
             groups.insert(key, position);
-            Entry entry;
+            Group entry;
             entry.release = release;
             entry.label = label;
-            m_entries << entry;
+            entries << entry;
         }
-        auto &entry = m_entries[position];
+        auto &entry = entries[position];
         entry.aliases << alias;
-        m_aliases.insert(alias, position);
+        aliases.insert(alias);
         if ((entry.release.provider != "modrinth" && release.provider == "modrinth") ||
             (entry.release.provider == release.provider && entry.release.changelog.isEmpty() &&
              !release.changelog.isEmpty()))
             entry.release = release;
     }
-    for (const auto &entry : m_entries) {
+    return entries;
+}
+void VersionChangelogs::setGroups(const QVector<Group> &groups) {
+    clear();
+    beginResetModel();
+    m_entries.reserve(groups.size());
+    m_versions.reserve(groups.size());
+    for (const auto &group : groups) {
+        Entry entry;
+        entry.release = group.release;
+        entry.label = group.label;
+        entry.aliases = group.aliases;
+        for (const auto &alias : group.aliases)
+            m_aliases.insert(alias, m_entries.size());
+        m_entries << entry;
         auto row = entry.release.toVariant();
         row["version"] = entry.label;
         m_versions << row;

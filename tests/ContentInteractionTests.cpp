@@ -615,6 +615,11 @@ Item { id:root;width:1000;height:700
             "releaseRows", QVariantList{QVariantMap{{"label", "1.2"}, {"variants", QVariantList{release}}}});
         QTRY_VERIFY(findItem(fixture.get(), "releaseChangelogLink"));
         auto *link = findItem(fixture.get(), "releaseChangelogLink");
+        // Asynchronous tab incubation can expose objects before their first layout/render pass.
+        QSignalSpy rendered(&window, &QQuickWindow::frameSwapped);
+        window.update();
+        QVERIFY(rendered.wait(1000));
+        QVERIFY(link->width() > 0 && link->height() > 0);
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
                           link->mapToScene(QPointF(link->width() / 2, link->height() / 2)).toPoint());
         QTRY_COMPARE(fixture->property("selection").toString(), QString("changelog"));

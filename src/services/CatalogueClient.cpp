@@ -2,11 +2,13 @@
 #include "domain/ContentCompatibility.h"
 #include "platform/ProjectAuthors.h"
 #include "platform/ReviewedAuthorIdentities.h"
+#include <QFutureWatcher>
 #include <QJsonArray>
 #include <QNetworkReply>
 #include <QRegularExpression>
 #include <QTimer>
 #include <QUrlQuery>
+#include <QtConcurrent>
 #include <algorithm>
 #include <limits>
 #include <memory>
@@ -67,7 +69,20 @@ static bool matchesScopedCurseforgeProject(const QJsonObject &row, const Catalog
 }
 CatalogueClient::CatalogueClient(QObject *parent, QUrl modrinthApi, QUrl curseforgeApi)
     : QObject(parent), m_network(this), m_modrinthApi(std::move(modrinthApi)),
-      m_curseforgeApi(std::move(curseforgeApi)) {}
+      m_curseforgeApi(std::move(curseforgeApi)) {
+    m_cacheClock.start();
+}
+void CatalogueClient::setReadCacheLifetime(int milliseconds) {
+    m_cacheLifetime = qBound(0, milliseconds, 300000);
+    m_readCache.clear();
+}
+void CatalogueClient::setCurseforgeKey(const QByteArray &key) {
+    if (key == m_curseforgeKey)
+        return;
+    m_curseforgeKey = key;
+    ++m_authGeneration;
+    m_readCache.clear();
+}
 void CatalogueClient::request(const QUrl &url, bool cf, JsonCallback callback, bool allowMissing,
                               const QByteArray &body) {
     const auto root = cf ? m_curseforgeApi : m_modrinthApi;
@@ -75,6 +90,50 @@ void CatalogueClient::request(const QUrl &url, bool cf, JsonCallback callback, b
     relative = relative.mid(4);
     QUrl endpoint = root.resolved(QUrl(relative));
     endpoint.setQuery(url.query());
+    const int authGeneration = m_authGeneration;
+    const QString cacheKey = QString::number(authGeneration) + ':' + endpoint.toString(QUrl::FullyEncoded) +
+                             (allowMissing ? ":optional" : ":required");
+    const bool cacheable = m_cacheLifetime > 0 && body.isEmpty();
+    std::shared_ptr<PendingRead> pending;
+    if (cacheable) {
+        if (const auto *cached = m_readCache.object(cacheKey);
+            cached && cached->expires > m_cacheClock.elapsed()) {
+            QTimer::singleShot(
+                0, this, [this, callback = std::move(callback), document = cached->document, authGeneration] {
+                    if (authGeneration != m_authGeneration)
+                        callback({}, "The provider connection changed. Reopen the content page.");
+                    else
+                        callback(document, {});
+                });
+            return;
+        }
+        if (auto existing = m_pendingReads.value(cacheKey)) {
+            existing->callbacks << std::move(callback);
+            return;
+        }
+        pending = std::make_shared<PendingRead>();
+        pending->callbacks << std::move(callback);
+        m_pendingReads.insert(cacheKey, pending);
+    }
+    auto deliver = [this, cacheable, cacheKey, pending, callback = std::move(callback),
+                    authGeneration](QJsonDocument document, QString error, int bytes) {
+        if (authGeneration != m_authGeneration) {
+            document = {};
+            error = "The provider connection changed. Reopen the content page.";
+        }
+        if (!cacheable) {
+            callback(document, error);
+            return;
+        }
+        m_pendingReads.remove(cacheKey);
+        if (error.isEmpty() && !document.isNull() && authGeneration == m_authGeneration)
+            m_readCache.insert(cacheKey,
+                               new CachedResponse{document, m_cacheClock.elapsed() + m_cacheLifetime},
+                               qMax(1024, bytes * 2));
+        const auto callbacks = std::move(pending->callbacks);
+        for (const auto &waiting : callbacks)
+            waiting(document, error);
+    };
     QNetworkRequest request(endpoint);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
     request.setHeader(QNetworkRequest::UserAgentHeader,
@@ -86,23 +145,51 @@ void CatalogueClient::request(const QUrl &url, bool cf, JsonCallback callback, b
     if (!body.isEmpty())
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     auto *reply = body.isEmpty() ? m_network.get(request) : m_network.post(request, body);
-    connect(reply, &QNetworkReply::finished, this, [reply, allowMissing, callback = std::move(callback)] {
+    connect(reply, &QNetworkReply::readyRead, this, [reply] {
+        if (reply->bytesAvailable() > 32 * 1024 * 1024) {
+            reply->setProperty("responseTooLarge", true);
+            reply->abort();
+        }
+    });
+    connect(reply, &QNetworkReply::finished, this, [this, reply, allowMissing, deliver] {
         const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (allowMissing && status == 404) {
-            callback({}, {});
+            deliver({}, {}, 0);
             reply->deleteLater();
             return;
         }
         auto error = reply->error() == QNetworkReply::NoError ? QString{} : reply->errorString();
+        if (reply->property("responseTooLarge").toBool())
+            error = "The provider response exceeded the 32 MiB safety limit.";
         if (error.isEmpty() && status != 200)
             error = "Provider request failed (HTTP " + QString::number(status) + ").";
         if (status == 429)
             error = "Rate limit reached. Wait a moment before searching again.";
-        QJsonParseError parseError;
-        const auto document = QJsonDocument::fromJson(reply->readAll(), &parseError);
-        if (error.isEmpty() && parseError.error != QJsonParseError::NoError)
-            error = "The provider returned invalid JSON.";
-        callback(document, error);
+        if (!error.isEmpty()) {
+            deliver({}, error, 0);
+            reply->deleteLater();
+            return;
+        }
+        const auto bytes = reply->readAll();
+        auto parse = [bytes, error]() mutable {
+            QJsonParseError parseError;
+            const auto document = QJsonDocument::fromJson(bytes, &parseError);
+            if (error.isEmpty() && parseError.error != QJsonParseError::NoError)
+                error = "The provider returned invalid JSON.";
+            return std::pair{document, error};
+        };
+        if (bytes.size() >= 64 * 1024) {
+            auto *watcher = new QFutureWatcher<std::pair<QJsonDocument, QString>>(this);
+            connect(watcher, &QFutureWatcherBase::finished, this, [watcher, deliver, size = bytes.size()] {
+                const auto result = watcher->result();
+                watcher->deleteLater();
+                deliver(result.first, result.second, int(size));
+            });
+            watcher->setFuture(QtConcurrent::run(std::move(parse)));
+        } else {
+            const auto result = parse();
+            deliver(result.first, result.second, int(bytes.size()));
+        }
         reply->deleteLater();
     });
 }
@@ -612,7 +699,7 @@ void CatalogueClient::loadProject(const Project &project, const QString &request
         const auto base =
             cf ? "https://api.curseforge.com/v1/mods/" + id : "https://api.modrinth.com/v2/project/" + id;
         request(QUrl(base + (cf ? "/description" : "")), cf,
-                [batch, done, cf, project](const QJsonDocument &doc, const QString &error) {
+                [this, generation, batch, done, cf, project](const QJsonDocument &doc, const QString &error) {
                     if (!error.isEmpty())
                         batch->detail.errors << error;
                     else if (cf) {
@@ -623,6 +710,8 @@ void CatalogueClient::loadProject(const Project &project, const QString &request
                         for (const auto &image : doc.object().value("gallery").toArray())
                             batch->images["modrinth"] << image.toObject().value("url").toString();
                     }
+                    if (error.isEmpty() && (!cf || !project.sourceIds.contains("modrinth")))
+                        emit descriptionReady(generation, batch->detail.description);
                     done();
                 });
         if (cf)
@@ -741,7 +830,9 @@ void CatalogueClient::resolveProject(const QString &sha1, QMap<QString, QString>
             const bool cf = provider == "curseforge";
             request(QUrl(cf ? "https://api.curseforge.com/v1/mods/" + id
                             : "https://api.modrinth.com/v2/project/" + id),
-                    cf, [batch, done, cf, provider](const QJsonDocument &doc, const QString &error) {
+                    cf,
+                    [this, generation, batch, done, cf, provider](const QJsonDocument &doc,
+                                                                  const QString &error) {
                         if (!error.isEmpty())
                             batch->errors << provider + ": " + error;
                         else {
@@ -762,6 +853,8 @@ void CatalogueClient::resolveProject(const QString &sha1, QMap<QString, QString>
                                        : "https://modrinth.com/" + p.type + "/" + p.id;
                             if (!p.id.isEmpty() && p.id != "0")
                                 batch->projects << p;
+                            if (!cf && !p.id.isEmpty() && p.id != "0")
+                                emit descriptionReady(generation, row.value("body").toString());
                         }
                         done();
                     });

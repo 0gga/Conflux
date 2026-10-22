@@ -1,6 +1,8 @@
 #pragma once
+#include "DescriptionRenderer.h"
 #include "ProjectShowcaseSource.h"
 #include "VersionChangelogs.h"
+#include <QCache>
 #include <QObject>
 #include <QVariantList>
 #include <memory>
@@ -21,6 +23,7 @@ class ProjectShowcase final : public QObject {
     Q_PROPERTY(int changelogIndex READ changelogIndex NOTIFY changed)
     Q_PROPERTY(QString notice READ notice NOTIFY changed)
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
+    Q_PROPERTY(bool galleryBusy READ galleryBusy NOTIFY changed)
     Q_PROPERTY(QString filePath READ filePath NOTIFY changed)
     Q_PROPERTY(QString requestKey READ requestKey NOTIFY changed)
   public:
@@ -79,6 +82,9 @@ class ProjectShowcase final : public QObject {
     bool busy() const {
         return m_busy;
     }
+    bool galleryBusy() const {
+        return m_galleryPending;
+    }
     QString filePath() const {
         return m_filePath;
     }
@@ -89,6 +95,12 @@ class ProjectShowcase final : public QObject {
     void changed();
 
   private:
+    struct PreparedVersions {
+        QVariantList groups;
+        QVector<VersionChangelogs::Group> changelogs;
+    };
+    void reset();
+    void presentDescription(const QString &, bool markdown, int generation);
     std::shared_ptr<IProjectShowcaseSource> m_source;
     VersionChangelogs m_changelogs;
     std::shared_ptr<const IInstalledModIdentity> m_identity;
@@ -98,6 +110,10 @@ class ProjectShowcase final : public QObject {
     QStringList m_gallery;
     QVariantList m_versions, m_descriptionBlocks;
     bool m_busy = false;
+    bool m_detailsReady = false, m_descriptionPending = false;
+    bool m_galleryPending = false;
+    QString m_descriptionKey;
+    QCache<QString, RenderedDescription> m_renderedDescriptions{8};
     int m_generation = 0;
 };
 } // namespace studio

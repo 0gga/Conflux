@@ -440,6 +440,70 @@ Item { GalleryViewer { id:viewer;objectName:"viewer" } function display(urls) { 
         QTest::newRow("narrow") << 640;
         QTest::newRow("wide") << 1100;
     }
+    void contentPageProgressivelyReplacesSkeletonAndBuildsOnlySelectedTabs() {
+#ifndef Q_MOC_RUN
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData(
+            R"QML(
+import QtQuick
+import "pages"
+Item {
+    id:root
+    property bool loading:true
+    property bool galleryLoading:true
+    property var images:[]
+    property var blocks:[]
+    property string selectedTab:"description"
+    QtObject { id:model;property var project:({title:"Instant title",sources:[]});property var gallery:root.images;property bool galleryBusy:root.galleryLoading;property bool busy:root.loading;property string notice:"";property var descriptionBlocks:root.blocks;property var changelogVersions:[];property var changelogBlocks:[];property var changelogRelease:({});property string changelogNotice:"";property bool changelogBusy:false;property int changelogIndex:-1;property var changelogModel:null;signal changed();function selectChangelog(release){} function requestChangelog(index,retry){} }
+    QtObject { id:browser;property bool ready:true;property bool busy:false;property string notice:"";function installed(release,type){return false} function state(project){return ({locked:false})} }
+    QtObject { id:applicationModel;property bool navigationBusy:false;property bool curseforgeEnabled:true;function openWeb(url){} }
+    QtObject { id:content;property string notice:"";property int lockRevision:0;function projectLocked(project){return false} function sourceLock(project){return ({})} }
+    QtObject { id:filters;property var rows:[];property var options:({channels:[],versions:[],loaders:[]});property var filters:({channels:[],versions:[],loaders:[],source:"all"});function configure(values){} function clear(){} }
+    ShowcasePage { anchors.fill:parent;showcase:model;browse:browser;app:applicationModel;contentController:content;releaseFilters:filters;tab:root.selectedTab;onTabRequested:function(key){root.selectedTab=key} }
+})QML",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/LoadingFixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> root(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY2(root, qPrintable(component.errorString()));
+        QQuickWindow window;
+        window.resize(1080, 720);
+        root->setParentItem(window.contentItem());
+        root->setSize(window.size());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QVERIFY(item(root.get(), "descriptionSkeleton"));
+        QVERIFY(!root->findChild<QQuickItem *>("showcaseGallery"));
+        QVERIFY(!root->findChild<QQuickItem *>("versionChannelFilter"));
+        QVERIFY(!root->findChild<QQuickItem *>("changelogView"));
+        root->setProperty("blocks",
+                          QVariantList{QVariantMap{{"kind", "text"}, {"html", "<p>Progressive body</p>"}}});
+        QTRY_VERIFY(item(root.get(), "descriptionTextBlock"));
+        QVERIFY(!item(root.get(), "descriptionSkeleton"));
+        root->setProperty("selectedTab", "gallery");
+        root->setProperty("loading", false);
+        QTest::qWait(30);
+        QCOMPARE(root->property("selectedTab").toString(),
+                 QString("gallery")); // Validation has not finished.
+        const auto path = storage.filePath("loading-gallery.png");
+        QImage image(80, 60, QImage::Format_RGB32);
+        image.fill(Qt::cyan);
+        QVERIFY(image.save(path));
+        root->setProperty("images", QStringList{QUrl::fromLocalFile(path).toString()});
+        root->setProperty("galleryLoading", false);
+        QTRY_VERIFY(item(root.get(), "galleryThumbnail"));
+        root->setProperty("selectedTab", "versions");
+        QTRY_VERIFY(item(root.get(), "versionChannelFilter"));
+        QTRY_VERIFY(!root->findChild<QQuickItem *>("showcaseGallery"));
+        root->setProperty("selectedTab", "changelog");
+        QTRY_VERIFY(item(root.get(), "changelogView"));
+        QTRY_VERIFY(!root->findChild<QQuickItem *>("versionChannelFilter"));
+        root->setProperty("selectedTab", "description");
+        QTRY_VERIFY(item(root.get(), "descriptionTextBlock"));
+        QTRY_VERIFY(!root->findChild<QQuickItem *>("changelogView"));
+#endif
+    }
+
     void cardsAndActualVersionRowsUseTheSameRecentTimeAndWrapWithinTheirRows() {
 #ifndef Q_MOC_RUN
         QFETCH(int, width);

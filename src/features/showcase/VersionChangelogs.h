@@ -8,6 +8,13 @@ namespace studio {
 class VersionChangelogs final : public QAbstractListModel {
     Q_OBJECT
   public:
+    struct Group {
+        Release release;
+        QString label;
+        QStringList aliases;
+    };
+    static QVector<Group> groupReleases(const QVector<Release> &);
+    void setGroups(const QVector<Group> &);
     explicit VersionChangelogs(std::shared_ptr<IProjectShowcaseSource>, QObject *parent = nullptr);
     void setReleases(const QVector<Release> &);
     void clear();

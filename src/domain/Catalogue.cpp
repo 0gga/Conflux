@@ -153,34 +153,37 @@ bool isNewerRelease(const Release &installed, const Release &candidate) {
            after.isValid() && after > before;
 }
 QVariantList groupReleaseVariants(const QVector<Release> &releases) {
-    QVariantList groups;
-    QMap<QString, int> positions;
+    struct Group {
+        QString label;
+        QVariantList modrinth, other;
+    };
+    QVector<Group> grouped;
+    QHash<QString, qsizetype> positions;
+    grouped.reserve(releases.size());
+    positions.reserve(releases.size());
     for (int index = 0; index < releases.size(); ++index) {
         const auto &release = releases.at(index);
         const auto label = release.version.isEmpty() ? release.title : release.version;
         const auto key = label.isEmpty() ? release.provider + ':' + release.id : label;
-        if (!positions.contains(key)) {
-            positions[key] = groups.size();
-            groups << QVariantMap{{"label", label}, {"variants", QVariantList{}}};
+        auto position = positions.constFind(key);
+        if (position == positions.cend()) {
+            position = positions.insert(key, grouped.size());
+            grouped.append({label, {}, {}});
         }
-        const int position = positions.value(key);
-        auto group = groups.at(position).toMap();
-        auto variants = group.value("variants").toList();
+        auto &group = grouped[position.value()];
         auto variant = release.toVariant();
         variant["releaseIndex"] = index;
-        int insertion = variants.size();
-        if (release.provider == "modrinth") {
-            insertion = 0;
-            while (insertion < variants.size() &&
-                   variants.at(insertion).toMap().value("provider") == "modrinth")
-                ++insertion;
-        }
-        variants.insert(insertion, variant);
-        group["variants"] = variants;
-        groups[position] = group;
+        (release.provider == "modrinth" ? group.modrinth : group.other).append(variant);
+    }
+    QVariantList groups;
+    groups.reserve(grouped.size());
+    for (auto &group : grouped) {
+        group.modrinth.append(group.other);
+        groups.append(QVariantMap{{"label", group.label}, {"variants", group.modrinth}});
     }
     return groups;
 }
+
 Release curseforgeRelease(const QJsonObject &file) {
     Release r;
     r.provider = "curseforge";

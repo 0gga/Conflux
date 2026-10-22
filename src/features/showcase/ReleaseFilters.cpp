@@ -1,13 +1,16 @@
 #include "ReleaseFilters.h"
+#include <QSignalBlocker>
 namespace studio {
 ReleaseFilters::ReleaseFilters(QObject *parent) : QObject(parent) {
     clear();
+    m_options = calculateOptions();
 }
 void ReleaseFilters::clear() {
     m_filters = {{"channels", QStringList{}},
                  {"versions", QStringList{}},
                  {"loaders", QStringList{}},
                  {"source", "all"}};
+    m_rows = calculateRows();
     emit changed();
 }
 void ReleaseFilters::setContext(const QString &identity, const QVariantList &groups,
@@ -19,6 +22,7 @@ void ReleaseFilters::setContext(const QString &identity, const QVariantList &gro
     if (reset) {
         m_identity = identity;
         m_seeded = false;
+        const QSignalBlocker blocker(this);
         clear();
     }
     if (!m_seeded && !versions.isEmpty()) {
@@ -27,6 +31,8 @@ void ReleaseFilters::setContext(const QString &identity, const QVariantList &gro
         m_seeded = true;
     }
     m_groups = groups;
+    m_options = calculateOptions();
+    m_rows = calculateRows();
     emit changed();
 }
 void ReleaseFilters::configure(const QVariantMap &changes) {
@@ -54,10 +60,12 @@ void ReleaseFilters::configure(const QVariantMap &changes) {
             dirty = true;
         }
     }
-    if (dirty)
+    if (dirty) {
+        m_rows = calculateRows();
         emit changed();
+    }
 }
-QVariantMap ReleaseFilters::options() const {
+QVariantMap ReleaseFilters::calculateOptions() const {
     QStringList versions, loaders;
     for (const auto &group : m_groups)
         for (const auto &item : group.toMap().value("variants").toList()) {
@@ -71,7 +79,7 @@ QVariantMap ReleaseFilters::options() const {
     return {
         {"channels", QStringList{"release", "beta", "alpha"}}, {"versions", versions}, {"loaders", loaders}};
 }
-QVariantList ReleaseFilters::rows() const {
+QVariantList ReleaseFilters::calculateRows() const {
     QVariantList rows;
     const auto versions = m_filters.value("versions").toStringList();
     const auto loaders = m_filters.value("loaders").toStringList();

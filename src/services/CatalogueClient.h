@@ -1,10 +1,13 @@
 #pragma once
 #include "domain/Catalogue.h"
 #include "domain/CatalogueSearch.h"
+#include <QCache>
+#include <QElapsedTimer>
 #include <QJsonDocument>
 #include <QNetworkAccessManager>
 #include <QObject>
 #include <functional>
+#include <memory>
 
 namespace studio {
 class CatalogueClient : public QObject, public ICatalogueSearch {
@@ -13,9 +16,9 @@ class CatalogueClient : public QObject, public ICatalogueSearch {
     explicit CatalogueClient(QObject *parent = nullptr,
                              QUrl modrinthApi = QUrl("https://api.modrinth.com/v2/"),
                              QUrl curseforgeApi = QUrl("https://api.curseforge.com/v1/"));
-    void setCurseforgeKey(const QByteArray &key) {
-        m_curseforgeKey = key;
-    }
+    void setCurseforgeKey(const QByteArray &key);
+    // Opt-in for read-only presentation clients, never installer validation.
+    void setReadCacheLifetime(int milliseconds);
     bool hasCurseforgeKey() const {
         return !m_curseforgeKey.isEmpty();
     }
@@ -36,6 +39,7 @@ class CatalogueClient : public QObject, public ICatalogueSearch {
   signals:
     void searchFinished(int generation, QVector<studio::Project> projects, QStringList errors);
     void detailFinished(int generation, studio::ProjectDetail detail);
+    void descriptionReady(int generation, QString description);
     void projectResolved(int generation, studio::Project project, QString error);
 
   private:
@@ -44,6 +48,17 @@ class CatalogueClient : public QObject, public ICatalogueSearch {
     QUrl m_modrinthApi, m_curseforgeApi;
     QMap<QString, QString> m_hashProjects, m_linkedProjects;
     using JsonCallback = std::function<void(QJsonDocument, QString)>;
+    struct CachedResponse {
+        QJsonDocument document;
+        qint64 expires = 0;
+    };
+    struct PendingRead {
+        QList<JsonCallback> callbacks;
+    };
+    QCache<QString, CachedResponse> m_readCache{16 * 1024 * 1024};
+    QHash<QString, std::shared_ptr<PendingRead>> m_pendingReads;
+    QElapsedTimer m_cacheClock;
+    int m_cacheLifetime = 0, m_authGeneration = 0;
     void request(const QUrl &url, bool curseforge, JsonCallback callback, bool allowMissing = false,
                  const QByteArray &body = {});
     void linkCurseforgeFiles(CataloguePage, QMap<QString, QStringList>, Callback);

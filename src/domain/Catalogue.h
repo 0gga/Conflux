@@ -48,9 +48,13 @@ struct ContentInstallRequest {
 // Only explicit, reviewed provider:id -> shared identity mappings may collapse projects.
 QVector<Project> mergeProjects(const QVector<Project> &projects,
                                const QHash<QString, QString> &identities = {});
+QString projectIdentity(const Project &, const QHash<QString, QString> &identities = {});
+QMap<QString, QString> verifiedProjectPairs(const QMap<QString, QStringList> &projectHashes,
+                                            const QMap<QString, QString> &hashProjects);
 // Equal display labels do not establish equivalence. Equal files and compatibility do.
 QVector<Release> mergeReleases(const QVector<Release> &releases);
 Release modrinthRelease(const QJsonObject &version, const QString &fileSha1 = {});
+Release curseforgeRelease(const QJsonObject &file);
 bool isNewerRelease(const Release &installed, const Release &candidate);
 QVariantList groupReleaseVariants(const QVector<Release> &releases);
 Release releaseFromVariant(const QVariantMap &value);

@@ -19,6 +19,11 @@ class BrowseInstalls final : public QObject {
     void setTargetPath(const QString &);
     void setCurseforgeKey(const QByteArray &key) {
         m_catalogue->setCurseforgeKey(key);
+        const bool enabled = !key.trimmed().isEmpty();
+        if (enabled != m_curseforgeEnabled) {
+            m_curseforgeEnabled = enabled;
+            emit changed();
+        }
     }
     QVariantMap pack() const {
         return ready() ? m_pack : QVariantMap{};
@@ -53,6 +58,7 @@ class BrowseInstalls final : public QObject {
     QVariantList m_rows;
     QString m_target, m_notice;
     bool m_indexing = false;
+    bool m_curseforgeEnabled = false;
     int m_lookupGeneration = 0;
     ContentOperationQueue m_lookups;
     QSet<QString> m_pendingLookups;

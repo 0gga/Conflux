@@ -11,10 +11,11 @@
 #include <filesystem>
 namespace studio {
 ContentInstaller::ContentInstaller(std::shared_ptr<const NativeContentStore> files, QObject *parent,
-                                   bool local, QUrl apiRoot)
+                                   bool local, QUrl apiRoot, QUrl curseforgeApi)
     : QObject(parent), m_installer(this, !apiRoot.isEmpty() ? apiRoot
                                          : local            ? QUrl("http://127.0.0.1/")
                                                             : QUrl("https://api.modrinth.com/v2/")),
+      m_curseforge(this, curseforgeApi.isEmpty() ? QUrl("https://api.curseforge.com/v1/") : curseforgeApi),
       m_download(this, local), m_files(std::move(files)) {
     connect(&m_download, &VerifiedDownload::progress, this, &ContentInstaller::progress);
     connect(&m_installer, &ModInstaller::progress, this, &ContentInstaller::progress);
@@ -174,6 +175,20 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
         if (!request.resolveDependencies)
             m_shallowProjects.insert(request.release.projectId);
     m_committing = false;
+    m_preparing = true;
+    m_curseforge.prepare(pack, rows, requests,
+                         [this](QVector<ContentInstallRequest> prepared, QString error) {
+                             m_preparing = false;
+                             if (!error.isEmpty()) {
+                                 finish({false, error});
+                                 return;
+                             }
+                             prepareDownloads(prepared);
+                         });
+}
+void ContentInstaller::prepareDownloads(const QVector<ContentInstallRequest> &requests) {
+    const auto pack = m_targetPack;
+    const auto rows = m_targetRows;
     bool direct = !requests.isEmpty();
     for (const auto &request : requests)
         direct &= !request.resolveDependencies || request.contentType != "mod";
@@ -190,7 +205,7 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
     }
     QVector<ContentInstallRequest> mods;
     for (const auto &request : requests) {
-        if (request.contentType == "mod")
+        if (request.contentType == "mod" && request.release.provider != "curseforge")
             mods << request;
         else
             m_batches << QVector<ContentInstallRequest>{request};
@@ -288,7 +303,8 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
     }));
 }
 void ContentInstaller::installBatch(const QVector<ContentInstallRequest> &requests) {
-    if (requests.size() == 1 && requests.first().contentType != "mod") {
+    if (requests.size() == 1 &&
+        (requests.first().contentType != "mod" || requests.first().release.provider == "curseforge")) {
         const auto request = requests.first();
         const auto category = contentCategory(request.contentType);
         if (request.resolveDependencies && !request.release.requiredDependencies.isEmpty()) {
@@ -326,16 +342,19 @@ void ContentInstaller::installBatch(const QVector<ContentInstallRequest> &reques
                     auto current = PackRepository::inspectContent(path);
                     if (!current.ok)
                         return current;
-                    QJsonArray assets;
-                    for (const auto &v : current.manifest.value("assets").toArray()) {
+                    const auto key = request.contentType == "mod" ? QString("mods") : QString("assets");
+                    QJsonArray refs;
+                    for (const auto &v : current.manifest.value(key).toArray()) {
                         const auto old = v.toObject();
                         if (old.value("provider") != request.release.provider ||
                             old.value("projectId") != request.release.projectId)
-                            assets << old;
+                            refs << old;
                     }
-                    assets << ref;
+                    refs << ref;
                     return PackRepository::updateContentReferences(
-                        path, current.manifest, current.manifest.value("mods").toArray(), assets);
+                        path, current.manifest,
+                        key == "mods" ? refs : current.manifest.value("mods").toArray(),
+                        key == "assets" ? refs : current.manifest.value("assets").toArray());
                 }));
             });
         return;

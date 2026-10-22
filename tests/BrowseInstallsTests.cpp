@@ -30,6 +30,37 @@ class BrowseInstallsTests : public QObject {
                  QVariantMap{{"provider", "modrinth"}, {"projectId", "project"}, {"id", "version"}}}};
     }
   private slots:
+    void approvedCurseforgeOnlyProjectsCanInstallAndDisconnectUpdatesTheirState() {
+        auto source = std::make_shared<DeferredVersionCatalogue>();
+        BrowseInstalls model(source);
+        model.setTargetPath("a");
+        model.setContext({{"path", "a"}, {"minecraft", "1.21.1"}, {"loader", "fabric"}}, {}, false);
+        const QVariantMap p{{"provider", "curseforge"},
+                            {"id", "11"},
+                            {"type", "mod"},
+                            {"sourceIds", QVariantMap{{"curseforge", "11"}}}};
+        QVERIFY(!model.state(p).value("canInstall").toBool());
+        QSignalSpy changes(&model, &BrowseInstalls::changed);
+        model.setCurseforgeKey("fixture-key");
+        QCOMPARE(changes.count(), 1);
+        QVERIFY(model.state(p).value("canInstall").toBool());
+        QCOMPARE(model.state(p).value("label").toString(), QString("Install"));
+        QSignalSpy installs(&model, &BrowseInstalls::installRequested);
+        model.install(p);
+        QCOMPARE(source->pending.size(), 1);
+        Release release;
+        release.provider = "curseforge";
+        release.projectId = "11";
+        release.id = "101";
+        release.sha1 = "hash";
+        release.url = "https://example.invalid/mod.jar";
+        release.gameVersions = {"1.21.1"};
+        release.loaders = {"fabric"};
+        source->pending.first()({release}, {});
+        QCOMPARE(installs.count(), 1);
+        model.setCurseforgeKey({});
+        QVERIFY(!model.state(p).value("canInstall").toBool());
+    }
     void installedStateIsScopedToTheRequestedInstance() {
         auto source = std::make_shared<DeferredVersionCatalogue>();
         BrowseInstalls model(source);

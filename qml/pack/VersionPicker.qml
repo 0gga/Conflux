@@ -10,6 +10,7 @@ FocusDialog {
     property string minecraft: ""
     property string preferredLoader: ""
     property int selectedVersion: -1
+    readonly property var selectedRelease: selectedVersion >= 0 && selectedVersion < controller.versions.length ? controller.versions[selectedVersion] : ({})
     width: 650; height: 520; padding: 24; modal: true; anchors.centerIn: parent
     background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius }
     onOpened: selectedVersion = -1
@@ -41,7 +42,7 @@ FocusDialog {
             Layout.fillWidth: true
             ActionButton { text: "Cancel"; subtle: true; onClicked: root.close() }
             Item { Layout.fillWidth: true }
-            ActionButton { text: "Install version"; primary: true; enabled: root.selectedVersion >= 0 && !root.controller.versionTarget.locked && !root.controller.versionTarget.frozen && root.controller.versions[root.selectedVersion].provider === "modrinth"; onClicked: { root.controller.installVersion(root.selectedVersion); root.close() } }
+            ActionButton { objectName: "versionPickerInstall"; text: "Install version"; primary: true; enabled: root.selectedVersion >= 0 && !root.controller.versionTarget.locked && !root.controller.versionTarget.frozen && (root.selectedRelease.provider === "modrinth" || root.selectedRelease.provider === "curseforge") && !!root.selectedRelease.url && !!root.selectedRelease.sha1; onClicked: { root.controller.installVersion(root.selectedVersion); root.close() } }
         }
     }
 }

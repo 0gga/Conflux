@@ -145,12 +145,23 @@ QVariantList NativeContentStore::snapshot(const QVariantMap &pack, const QVarian
                 }
             }
         }
-        if (row.value("category") != "mods")
-            for (const auto &value : pack.value("assets").toList()) {
+        // Managed pins identify every content type, including provider-only mods. Attach a
+        // release only when both its contained path and published hash match the actual file.
+        {
+            const auto kind = row.value("category") == "mods" ? QString("mods") : QString("assets");
+            for (const auto &value : pack.value(kind).toList()) {
                 const auto pin = value.toMap();
                 if (contentKey(pin.value("installPath").toString()) == contentKey(relative) &&
                     pin.value("sha1") == row.value("sha1")) {
-                    row["sourceIds"] = pin.value("projectSourceIds");
+                    auto ids = row.value("sourceIds").toMap();
+                    const auto pinnedIds = pin.value("projectSourceIds").toMap();
+                    for (auto it = pinnedIds.cbegin(); it != pinnedIds.cend(); ++it)
+                        ids[it.key()] = it.value();
+                    const auto provider = pin.value("provider").toString();
+                    const auto id = pin.value("projectId").toString();
+                    if (!provider.isEmpty() && !id.isEmpty())
+                        ids[provider] = id;
+                    row["sourceIds"] = ids;
                     row["installedRelease"] = pin;
                     row["projectId"] = pin.value("projectId");
                     row["provider"] = pin.value("provider");
@@ -159,6 +170,7 @@ QVariantList NativeContentStore::snapshot(const QVariantMap &pack, const QVarian
                     row["title"] = pin.value("projectTitle", row.value("title"));
                 }
             }
+        }
         rows << row;
     }
     return rows;

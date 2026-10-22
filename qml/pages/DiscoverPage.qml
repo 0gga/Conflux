@@ -16,6 +16,8 @@ Item {
     property string targetPath: ""
     property int scrollRevision: -1
     readonly property string contentType: catalogue.filters.type
+    // Narrow notification dependency: result/busy/filter-map updates must not replace an active draft.
+    readonly property string committedQuery: catalogue.filters.query || ""
     readonly property var instances: app.libraryPacks.filter(function(pack) { return !pack.hidden })
     readonly property real filterPanelWidth: Appearance.filterWidthFor(width - 56) * Appearance.values.filterScale / 100
     readonly property bool compactFilters: width - 56 < 720 + filterPanelWidth + 18
@@ -63,7 +65,7 @@ Item {
                 Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.fillHeight: true; spacing: 12
                 SearchField {
                     id: query; objectName: "modSearchInput"; Layout.fillWidth: true; implicitHeight: 44; leadingIcon: "search"
-                    text: root.catalogue.filters.query || ""; placeholderText: root.contentType === "all" ? "Search this author’s content..." : "Search " + Branding.label(root.contentType).toLowerCase() + "..."
+                    text: root.committedQuery; placeholderText: root.contentType === "all" ? "Search this author’s content..." : "Search " + Branding.label(root.contentType).toLowerCase() + "..."
                     onTextEdited: debounce.restart(); onAccepted: { debounce.stop();root.catalogue.configure({query:text}) }
                 }
                 RowLayout {

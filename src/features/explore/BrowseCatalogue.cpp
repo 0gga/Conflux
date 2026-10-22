@@ -320,8 +320,7 @@ void BrowseCatalogue::reset() {
     pump();
 }
 QString BrowseCatalogue::identity(const Project &p) const {
-    const auto id = p.provider + ':' + p.id;
-    return m_identities.value(id, id);
+    return projectIdentity(p, m_identities);
 }
 bool BrowseCatalogue::accepted(const Project &p) const {
     const auto map = p.toVariant();
@@ -591,8 +590,13 @@ QVariantList BrowseCatalogue::projects() const {
         return rows;
     for (const auto &value : m_pages[m_page]) {
         const auto item = value.toMap();
-        const auto id = item.value("provider").toString() + ':' + item.value("id").toString();
-        const auto key = m_identities.value(id, id);
+        Project project;
+        project.provider = item.value("provider").toString();
+        project.id = item.value("id").toString();
+        const auto ids = item.value("sourceIds").toMap();
+        for (auto it = ids.cbegin(); it != ids.cend(); ++it)
+            project.sourceIds[it.key()] = it.value().toString();
+        const auto key = identity(project);
         rows << (m_known.contains(key) ? m_known.value(key).toVariant() : item);
     }
     return rows;

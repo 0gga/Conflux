@@ -5,11 +5,13 @@
 #include "platform/ProjectAuthors.h"
 #include <QJsonArray>
 #include <QNetworkReply>
+#include <QPointer>
 #include <QUrlQuery>
 #include <memory>
 namespace studio {
-ContentCatalogue::ContentCatalogue(QObject *parent, QUrl api)
-    : QObject(parent), m_network(this), m_api(std::move(api)), m_client(this) {
+ContentCatalogue::ContentCatalogue(QObject *parent, QUrl api, QUrl curseforgeApi)
+    : QObject(parent), m_network(this), m_api(std::move(api)),
+      m_client(this, m_api, std::move(curseforgeApi)) {
     m_client.setCurseforgeKey(qgetenv("CURSEFORGE_API_KEY"));
     connect(&m_client, &CatalogueClient::detailFinished, this,
             [this](int generation, const ProjectDetail &detail) {
@@ -45,7 +47,10 @@ void ContentCatalogue::request(const QString &path, const QJsonObject *body, Jso
     });
 }
 void ContentCatalogue::refresh(const QVariantList &input, const QString &game, const QString &loader,
-                               IndexCallback callback) {
+                               IndexCallback complete) {
+    const IndexCallback callback = [this, game, loader, complete](QVariantList rows, QString error) {
+        refreshCurseforge(std::move(rows), game, loader, complete, error);
+    };
     struct Batch {
         QVariantList rows;
         QJsonObject installed, latest, projects;
@@ -258,6 +263,81 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
                             });
                 }
             });
+}
+void ContentCatalogue::refreshCurseforge(QVariantList rows, const QString &game, const QString &loader,
+                                         IndexCallback callback, const QString &previousError) {
+    struct Batch {
+        QVariantList rows;
+        QList<int> pending;
+        int active = 0;
+        QStringList errors;
+    };
+    auto batch = std::make_shared<Batch>();
+    batch->rows = std::move(rows);
+    if (!previousError.isEmpty())
+        batch->errors << previousError;
+    if (m_client.hasCurseforgeKey())
+        for (int i = 0; i < batch->rows.size(); ++i) {
+            const auto row = batch->rows[i].toMap();
+            const auto installed = releaseFromVariant(row.value("installedRelease").toMap());
+            if (installed.provider == "curseforge" && !installed.projectId.isEmpty() &&
+                installed.sha1.compare(row.value("sha1").toString(), Qt::CaseInsensitive) == 0)
+                batch->pending << i;
+        }
+    auto pump = std::make_shared<std::function<void()>>();
+    std::weak_ptr<std::function<void()>> weak = pump;
+    QPointer<ContentCatalogue> guard(this);
+    *pump = [guard, batch, game, loader, callback, weak] {
+        if (!guard)
+            return;
+        while (batch->active < 2 && !batch->pending.isEmpty()) {
+            const int index = batch->pending.takeFirst();
+            auto row = batch->rows[index].toMap();
+            const auto installed = releaseFromVariant(row.value("installedRelease").toMap());
+            QStringList loaders = categoryType(row.value("category").toString()) == "mod"
+                                      ? loader.split('|', Qt::SkipEmptyParts)
+                                      : QStringList{};
+            if (!installed.loaders.isEmpty()) {
+                QStringList shared;
+                for (const auto &value : loaders)
+                    if (installed.loaders.contains(value))
+                        shared << value;
+                loaders = shared;
+                if (categoryType(row.value("category").toString()) == "mod" && loaders.isEmpty())
+                    continue;
+            }
+            ++batch->active;
+            auto next = weak.lock();
+            guard->m_client.curseforgeVersions(
+                installed.projectId, game, loaders,
+                [guard, batch, index, installed, next](QVector<Release> releases, QString error) {
+                    if (!guard)
+                        return;
+                    auto row = batch->rows[index].toMap();
+                    row["updateAvailable"] = false;
+                    row.remove("updateRelease");
+                    Release newest;
+                    for (const auto &release : releases)
+                        if (release.channel == "release" && !release.url.isEmpty() &&
+                            !release.sha1.isEmpty() && isNewerRelease(installed, release) &&
+                            (newest.id.isEmpty() || isNewerRelease(newest, release)))
+                            newest = release;
+                    if (!newest.id.isEmpty()) {
+                        row["updateAvailable"] = true;
+                        row["updateRelease"] = newest.toVariant();
+                    }
+                    batch->rows[index] = row;
+                    if (!error.isEmpty())
+                        batch->errors << "CurseForge updates: " + error;
+                    --batch->active;
+                    if (next)
+                        (*next)();
+                });
+        }
+        if (!batch->active && batch->pending.isEmpty())
+            callback(batch->rows, batch->errors.join('\n'));
+    };
+    (*pump)();
 }
 void ContentCatalogue::versions(const QVariantMap &row, const QString &game, const QString &loader,
                                 VersionsCallback callback) {

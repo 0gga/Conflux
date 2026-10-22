@@ -43,13 +43,16 @@ FocusPopup {
                 id: pan; objectName: "galleryEnlargedViewport"; Layout.fillWidth: true; Layout.fillHeight: true
                 clip: true; boundsBehavior: Flickable.StopAtBounds
                 contentWidth: Math.max(width,picture.width); contentHeight: Math.max(height,picture.height)
-                ContentIcon {
+                Image {
                     id: picture; objectName: "galleryEnlargedImage"
+                    readonly property size naturalSize: Qt.size(implicitWidth, implicitHeight)
                     readonly property real fit: naturalSize.width>0 ? Math.min(pan.width/naturalSize.width,pan.height/naturalSize.height) * Appearance.values.galleryFitPercent/100 : 1
                     width: naturalSize.width>0 ? naturalSize.width*fit*root.zoom : pan.width
                     height: naturalSize.height>0 ? naturalSize.height*fit*root.zoom : pan.height
                     x: Math.max(0,(pan.width-width)/2); y: Math.max(0,(pan.height-height)/2)
-                    source: root.images[root.currentIndex] || ""; intrinsicSize: true; preserveAspectFit: true; radius: ControlStyle.panelRadius; kind: "image"
+                    source: root.images[root.currentIndex] || ""
+                    sourceSize: Qt.size(0, 0); asynchronous: true; fillMode: Image.PreserveAspectFit
+                    smooth: true
                 }
                 WheelHandler { onWheel: function(event) { root.magnify(event.angleDelta.y>0 ? 1.2 : 1/1.2);event.accepted=true } }
             }

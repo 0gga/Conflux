@@ -58,9 +58,9 @@ QVariantMap BrowseInstalls::state(const QVariantMap &project) const {
                 return out;
             }
     }
-    if (!ids.contains("modrinth")) {
+    if (ids.value("modrinth").toString().isEmpty() && !m_curseforgeEnabled) {
         out["canInstall"] = false;
-        out["label"] = "CurseForge pending";
+        out["label"] = "Connect CurseForge";
     }
     return out;
 }
@@ -93,6 +93,12 @@ bool BrowseInstalls::installed(const QVariantMap &release, const QString &type) 
     return false;
 }
 void BrowseInstalls::installVersion(const QVariantMap &release, const QVariantMap &project) {
+    if (release.value("provider") == "curseforge" && !m_curseforgeEnabled) {
+        m_notice = "Connect an approved CurseForge API key in Settings.";
+        emit changed();
+        emit operationFailed(m_notice);
+        return;
+    }
     if (!ready() || busy() || installed(release, project.value("type", "mod").toString()))
         return;
     const auto targetType = project.value("type", "mod").toString();
@@ -165,7 +171,9 @@ void BrowseInstalls::install(const QVariantMap &project) {
                                      });
                 bool installed = false;
                 for (const auto &release : releases)
-                    if (release.channel == "release" && release.provider == "modrinth" &&
+                    if (release.channel == "release" &&
+                        (release.provider == "modrinth" ||
+                         (release.provider == "curseforge" && guard->m_curseforgeEnabled)) &&
                         !release.url.isEmpty() && !release.sha1.isEmpty() &&
                         release.gameVersions.contains(pack.value("minecraft").toString())) {
                         auto target = project;

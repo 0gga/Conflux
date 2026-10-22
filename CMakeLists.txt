@@ -89,6 +89,7 @@ target_sources(conflux_desktop PRIVATE
     src/platform/NativeContentStore.h src/platform/NativeContentStore.cpp
     src/platform/LauncherContentState.h src/platform/LauncherContentState.cpp
     src/platform/ContentInstaller.h src/platform/ContentInstaller.cpp
+    src/platform/CurseforgeInstallSource.h src/platform/CurseforgeInstallSource.cpp
     src/services/ContentCatalogue.h src/services/ContentCatalogue.cpp
     src/platform/PackChangeMonitor.h src/platform/PackChangeMonitor.cpp
     src/platform/WindowFrame.h src/platform/WindowFrame.cpp
@@ -181,6 +182,9 @@ if(BUILD_TESTING)
     qt_add_executable(installer-tests tests/InstallerTests.cpp)
     target_link_libraries(installer-tests PRIVATE pack_foundation Qt6::Test)
     add_test(NAME installer COMMAND installer-tests)
+    qt_add_executable(curseforge-install-tests tests/CurseforgeInstallTests.cpp)
+    target_link_libraries(curseforge-install-tests PRIVATE conflux_desktop miniz Qt6::Test)
+    add_test(NAME curseforge-install COMMAND curseforge-install-tests -o "${CMAKE_CURRENT_BINARY_DIR}/curseforge-install-results.txt,txt")
     qt_add_executable(library-row-tests tests/LibraryRowTests.cpp)
     target_link_libraries(library-row-tests PRIVATE conflux_styleplugin Qt6::Quick Qt6::QuickControls2 Qt6::Test)
     target_compile_definitions(library-row-tests PRIVATE CONFLUX_QML_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")

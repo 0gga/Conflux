@@ -82,6 +82,38 @@ class BrowseCatalogueTests final : public QObject {
         return fixture;
     }
   private slots:
+    void fileVerifiedProviderLinksDeduplicateAndKeepBothDownloadCounts() {
+        auto fixture = source(1);
+        auto cf = project(10, "curseforge");
+        cf.sourceIds["modrinth"] = "0";
+        fixture->rows["curseforge"] = {cf};
+        BrowseCatalogue model(fixture,
+                              std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()));
+        model.setKey("fixture-key");
+        model.setContext("pack", {}, {});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 1);
+        model.setInstalled(
+            {QVariantMap{{"category", "mods"}, {"sourceIds", QVariantMap{{"curseforge", "10"}}}}});
+        model.configure({{"hideInstalled", true}});
+        QTRY_VERIFY(!model.busy());
+        QVERIFY(model.projects().isEmpty());
+        model.configure({{"hideInstalled", false}});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 1);
+        const auto row = model.projects().first().toMap();
+        QCOMPARE(row.value("provider").toString(), QString("modrinth"));
+        QCOMPARE(row.value("sourceIds").toMap().value("curseforge").toString(), QString("10"));
+        QCOMPARE(row.value("downloadsRaw").toLongLong(), 1990);
+        model.configure({{"source", "curseforge"}});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 1);
+        QCOMPARE(model.projects().first().toMap().value("provider").toString(), QString("modrinth"));
+        QCOMPARE(model.projects().first().toMap().value("downloadsRaw").toLongLong(), 1990);
+        model.configure({{"source", "merged"}});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 1);
+    }
     void credentialChangesInvalidatePagesAndIgnoreOutdatedFacets() {
         auto fixture = source(3);
         fixture->delayedFacets = true;

@@ -95,6 +95,7 @@ class DesktopSession final : public QObject {
         m_showcase.setCurseforgeKey(key);
         m_content.setCurseforgeKey(key);
         m_browse.setCurseforgeKey(key);
+        m_contentInstaller->setCurseforgeKey(key);
     }
     void setPack(const QVariantMap &);
     void attachWindow(QObject &window) {

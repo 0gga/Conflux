@@ -77,6 +77,112 @@ Item {
         return root;
     }
   private slots:
+    void installedContentVersionPickerAcceptsDownloadableCurseforgeVersions() {
+#ifndef Q_MOC_RUN
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData(R"QML(import QtQuick
+import QtQuick.Controls
+import "pack"
+Item {
+    required property var releaseRows
+    QtObject { id:controller;property var versionTarget:({title:"CF fixture",locked:false,frozen:false});property var versions:releaseRows;property var versionGroups:[];property string versionError:"";property bool versionsBusy:false;function installVersion(index){} }
+    VersionPicker { id:picker;objectName:"picker";controller:controller;parent:Overlay.overlay }
+    function display() { picker.open();picker.selectedVersion=0 }
+})QML",
+                          QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/PickerFixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QVariantMap release{{"provider", "curseforge"},
+                            {"url", "https://example.invalid/file.jar"},
+                            {"sha1", QString(40, 'a')}};
+        std::unique_ptr<QQuickItem> root(qobject_cast<QQuickItem *>(
+            component.createWithInitialProperties({{"releaseRows", QVariantList{release}}})));
+        QVERIFY(root);
+        QQuickWindow window;
+        window.resize(1100, 800);
+        root->setParentItem(window.contentItem());
+        root->setSize(window.size());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QVERIFY(QMetaObject::invokeMethod(root.get(), "display"));
+        QTRY_VERIFY(item(window.contentItem(), "versionPickerInstall"));
+        auto *button = item(window.contentItem(), "versionPickerInstall");
+        QVERIFY(button->isEnabled());
+        release["url"] = "";
+        root->setProperty("releaseRows", QVariantList{release});
+        QTRY_VERIFY(!button->isEnabled());
+#endif
+    }
+    void delayedResultsDoNotReplaceAnUnsubmittedSearchDraft() {
+        auto source = std::make_shared<catalogue_test::Search>();
+        BrowseCatalogue model(
+            source, std::make_shared<ContentVisibility>(std::make_shared<catalogue_test::Settings>()));
+        model.setContext("fixture", {}, {});
+        QTRY_VERIFY(!model.busy());
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(1366, 768);
+        auto root = page(engine, model, window, 1);
+        QVERIFY(root);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *search = item(root.get(), "modSearchInput");
+        QVERIFY(search);
+        search->forceActiveFocus();
+        source->delayed = true;
+        QTest::keyClick(&window, Qt::Key_P);
+        QTRY_COMPARE(model.filters().value("query").toString(), QString("p"));
+        QTest::keyClick(&window, Qt::Key_R);
+        QCOMPARE(search->property("text").toString(), QString("pr"));
+        source->deliver(source->calls.size() - 1);
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(search->property("text").toString(), QString("pr"));
+        QTest::keyClick(&window, Qt::Key_O);
+        model.configure({{"hideInstalled", true}});
+        QCOMPARE(search->property("text").toString(), QString("pro"));
+        QTRY_COMPARE(model.filters().value("query").toString(), QString("pro"));
+        model.configure({{"query", "restored"}});
+        QTRY_COMPARE(search->property("text").toString(), QString("restored"));
+    }
+    void enlargedGalleryUsesAnOriginalResolutionImageAtEveryZoom() {
+#ifndef Q_MOC_RUN
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData(
+            R"QML(import QtQuick
+import QtQuick.Controls
+import "showcase"
+Item { GalleryViewer { id:viewer;objectName:"viewer" } function display(url) { viewer.show([url],0) } })QML",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/GalleryFixture.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QQuickItem> root(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY(root);
+        QImage original(1800, 1000, QImage::Format_RGB32);
+        original.fill(Qt::cyan);
+        const auto path = storage.path() + "/original-gallery.png";
+        QVERIFY(original.save(path));
+        QQuickWindow window;
+        window.resize(900, 700);
+        root->setParentItem(window.contentItem());
+        root->setSize(window.size());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QVERIFY(QMetaObject::invokeMethod(root.get(), "display",
+                                          Q_ARG(QVariant, QUrl::fromLocalFile(path).toString())));
+        QTRY_VERIFY(item(window.contentItem(), "galleryEnlargedImage"));
+        auto *picture = item(window.contentItem(), "galleryEnlargedImage");
+        QTRY_COMPARE(picture->property("status").toInt(), 1);
+        QCOMPARE(picture->property("naturalSize").toSize(), original.size());
+        QVERIFY(picture->inherits("QQuickImage"));
+        const auto fitted = picture->width();
+        auto *viewer = root->findChild<QObject *>("viewer");
+        QVERIFY(viewer);
+        viewer->setProperty("zoom", 3.);
+        QTRY_COMPARE(picture->width(), fitted * 3);
+        QCOMPARE(picture->property("naturalSize").toSize(), original.size());
+        QCOMPARE(picture->property("source").toUrl(), QUrl::fromLocalFile(path));
+#endif
+    }
     void initTestCase() {
         const auto fonts = qEnvironmentVariable("WINDIR", "C:/Windows") + "/Fonts/";
         for (const auto &file : {"segoeui.ttf", "seguisb.ttf", "segoeuib.ttf", "seguisym.ttf"})
@@ -311,8 +417,8 @@ Item {
     required property string timestamp
     property var sourceProject: ({title:"Example",updated:timestamp,sources:[]})
     QtObject { id:model;property var project:root.sourceProject;property var gallery:[];property bool busy:false;property string notice:"";property var descriptionBlocks:[];property var changelogVersions:[];property var changelogBlocks:[];property var changelogRelease:({});property string changelogNotice:"";property bool changelogBusy:false;signal changed() }
-    QtObject { id:browser;property bool ready:false;property bool busy:false;property string notice:"";function installed(release,type){return false} }
-    QtObject { id:applicationModel;property bool navigationBusy:false;function openWeb(url){} }
+    QtObject { id:browser;property bool ready:true;property bool busy:false;property string notice:"";function installed(release,type){return false} function state(project){return ({locked:false})} function installVersion(release,project){} }
+    QtObject { id:applicationModel;property bool navigationBusy:false;property bool curseforgeEnabled:true;function openWeb(url){} }
     QtObject { id:content;property string notice:"";property int lockRevision:0;function projectLocked(project){return false} function sourceLock(project){return ({})} }
     QtObject { id:filters;property var rows:root.releaseRows;property var options:({channels:[],versions:[],loaders:[]});property var filters:({channels:[],versions:[],loaders:[],source:"all"}) }
     ProjectCard { id:card;objectName:"dateCard";width:parent.width;project:root.sourceProject;installState:({canInstall:false,label:"Install"}) }
@@ -351,6 +457,12 @@ Item {
         const auto bounds =
             published->mapRectToItem(row, QRectF(0, 0, published->width(), published->height()));
         QVERIFY(bounds.left() >= 0 && bounds.right() <= row->width() && bounds.bottom() <= row->height());
+        release.provider = "curseforge";
+        release.url = "https://example.invalid/release.jar";
+        release.sha1 = QString(40, 'a');
+        root->setProperty("releaseRows", groups());
+        QTRY_VERIFY(item(root.get(), "installReleaseButton"));
+        QVERIFY(item(root.get(), "installReleaseButton")->isEnabled());
         // Legacy providers may supply only a day: never infer midnight as a release time.
         release.published = QDate::currentDate().toString(Qt::ISODate);
         root->setProperty("releaseRows", groups());

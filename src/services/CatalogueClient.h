@@ -10,7 +10,9 @@ namespace studio {
 class CatalogueClient : public QObject, public ICatalogueSearch {
     Q_OBJECT
   public:
-    explicit CatalogueClient(QObject *parent = nullptr);
+    explicit CatalogueClient(QObject *parent = nullptr,
+                             QUrl modrinthApi = QUrl("https://api.modrinth.com/v2/"),
+                             QUrl curseforgeApi = QUrl("https://api.curseforge.com/v1/"));
     void setCurseforgeKey(const QByteArray &key) {
         m_curseforgeKey = key;
     }
@@ -28,6 +30,8 @@ class CatalogueClient : public QObject, public ICatalogueSearch {
     void loadProject(const Project &project, const QString &game, const QString &loader, int generation,
                      bool allVersions = false);
     void loadChangelog(const Release &, std::function<void(QString, QString)>);
+    void curseforgeVersions(const QString &projectId, const QString &game, const QStringList &loaders,
+                            std::function<void(QVector<Release>, QString)>);
     void resolveProject(const QString &sha1, QMap<QString, QString> sourceIds, int generation);
   signals:
     void searchFinished(int generation, QVector<studio::Project> projects, QStringList errors);
@@ -37,7 +41,11 @@ class CatalogueClient : public QObject, public ICatalogueSearch {
   private:
     QNetworkAccessManager m_network;
     QByteArray m_curseforgeKey;
+    QUrl m_modrinthApi, m_curseforgeApi;
+    QMap<QString, QString> m_hashProjects, m_linkedProjects;
     using JsonCallback = std::function<void(QJsonDocument, QString)>;
-    void get(const QUrl &url, bool curseforge, JsonCallback callback, bool allowMissing = false);
+    void request(const QUrl &url, bool curseforge, JsonCallback callback, bool allowMissing = false,
+                 const QByteArray &body = {});
+    void linkCurseforgeFiles(CataloguePage, QMap<QString, QStringList>, Callback);
 };
 } // namespace studio

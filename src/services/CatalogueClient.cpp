@@ -4,7 +4,11 @@
 #include "platform/ReviewedAuthorIdentities.h"
 #include <QJsonArray>
 #include <QNetworkReply>
+#include <QRegularExpression>
+#include <QTimer>
 #include <QUrlQuery>
+#include <algorithm>
+#include <limits>
 #include <memory>
 
 namespace studio {
@@ -20,16 +24,68 @@ static QString jsonArray(const QString &item) {
 static int loaderNumber(const QString &loader) {
     return QMap<QString, int>{{"forge", 1}, {"fabric", 4}, {"quilt", 5}, {"neoforge", 6}}.value(loader);
 }
-CatalogueClient::CatalogueClient(QObject *parent) : QObject(parent), m_network(this) {}
-void CatalogueClient::get(const QUrl &url, bool cf, JsonCallback callback, bool allowMissing) {
-    QNetworkRequest request(url);
+static bool matchesScopedCurseforgeProject(const QJsonObject &row, const CatalogueQuery &query, int classId) {
+    if (!query.projectIds.contains(QString::number(row.value("id").toInteger())) ||
+        row.value("gameId").toInt() != 432 ||
+        (query.type != "all" && row.value("classId").toInt() != classId))
+        return false;
+    if (!query.text.isEmpty() && !row.value("name").toString().contains(query.text, Qt::CaseInsensitive) &&
+        !row.value("summary").toString().contains(query.text, Qt::CaseInsensitive))
+        return false;
+    bool author = !query.authorIds.contains("curseforge");
+    for (const auto &value : row.value("authors").toArray())
+        author |=
+            QString::number(value.toObject().value("id").toInteger()) == query.authorIds.value("curseforge");
+    if (!author)
+        return false;
+    bool tags = query.tags.isEmpty();
+    for (const auto &value : row.value("categories").toArray())
+        tags |= query.tags.contains("cf:" + QString::number(value.toObject().value("id").toInteger()));
+    if (!tags)
+        return false;
+    const auto loaders = query.type == "mod" ? query.loaders : QStringList{};
+    if (query.versions.isEmpty() && loaders.isEmpty())
+        return true;
+    for (const auto &value : row.value("latestFilesIndexes").toArray()) {
+        const auto file = value.toObject();
+        bool loader = loaders.isEmpty();
+        for (const auto &name : loaders)
+            loader |= loaderNumber(name) == file.value("modLoader").toInt();
+        if (loader &&
+            (query.versions.isEmpty() || query.versions.contains(file.value("gameVersion").toString())))
+            return true;
+    }
+    for (const auto &value : row.value("latestFiles").toArray()) {
+        const auto release = curseforgeRelease(value.toObject());
+        bool game = query.versions.isEmpty();
+        for (const auto &version : query.versions)
+            game |= release.gameVersions.contains(version);
+        if (game && (loaders.isEmpty() || sharesLoader(release.loaders, loaders)))
+            return true;
+    }
+    return false;
+}
+CatalogueClient::CatalogueClient(QObject *parent, QUrl modrinthApi, QUrl curseforgeApi)
+    : QObject(parent), m_network(this), m_modrinthApi(std::move(modrinthApi)),
+      m_curseforgeApi(std::move(curseforgeApi)) {}
+void CatalogueClient::request(const QUrl &url, bool cf, JsonCallback callback, bool allowMissing,
+                              const QByteArray &body) {
+    const auto root = cf ? m_curseforgeApi : m_modrinthApi;
+    auto relative = url.path();
+    relative = relative.mid(4);
+    QUrl endpoint = root.resolved(QUrl(relative));
+    endpoint.setQuery(url.query());
+    QNetworkRequest request(endpoint);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
     request.setHeader(QNetworkRequest::UserAgentHeader,
                       "0gga/Conflux/0.1.0 (https://github.com/0gga/Conflux)");
     request.setRawHeader("Accept", "application/json");
     if (cf)
         request.setRawHeader("x-api-key", m_curseforgeKey);
     request.setTransferTimeout(20000);
-    auto *reply = m_network.get(request);
+    if (!body.isEmpty())
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    auto *reply = body.isEmpty() ? m_network.get(request) : m_network.post(request, body);
     connect(reply, &QNetworkReply::finished, this, [reply, allowMissing, callback = std::move(callback)] {
         const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (allowMissing && status == 404) {
@@ -38,6 +94,8 @@ void CatalogueClient::get(const QUrl &url, bool cf, JsonCallback callback, bool 
             return;
         }
         auto error = reply->error() == QNetworkReply::NoError ? QString{} : reply->errorString();
+        if (error.isEmpty() && status != 200)
+            error = "Provider request failed (HTTP " + QString::number(status) + ").";
         if (status == 429)
             error = "Rate limit reached. Wait a moment before searching again.";
         QJsonParseError parseError;
@@ -46,6 +104,84 @@ void CatalogueClient::get(const QUrl &url, bool cf, JsonCallback callback, bool 
             error = "The provider returned invalid JSON.";
         callback(document, error);
         reply->deleteLater();
+    });
+}
+void CatalogueClient::linkCurseforgeFiles(CataloguePage page, QMap<QString, QStringList> hashes,
+                                          Callback callback) {
+    if (m_hashProjects.size() > 10000)
+        m_hashProjects.clear();
+    if (m_linkedProjects.size() > 10000)
+        m_linkedProjects.clear();
+    QStringList missing;
+    for (const auto &files : hashes)
+        for (const auto &hash : files)
+            if (!m_hashProjects.contains(hash) && !missing.contains(hash) && missing.size() < 1000)
+                missing << hash;
+    const auto finish = [this, page, hashes, callback](QString error) {
+        auto result = page;
+        const auto pairs = verifiedProjectPairs(hashes, m_hashProjects);
+        for (auto &project : result.projects) {
+            const auto mr = pairs.value(project.id);
+            if (mr.isEmpty() || (m_linkedProjects.contains(mr) && m_linkedProjects.value(mr) != project.id))
+                continue;
+            m_linkedProjects[mr] = project.id;
+            project.sourceIds["modrinth"] = mr;
+        }
+        if (!error.isEmpty())
+            result.error = "Cross-platform matching: " + error;
+        callback(std::move(result));
+    };
+    if (missing.isEmpty()) {
+        finish({});
+        return;
+    }
+    const auto body =
+        QJsonDocument(QJsonObject{{"hashes", QJsonArray::fromStringList(missing)}, {"algorithm", "sha1"}})
+            .toJson(QJsonDocument::Compact);
+    request(
+        QUrl("https://api.modrinth.com/v2/version_files"), false,
+        [this, missing, finish](QJsonDocument doc, QString error) {
+            if (error.isEmpty()) {
+                for (const auto &hash : missing) {
+                    const auto version = doc.object().value(hash).toObject();
+                    bool exact = false;
+                    for (const auto &file : version.value("files").toArray())
+                        exact |= file.toObject().value("hashes").toObject().value("sha1").toString().compare(
+                                     hash, Qt::CaseInsensitive) == 0;
+                    m_hashProjects[hash] = exact ? version.value("project_id").toString() : QString{};
+                }
+            }
+            finish(error);
+        },
+        false, body);
+}
+void CatalogueClient::curseforgeVersions(const QString &id, const QString &game, const QStringList &loaders,
+                                         std::function<void(QVector<Release>, QString)> callback) {
+    if (!hasCurseforgeKey()) {
+        // Keep the bounded update pump asynchronous if the key is removed mid-check.
+        QTimer::singleShot(
+            0, this, [callback] { callback({}, "Connect an approved CurseForge API key in Settings."); });
+        return;
+    }
+    QUrl url("https://api.curseforge.com/v1/mods/" + id + "/files");
+    QUrlQuery query;
+    query.addQueryItem("gameVersion", game);
+    query.addQueryItem("pageSize", "50");
+    if (loaders.size() == 1 && loaderNumber(loaders.first()))
+        query.addQueryItem("modLoaderType", QString::number(loaderNumber(loaders.first())));
+    url.setQuery(query);
+    request(url, true, [id, game, loaders, callback](QJsonDocument doc, QString error) {
+        QVector<Release> releases;
+        if (error.isEmpty())
+            for (const auto &value : doc.object().value("data").toArray()) {
+                const auto file = value.toObject();
+                auto release = curseforgeRelease(file);
+                if (release.projectId == id && release.gameVersions.contains(game) &&
+                    (loaders.isEmpty() || sharesLoader(release.loaders, loaders)) &&
+                    file.value("isAvailable") != false)
+                    releases << release;
+            }
+        callback(releases, error);
     });
 }
 static QString compactJson(const QJsonArray &values) {
@@ -137,32 +273,33 @@ void CatalogueClient::fetch(const CatalogueQuery &query, int offset, int limit, 
             return;
         }
         if (!cf) {
-            get(QUrl("https://api.modrinth.com/v2/user/" +
-                     QString::fromLatin1(QUrl::toPercentEncoding(author)) + "/projects"),
-                false,
-                [this, query, offset, limit, callback](const QJsonDocument &doc, const QString &error) {
-                    if (!error.isEmpty()) {
-                        callback({{}, 0, error});
-                        return;
-                    }
-                    auto scoped = query;
-                    scoped.authorIds.clear();
-                    scoped.projectIds.clear();
-                    for (const auto &value : doc.array()) {
-                        const auto id = value.toObject().value("id").toString();
-                        if (!id.isEmpty())
-                            scoped.projectIds << id;
-                    }
-                    if (scoped.projectIds.isEmpty()) {
-                        callback({{}, 0, {}});
-                        return;
-                    }
-                    if (scoped.projectIds.size() > 1000) {
-                        callback({{}, 0, "This author has more than1000 projects; narrow the content type."});
-                        return;
-                    }
-                    fetch(scoped, offset, limit, callback);
-                });
+            request(QUrl("https://api.modrinth.com/v2/user/" +
+                         QString::fromLatin1(QUrl::toPercentEncoding(author)) + "/projects"),
+                    false,
+                    [this, query, offset, limit, callback](const QJsonDocument &doc, const QString &error) {
+                        if (!error.isEmpty()) {
+                            callback({{}, 0, error});
+                            return;
+                        }
+                        auto scoped = query;
+                        scoped.authorIds.clear();
+                        scoped.projectIds.clear();
+                        for (const auto &value : doc.array()) {
+                            const auto id = value.toObject().value("id").toString();
+                            if (!id.isEmpty())
+                                scoped.projectIds << id;
+                        }
+                        if (scoped.projectIds.isEmpty()) {
+                            callback({{}, 0, {}});
+                            return;
+                        }
+                        if (scoped.projectIds.size() > 1000) {
+                            callback(
+                                {{}, 0, "This author has more than1000 projects; narrow the content type."});
+                            return;
+                        }
+                        fetch(scoped, offset, limit, callback);
+                    });
             return;
         }
     }
@@ -180,9 +317,32 @@ void CatalogueClient::fetch(const CatalogueQuery &query, int offset, int limit, 
         return;
     }
     auto search = [this, query, offset, limit, callback, cf](int classId) {
-        get(searchUrl(query, offset, limit, classId), cf,
-            [query, callback, cf](const QJsonDocument &doc, const QString &error) {
+        auto url = searchUrl(query, offset, limit, classId);
+        QByteArray body;
+        if (cf && !query.projectIds.isEmpty()) {
+            if (query.projectIds.size() > 1000) {
+                callback({{}, 0, "Narrow the hidden-project filters to at most1000 projects."});
+                return;
+            }
+            QJsonArray ids;
+            for (const auto &id : query.projectIds) {
+                bool valid = false;
+                const auto number = id.toLongLong(&valid);
+                if (!valid || number <= 0 || number > std::numeric_limits<int>::max()) {
+                    callback({{}, 0, "This CurseForge project has no valid identity."});
+                    return;
+                }
+                ids << number;
+            }
+            url = QUrl("https://api.curseforge.com/v1/mods");
+            body = QJsonDocument(QJsonObject{{"modIds", ids}}).toJson(QJsonDocument::Compact);
+        }
+        request(
+            url, cf,
+            [this, query, offset, limit, classId, callback, cf](const QJsonDocument &doc,
+                                                                const QString &error) {
                 CataloguePage result;
+                QMap<QString, QStringList> projectHashes;
                 result.error = error;
                 result.total =
                     cf ? doc.object().value("pagination").toObject().value("totalCount").toInteger()
@@ -191,6 +351,9 @@ void CatalogueClient::fetch(const CatalogueQuery &query, int offset, int limit, 
                     for (const auto &value :
                          (cf ? doc.object().value("data").toArray() : doc.object().value("hits").toArray())) {
                         const auto row = value.toObject();
+                        if (cf && !query.projectIds.isEmpty() &&
+                            !matchesScopedCurseforgeProject(row, query, classId))
+                            continue;
                         Project p;
                         p.provider = query.provider;
                         p.type =
@@ -230,6 +393,15 @@ void CatalogueClient::fetch(const CatalogueQuery &query, int offset, int limit, 
                         p.sourceIds[p.provider] = p.id;
                         p.sourceDownloads[p.provider] = p.downloads;
                         if (cf) {
+                            for (const auto &file : row.value("latestFiles").toArray())
+                                for (const auto &value : file.toObject().value("hashes").toArray()) {
+                                    const auto hash = value.toObject();
+                                    if (hash.value("algo").toInt() == 1 &&
+                                        QRegularExpression("^[a-fA-F0-9]{40}$")
+                                            .match(hash.value("value").toString())
+                                            .hasMatch())
+                                        projectHashes[p.id] << hash.value("value").toString().toLower();
+                                }
                             for (const auto &category : row.value("categories").toArray())
                                 p.categories << category.toObject().value("name").toString();
                             for (const auto &version : row.value("latestFilesIndexes").toArray()) {
@@ -261,19 +433,39 @@ void CatalogueClient::fetch(const CatalogueQuery &query, int offset, int limit, 
                         }
                         result.projects << p;
                     }
-                callback(std::move(result));
-            });
+                if (cf && !query.projectIds.isEmpty()) {
+                    std::stable_sort(result.projects.begin(), result.projects.end(),
+                                     [query](const Project &a, const Project &b) {
+                                         if (query.sort == "downloads")
+                                             return a.totalDownloads() > b.totalDownloads();
+                                         if (query.sort == "updated")
+                                             return a.updated > b.updated;
+                                         if (query.sort == "newest")
+                                             return a.created > b.created;
+                                         return query.projectIds.indexOf(a.id) <
+                                                query.projectIds.indexOf(b.id);
+                                     });
+                    result.total = result.projects.size();
+                    result.projects = result.projects.mid(qMax(0, offset), qBound(1, limit, 50));
+                }
+                if (cf && error.isEmpty())
+                    linkCurseforgeFiles(std::move(result), projectHashes, callback);
+                else
+                    callback(std::move(result));
+            },
+            false, body);
     };
     if (cf && query.type == "datapack")
-        get(QUrl("https://api.curseforge.com/v1/categories?gameId=432&classesOnly=true"), true,
-            [search, callback](QJsonDocument doc, QString error) {
-                for (const auto &v : doc.object().value("data").toArray())
-                    if (v.toObject().value("slug") == "data-packs") {
-                        search(v.toObject().value("id").toInt());
-                        return;
-                    }
-                callback({{}, 0, error.isEmpty() ? "CurseForge did not expose a Data Packs class." : error});
-            });
+        request(QUrl("https://api.curseforge.com/v1/categories?gameId=432&classesOnly=true"), true,
+                [search, callback](QJsonDocument doc, QString error) {
+                    for (const auto &v : doc.object().value("data").toArray())
+                        if (v.toObject().value("slug") == "data-packs") {
+                            search(v.toObject().value("id").toInt());
+                            return;
+                        }
+                    callback(
+                        {{}, 0, error.isEmpty() ? "CurseForge did not expose a Data Packs class." : error});
+                });
     else
         search(query.type == "resourcepack" ? 12 : query.type == "shader" ? 6552 : 6);
 }
@@ -330,54 +522,54 @@ void CatalogueClient::facets(std::function<void(QVariantMap, QString)> callback)
             callback(batch->options, batch->errors.join('\n'));
     };
     if (hasCurseforgeKey())
-        get(QUrl("https://api.curseforge.com/v1/categories?gameId=432"), true,
+        request(QUrl("https://api.curseforge.com/v1/categories?gameId=432"), true,
+                [batch, done](QJsonDocument doc, QString error) {
+                    QMap<int, QString> classes{{6, "mod"}, {12, "resourcepack"}, {6552, "shader"}};
+                    for (const auto &value : doc.object().value("data").toArray())
+                        if (value.toObject().value("slug") == "data-packs")
+                            classes[value.toObject().value("id").toInt()] = "datapack";
+                    QVariantList tags;
+                    for (const auto &value : doc.object().value("data").toArray()) {
+                        const auto row = value.toObject();
+                        const auto type = classes.value(row.value("classId").toInt());
+                        if (!row.value("isClass").toBool() && !type.isEmpty())
+                            tags << QVariantMap{{"key", "cf:" + QString::number(row.value("id").toInt())},
+                                                {"title", row.value("name").toString().toLower()},
+                                                {"type", type},
+                                                {"provider", "curseforge"}};
+                    }
+                    batch->options["curseforgeTags"] = tags;
+                    if (!error.isEmpty())
+                        batch->errors << "CurseForge tags: " + error;
+                    done();
+                });
+    request(QUrl("https://api.modrinth.com/v2/tag/game_version"), false,
             [batch, done](QJsonDocument doc, QString error) {
-                QMap<int, QString> classes{{6, "mod"}, {12, "resourcepack"}, {6552, "shader"}};
-                for (const auto &value : doc.object().value("data").toArray())
-                    if (value.toObject().value("slug") == "data-packs")
-                        classes[value.toObject().value("id").toInt()] = "datapack";
-                QVariantList tags;
-                for (const auto &value : doc.object().value("data").toArray()) {
-                    const auto row = value.toObject();
-                    const auto type = classes.value(row.value("classId").toInt());
-                    if (!row.value("isClass").toBool() && !type.isEmpty())
-                        tags << QVariantMap{{"key", "cf:" + QString::number(row.value("id").toInt())},
-                                            {"title", row.value("name").toString().toLower()},
-                                            {"type", type},
-                                            {"provider", "curseforge"}};
-                }
-                batch->options["curseforgeTags"] = tags;
+                QStringList versions;
+                for (const auto &value : doc.array())
+                    versions << value.toObject().value("version").toString();
+                batch->options["versions"] = versions;
                 if (!error.isEmpty())
-                    batch->errors << "CurseForge tags: " + error;
+                    batch->errors << error;
                 done();
             });
-    get(QUrl("https://api.modrinth.com/v2/tag/game_version"), false,
-        [batch, done](QJsonDocument doc, QString error) {
-            QStringList versions;
-            for (const auto &value : doc.array())
-                versions << value.toObject().value("version").toString();
-            batch->options["versions"] = versions;
-            if (!error.isEmpty())
-                batch->errors << error;
-            done();
-        });
-    get(QUrl("https://api.modrinth.com/v2/tag/category"), false,
-        [batch, done](QJsonDocument doc, QString error) {
-            QVariantList tags;
-            for (const auto &value : doc.array()) {
-                const auto row = value.toObject();
-                if (row.value("header") == "categories" || row.value("header") == "features" ||
-                    row.value("header") == "resolutions" || row.value("header") == "performance impact")
-                    tags << QVariantMap{{"key", "mr:" + row.value("name").toString()},
-                                        {"title", row.value("name").toString()},
-                                        {"type", row.value("project_type").toString()},
-                                        {"provider", "modrinth"}};
-            }
-            batch->options["tags"] = tags;
-            if (!error.isEmpty())
-                batch->errors << error;
-            done();
-        });
+    request(QUrl("https://api.modrinth.com/v2/tag/category"), false,
+            [batch, done](QJsonDocument doc, QString error) {
+                QVariantList tags;
+                for (const auto &value : doc.array()) {
+                    const auto row = value.toObject();
+                    if (row.value("header") == "categories" || row.value("header") == "features" ||
+                        row.value("header") == "resolutions" || row.value("header") == "performance impact")
+                        tags << QVariantMap{{"key", "mr:" + row.value("name").toString()},
+                                            {"title", row.value("name").toString()},
+                                            {"type", row.value("project_type").toString()},
+                                            {"provider", "modrinth"}};
+                }
+                batch->options["tags"] = tags;
+                if (!error.isEmpty())
+                    batch->errors << error;
+                done();
+            });
 }
 
 void CatalogueClient::loadProject(const Project &project, const QString &requestedGame,
@@ -419,22 +611,22 @@ void CatalogueClient::loadProject(const Project &project, const QString &request
         }
         const auto base =
             cf ? "https://api.curseforge.com/v1/mods/" + id : "https://api.modrinth.com/v2/project/" + id;
-        get(QUrl(base + (cf ? "/description" : "")), cf,
-            [batch, done, cf, project](const QJsonDocument &doc, const QString &error) {
-                if (!error.isEmpty())
-                    batch->detail.errors << error;
-                else if (cf) {
-                    if (!project.sourceIds.contains("modrinth"))
-                        batch->detail.description = doc.object().value("data").toString();
-                } else {
-                    batch->detail.description = doc.object().value("body").toString();
-                    for (const auto &image : doc.object().value("gallery").toArray())
-                        batch->images["modrinth"] << image.toObject().value("url").toString();
-                }
-                done();
-            });
+        request(QUrl(base + (cf ? "/description" : "")), cf,
+                [batch, done, cf, project](const QJsonDocument &doc, const QString &error) {
+                    if (!error.isEmpty())
+                        batch->detail.errors << error;
+                    else if (cf) {
+                        if (!project.sourceIds.contains("modrinth"))
+                            batch->detail.description = doc.object().value("data").toString();
+                    } else {
+                        batch->detail.description = doc.object().value("body").toString();
+                        for (const auto &image : doc.object().value("gallery").toArray())
+                            batch->images["modrinth"] << image.toObject().value("url").toString();
+                    }
+                    done();
+                });
         if (cf)
-            get(QUrl(base), true, [batch, done](const QJsonDocument &doc, const QString &error) {
+            request(QUrl(base), true, [batch, done](const QJsonDocument &doc, const QString &error) {
                 if (!error.isEmpty())
                     batch->detail.errors << "CurseForge gallery: " + error;
                 else
@@ -462,7 +654,8 @@ void CatalogueClient::loadProject(const Project &project, const QString &request
         if (cf)
             params.addQueryItem("pageSize", "50");
         versions.setQuery(params);
-        get(versions, cf,
+        request(
+            versions, cf,
             [batch, done, cf, id, loader, type = project.type](const QJsonDocument &doc,
                                                                const QString &error) {
                 if (!error.isEmpty())
@@ -478,36 +671,7 @@ void CatalogueClient::loadProject(const Project &project, const QString &request
                         r.title = row.value(cf ? "displayName" : "name").toString();
                         r.published = row.value(cf ? "fileDate" : "date_published").toString();
                         r.gameVersions = strings(row.value(cf ? "gameVersions" : "game_versions").toArray());
-                        if (cf) {
-                            const auto channel = row.value("releaseType").toInt();
-                            r.channel = channel == 1   ? "release"
-                                        : channel == 2 ? "beta"
-                                        : channel == 3 ? "alpha"
-                                                       : "unknown";
-                            // CF gameVersions contains loader labels too; retain only Minecraft version
-                            // strings.
-                            QStringList games;
-                            for (const auto &version : r.gameVersions)
-                                if (version.startsWith("1."))
-                                    games << version;
-                            r.gameVersions = games;
-                            for (const auto &label : strings(row.value("gameVersions").toArray())) {
-                                const auto candidate = label.toLower();
-                                if (QStringList{"fabric", "forge", "neoforge", "quilt"}.contains(candidate))
-                                    r.loaders << candidate;
-                            }
-                            r.filename = row.value("fileName").toString();
-                            r.url = row.value("downloadUrl").toString();
-                            for (const auto &hash : row.value("hashes").toArray())
-                                if (hash.toObject().value("algo").toInt() == 1)
-                                    r.sha1 = hash.toObject().value("value").toString();
-                            for (const auto &dep : row.value("dependencies").toArray())
-                                if (dep.toObject().value("relationType").toInt() == 3)
-                                    r.requiredDependencies
-                                        << QString::number(dep.toObject().value("modId").toInteger());
-                        } else {
-                            r = modrinthRelease(row);
-                        }
+                        r = cf ? curseforgeRelease(row) : modrinthRelease(row);
                         if (cf && type == "mod" && !loader.isEmpty() && loader != "vanilla" &&
                             !sharesLoader(r.loaders, loader.split('|', Qt::SkipEmptyParts)))
                             continue;
@@ -530,11 +694,11 @@ void CatalogueClient::loadChangelog(const Release &release, std::function<void(Q
         callback({}, "This version has no source identity.");
         return;
     }
-    get(QUrl("https://api.curseforge.com/v1/mods/" + release.projectId + "/files/" + release.id +
-             "/changelog"),
-        true, [callback = std::move(callback)](const QJsonDocument &doc, QString error) {
-            callback(doc.object().value("data").toString(), error);
-        });
+    request(QUrl("https://api.curseforge.com/v1/mods/" + release.projectId + "/files/" + release.id +
+                 "/changelog"),
+            true, [callback = std::move(callback)](const QJsonDocument &doc, QString error) {
+                callback(doc.object().value("data").toString(), error);
+            });
 }
 void CatalogueClient::resolveProject(const QString &sha1, QMap<QString, QString> ids, int generation) {
     auto fetch = [this, generation](QMap<QString, QString> sourceIds, QString lookupError) {
@@ -575,38 +739,39 @@ void CatalogueClient::resolveProject(const QString &sha1, QMap<QString, QString>
         for (auto it = sourceIds.cbegin(); it != sourceIds.cend(); ++it) {
             const auto provider = it.key(), id = it.value();
             const bool cf = provider == "curseforge";
-            get(QUrl(cf ? "https://api.curseforge.com/v1/mods/" + id
-                        : "https://api.modrinth.com/v2/project/" + id),
-                cf, [batch, done, cf, provider](const QJsonDocument &doc, const QString &error) {
-                    if (!error.isEmpty())
-                        batch->errors << provider + ": " + error;
-                    else {
-                        const auto row = cf ? doc.object().value("data").toObject() : doc.object();
-                        Project p;
-                        p.provider = provider;
-                        p.id = cf ? QString::number(row.value("id").toInteger()) : row.value("id").toString();
-                        p.type = cf ? (row.value("classId").toInt() == 12     ? "resourcepack"
-                                       : row.value("classId").toInt() == 6552 ? "shader"
-                                                                              : "mod")
-                                    : row.value("project_type").toString("mod");
-                        p.title = row.value(cf ? "name" : "title").toString();
-                        p.summary = row.value(cf ? "summary" : "description").toString();
-                        p.icon = cf ? row.value("logo").toObject().value("url").toString()
-                                    : row.value("icon_url").toString();
-                        p.url = cf ? row.value("links").toObject().value("websiteUrl").toString()
-                                   : "https://modrinth.com/" + p.type + "/" + p.id;
-                        if (!p.id.isEmpty() && p.id != "0")
-                            batch->projects << p;
-                    }
-                    done();
-                });
+            request(QUrl(cf ? "https://api.curseforge.com/v1/mods/" + id
+                            : "https://api.modrinth.com/v2/project/" + id),
+                    cf, [batch, done, cf, provider](const QJsonDocument &doc, const QString &error) {
+                        if (!error.isEmpty())
+                            batch->errors << provider + ": " + error;
+                        else {
+                            const auto row = cf ? doc.object().value("data").toObject() : doc.object();
+                            Project p;
+                            p.provider = provider;
+                            p.id = cf ? QString::number(row.value("id").toInteger())
+                                      : row.value("id").toString();
+                            p.type = cf ? (row.value("classId").toInt() == 12     ? "resourcepack"
+                                           : row.value("classId").toInt() == 6552 ? "shader"
+                                                                                  : "mod")
+                                        : row.value("project_type").toString("mod");
+                            p.title = row.value(cf ? "name" : "title").toString();
+                            p.summary = row.value(cf ? "summary" : "description").toString();
+                            p.icon = cf ? row.value("logo").toObject().value("url").toString()
+                                        : row.value("icon_url").toString();
+                            p.url = cf ? row.value("links").toObject().value("websiteUrl").toString()
+                                       : "https://modrinth.com/" + p.type + "/" + p.id;
+                            if (!p.id.isEmpty() && p.id != "0")
+                                batch->projects << p;
+                        }
+                        done();
+                    });
         }
     };
     if (sha1.isEmpty()) {
         fetch(ids, {});
         return;
     }
-    get(
+    request(
         QUrl("https://api.modrinth.com/v2/version_file/" + sha1 + "?algorithm=sha1"), false,
         [ids, fetch](const QJsonDocument &doc, const QString &error) mutable {
             const auto project = doc.object().value("project_id").toString();

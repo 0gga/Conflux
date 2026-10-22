@@ -373,12 +373,13 @@ class FoundationTests : public QObject {
         QVERIFY2(page.error.isEmpty(), qPrintable(page.error));
         QVERIFY(!page.projects.isEmpty());
         QVERIFY(page.projects.size() <= 3);
-        const auto project = page.projects.first();
+        auto project = page.projects.first();
         QCOMPARE(project.provider, QString("curseforge"));
         QCOMPARE(project.sourceIds.value("curseforge"), project.id);
         QCOMPARE(project.sourceDownloads.value("curseforge"), project.downloads);
         QVERIFY(!project.title.isEmpty());
         QVERIFY(!project.authors.isEmpty());
+        project.sourceIds = {{"curseforge", project.id}};
 
         bool loaded = false;
         ProjectDetail detail;
@@ -423,6 +424,29 @@ class FoundationTests : public QObject {
         QVERIFY2(facetsError.isEmpty(), qPrintable(facetsError));
         QVERIFY(!facets.value("curseforgeTags").toList().isEmpty());
         QVERIFY(facets.value("versions").toStringList().contains("1.21.1"));
+    }
+    void matchingFilesLinkProviderProjectsWithoutMatchingTheirNames() {
+        QCOMPARE(verifiedProjectPairs({{"cf", {"hash-a", "hash-b"}}}, {{"hash-a", "mr"}, {"hash-b", "mr"}}),
+                 (QMap<QString, QString>{{"cf", "mr"}}));
+        QVERIFY(verifiedProjectPairs({{"cf", {"a", "b"}}}, {{"a", "first"}, {"b", "second"}}).isEmpty());
+        QVERIFY(verifiedProjectPairs({{"first-cf", {"a"}}, {"second-cf", {"a"}}}, {{"a", "mr"}}).isEmpty());
+        QVERIFY(verifiedProjectPairs({{"cf", {"unknown"}}}, {}).isEmpty());
+        auto cf = project("curseforge", "11"), mr = project("modrinth", "abc");
+        cf.sourceIds = {{"curseforge", "11"}, {"modrinth", "abc"}};
+        cf.downloads = 200;
+        mr.downloads = 100;
+        cf.title = "A different provider title";
+        for (const auto &rows : {QVector<Project>{cf, mr}, QVector<Project>{mr, cf}}) {
+            const auto merged = mergeProjects(rows);
+            QCOMPARE(merged.size(), 1);
+            QCOMPARE(merged.first().provider, QString("modrinth"));
+            QCOMPARE(merged.first().sourceIds.value("curseforge"), QString("11"));
+            QCOMPARE(merged.first().sourceIds.value("modrinth"), QString("abc"));
+            QCOMPARE(merged.first().totalDownloads(), 300);
+        }
+        cf.sourceIds.remove("modrinth");
+        cf.title = mr.title;
+        QCOMPARE(mergeProjects({cf, mr}).size(), 2);
     }
     void liveModrinthSearchAndReleases() {
         if (!qEnvironmentVariableIsSet("MODPACK_STUDIO_LIVE_TEST"))

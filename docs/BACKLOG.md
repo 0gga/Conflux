@@ -26,7 +26,7 @@ Requests are prioritized here; listing an idea does not mean it is implemented. 
 | P1 | Config changes in Git | Explicitly include reviewed config files in managed commits; preserve secret/unrelated-file staging guards. Current Git save remains for the pack manifest. |
 | P1 | Config change preview and restore | Show a diff before save, list timestamped backups, and restore only after an explicit action with conflict checks. |
 | P1 | GitHub sign-in and sync | OAuth, repository creation, push/pull and conflicts through UI; credentials stay outside repositories. |
-| P1 | Approved CurseForge downloads | Verify live integration after API approval, enforce distribution settings and resolve required dependencies through a provider adapter. |
+| P2 | CurseForge identification for untracked files | Add bounded provider fingerprint identification for files without verified pins or launcher source IDs. Approved-key downloads and required dependency staging use the shared content transaction. |
 | P2 | Dependency and incompatibility graph | Separate rules evaluate version constraints, duplicate/nested IDs, optional dependencies and explicit incompatibilities with evidence. Static results do not promise a successful game launch. |
 | P1 | Independent Conflux and CurseForge world launch | Add supported runtime/account/provider adapters, loader/Java resolution and real launch-state/error verification. Do not treat content API approval as a game-launch API. Current direct handoff supports verified Modrinth instances only. |
 | P2 | Richer mod identity and icons | Resolve nested-JAR identity/icons and verified provider artwork; retain a clear generic fallback. Cache with size limits and invalidation. |
@@ -40,7 +40,7 @@ Requests are prioritized here; listing an idea does not mean it is implemented. 
 
 ## Content follow-ups
 
-- Complete approved CurseForge downloads/updates and live API validation. Current provider-only showcases require an approved key; Modrinth-backed files use Modrinth first.
+- Extend provider identification to untracked CurseForge-only files and broader independently verified cross-platform links. Known CurseForge pins now support approved-key installs, compatible update checks and version selection; exact shared file hashes merge catalogue entries. Different binaries require another verified mapping. Actual Minecraft execution remains separate from content API validation.
 - Add safe folder-pack identity/mutations and cross-type required asset dependency planning and crash-durable multi-file recovery. Mixed known stable ZIP/mod commands now stage together and roll back handled commit failures; individual verified Modrinth ZIP install/version selection is implemented; this does not imply a universal shader-settings adapter.
 - Add shared Git freeze-policy files, richer update channels and backup restore/retention UI. Current freeze preferences are local.
 - Add full NBT world names/metadata and game-process observation; handing a URL to a launcher is not proof of a successful game launch.

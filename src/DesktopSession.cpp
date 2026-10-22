@@ -78,7 +78,7 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
     };
     connect(&m_showcase, &ProjectShowcase::changed, this, updateReleaseFilters);
     connect(&m_browse, &BrowseInstalls::changed, this, updateReleaseFilters);
-    m_catalogue.setKey(qgetenv("CURSEFORGE_API_KEY"));
+    setCurseforgeKey(qgetenv("CURSEFORGE_API_KEY"));
     updateBrowseContext();
     m_navigation.setLeaveGuard([this] { return !m_editor.dirty(); });
     connect(&m_browse, &BrowseInstalls::installRequested, &m_content, &ContentActions::installRelease);

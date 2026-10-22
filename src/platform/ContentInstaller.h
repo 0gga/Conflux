@@ -1,5 +1,6 @@
 #pragma once
 #include "features/content/ContentPorts.h"
+#include "platform/CurseforgeInstallSource.h"
 #include "platform/NativeContentStore.h"
 #include "platform/VerifiedDownload.h"
 #include "services/ModInstaller.h"
@@ -9,11 +10,18 @@ class ContentInstaller final : public QObject, public IContentInstaller {
     Q_OBJECT
   public:
     explicit ContentInstaller(std::shared_ptr<const NativeContentStore> files, QObject *parent = nullptr,
-                              bool allowLocalTestServer = false, QUrl apiRoot = {});
+                              bool allowLocalTestServer = false, QUrl apiRoot = {}, QUrl curseforgeApi = {});
+    void setCurseforgeKey(const QByteArray &key) {
+        m_curseforge.setKey(key);
+    }
     void install(const QVariantMap &, const QVariantList &, const QVector<ContentInstallRequest> &,
                  Callback) override;
     void cancel() override {
         m_cancelled = true;
+        if (m_curseforge.busy()) {
+            m_curseforge.cancel();
+            return;
+        }
         m_download.cancel();
         if (m_preparing)
             m_cancelled = true;
@@ -28,6 +36,7 @@ class ContentInstaller final : public QObject, public IContentInstaller {
 
   private:
     ModInstaller m_installer;
+    CurseforgeInstallSource m_curseforge;
     VerifiedDownload m_download;
     std::shared_ptr<const NativeContentStore> m_files;
     std::shared_ptr<QTemporaryDir> m_stage;
@@ -46,6 +55,7 @@ class ContentInstaller final : public QObject, public IContentInstaller {
     QJsonArray m_directMods, m_directAssets;
     int m_directIndex = 0;
     void downloadDirect();
+    void prepareDownloads(const QVector<ContentInstallRequest> &);
     void commitDirect();
     void startNextBatch();
     void installBatch(const QVector<ContentInstallRequest> &);

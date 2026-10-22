@@ -2,6 +2,7 @@
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QImage>
+#include <QSet>
 #include <QVersionNumber>
 #include <algorithm>
 #include <limits>
@@ -180,6 +181,37 @@ QVariantList groupReleaseVariants(const QVector<Release> &releases) {
     }
     return groups;
 }
+Release curseforgeRelease(const QJsonObject &file) {
+    Release r;
+    r.provider = "curseforge";
+    r.projectId = QString::number(file.value("modId").toInteger());
+    r.id = QString::number(file.value("id").toInteger());
+    r.title = r.version = file.value("displayName").toString();
+    r.filename = file.value("fileName").toString();
+    r.url = file.value("downloadUrl").toString();
+    r.fileSize = file.value("fileLength").toInteger();
+    r.published = file.value("fileDate").toString();
+    const auto channel = file.value("releaseType").toInt();
+    r.channel = channel == 1 ? "release" : channel == 2 ? "beta" : channel == 3 ? "alpha" : "unknown";
+    for (const auto &value : file.value("gameVersions").toArray()) {
+        const auto version = value.toString();
+        const auto loader = version.toLower();
+        if (QStringList{"fabric", "forge", "neoforge", "quilt"}.contains(loader))
+            r.loaders << loader;
+        else if (!version.isEmpty() && version.front().isDigit())
+            r.gameVersions << version;
+    }
+    for (const auto &value : file.value("hashes").toArray())
+        if (value.toObject().value("algo").toInt() == 1)
+            r.sha1 = value.toObject().value("value").toString();
+    for (const auto &value : file.value("dependencies").toArray()) {
+        const auto dependency = value.toObject();
+        if (dependency.value("relationType").toInt() == 3)
+            r.requiredDependencies << QString::number(dependency.value("modId").toInteger());
+        r.dependencyRefs << dependency;
+    }
+    return r;
+}
 Release releaseFromVariant(const QVariantMap &value) {
     Release r;
     r.provider = value.value("provider").toString();
@@ -204,12 +236,41 @@ Release releaseFromVariant(const QVariantMap &value) {
         r.sourceIds[it.key()] = it.value().toString();
     return r;
 }
+QString projectIdentity(const Project &project, const QHash<QString, QString> &identities) {
+    auto ids = project.sourceIds;
+    ids[project.provider] = project.id;
+    for (auto it = ids.cbegin(); it != ids.cend(); ++it)
+        if (identities.contains(it.key() + ':' + it.value()))
+            return identities.value(it.key() + ':' + it.value());
+    if (!ids.value("modrinth").isEmpty())
+        return "modrinth:" + ids.value("modrinth");
+    return project.provider + ':' + project.id;
+}
+QMap<QString, QString> verifiedProjectPairs(const QMap<QString, QStringList> &projectHashes,
+                                            const QMap<QString, QString> &hashProjects) {
+    QMap<QString, QString> result;
+    QMap<QString, QStringList> owners;
+    for (auto it = projectHashes.cbegin(); it != projectHashes.cend(); ++it) {
+        QSet<QString> matches;
+        for (const auto &hash : it.value())
+            if (!hashProjects.value(hash).isEmpty())
+                matches.insert(hashProjects.value(hash));
+        if (matches.size() != 1)
+            continue;
+        result[it.key()] = *matches.cbegin();
+        owners[*matches.cbegin()] << it.key();
+    }
+    for (const auto &conflicts : owners)
+        if (conflicts.size() > 1)
+            for (const auto &id : conflicts)
+                result.remove(id);
+    return result;
+}
 QVector<Project> mergeProjects(const QVector<Project> &projects, const QHash<QString, QString> &identities) {
     QVector<Project> result;
     QHash<QString, qsizetype> positions;
     for (auto project : projects) {
-        const auto providerId = project.provider + ':' + project.id;
-        const auto key = identities.value(providerId, providerId);
+        const auto key = projectIdentity(project, identities);
         project.sourceIds.insert(project.provider, project.id);
         project.sourceDownloads[project.provider] = project.downloads;
         if (!positions.contains(key)) {
@@ -223,11 +284,16 @@ QVector<Project> mergeProjects(const QVector<Project> &projects, const QHash<QSt
         for (auto it = project.sourceDownloads.cbegin(); it != project.sourceDownloads.cend(); ++it)
             downloads.insert(it.key(), it.value());
         downloads.insert(project.provider, project.downloads);
-        ids.insert(project.provider, project.id);
+        for (auto it = project.sourceIds.cbegin(); it != project.sourceIds.cend(); ++it)
+            ids.insert(it.key(), it.value());
+        auto urls = existing.sourceUrls;
+        for (auto it = project.sourceUrls.cbegin(); it != project.sourceUrls.cend(); ++it)
+            urls.insert(it.key(), it.value());
         if (project.provider == "modrinth")
             existing = project;
         existing.sourceIds = ids;
         existing.sourceDownloads = downloads;
+        existing.sourceUrls = urls;
     }
     return result;
 }

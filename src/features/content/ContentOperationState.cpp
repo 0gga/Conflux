@@ -10,10 +10,11 @@ static QString normalized(QString path) {
     return path;
 }
 QString contentRowKey(const QVariantMap &row) {
-    return row
-        .value("contentKey",
-               row.value("category").toString() + ":" + normalized(row.value("relativePath").toString()))
-        .toString();
+    const auto key = row.constFind(QStringLiteral("contentKey"));
+    if (key != row.cend())
+        return key->toString();
+    return row.value(QStringLiteral("category")).toString() + ':' +
+           normalized(row.value(QStringLiteral("relativePath")).toString());
 }
 QVariantMap contentInstallPrediction(const ContentInstallRequest &request, const QVariantMap &pack,
                                      QVariantMap row) {
@@ -147,6 +148,8 @@ QVariantList reconcileContentRows(const QVariantList &actual, const QVariantList
     return result;
 }
 QVariantList resolveContentTargets(const QVariantList &rows, const QStringList &targets) {
+    if (rows.isEmpty() || targets.isEmpty())
+        return {};
     QVariantList out;
     const QSet<QString> keys(targets.cbegin(), targets.cend());
     for (const auto &value : rows)

@@ -32,23 +32,25 @@ inline QString contentLabel(const QString &key) {
                                               {"datapack", "Data Packs"},
                                               {"shader", "Shaders"}};
     const auto lower = key.toLower();
-    for (const auto &loader : QStringList{"neoforge", "fabric", "forge", "quilt"})
-        if (lower.startsWith(loader + '-'))
-            return names.value(loader) + " " + key.mid(loader.size() + 1);
+    static const QStringList loaders{"neoforge", "fabric", "forge", "quilt"};
+    for (const auto &loader : loaders)
+        if (lower.size() > loader.size() && lower.at(loader.size()) == QLatin1Char('-') &&
+            lower.startsWith(loader))
+            return names.value(loader) + QLatin1Char(' ') + key.mid(loader.size() + 1);
     return names.value(lower, key);
 }
 inline QString contentCategory(const QString &type) {
-    return QMap<QString, QString>{{"mod", "mods"},
-                                  {"resourcepack", "resourcepacks"},
-                                  {"shader", "shaderpacks"},
-                                  {"datapack", "datapacks"}}
-        .value(type);
+    static const QMap<QString, QString> categories{{"mod", "mods"},
+                                                   {"resourcepack", "resourcepacks"},
+                                                   {"shader", "shaderpacks"},
+                                                   {"datapack", "datapacks"}};
+    return categories.value(type);
 }
 inline QString categoryType(const QString &category) {
-    return QMap<QString, QString>{{"mods", "mod"},
-                                  {"resourcepacks", "resourcepack"},
-                                  {"shaderpacks", "shader"},
-                                  {"datapacks", "datapack"}}
-        .value(category, "mod");
+    static const QMap<QString, QString> types{{"mods", "mod"},
+                                              {"resourcepacks", "resourcepack"},
+                                              {"shaderpacks", "shader"},
+                                              {"datapacks", "datapack"}};
+    return types.value(category, "mod");
 }
 } // namespace studio

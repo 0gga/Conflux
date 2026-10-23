@@ -6,6 +6,50 @@ using namespace update_fixture;
 class ContentUpdateTests : public QObject {
     Q_OBJECT
   private slots:
+    void bulkUpdatesKeepTheirOriginalDestinationThroughReentrantNavigation() {
+        Harness h;
+        const QVariantList originalRows{row("A"), row("B"), row("C")};
+        h.set(originalRows);
+        QTRY_VERIFY(!h.content.busy());
+        auto otherPack = h.pack;
+        otherPack["path"] = h.temp.path() + "/other";
+        otherPack["title"] = "Other instance";
+        auto otherRows = originalRows;
+        for (auto &value : otherRows) {
+            auto item = value.toMap();
+            item["version"] = "9.0";
+            item["sha1"] = hash(("other-" + item.value("projectId").toString()).toUtf8());
+            auto release = item.value("installedRelease").toMap();
+            release["sha1"] = item.value("sha1");
+            release["version"] = "9.0";
+            item["installedRelease"] = release;
+            item["updateAvailable"] = false;
+            item.remove("updateRelease");
+            value = item;
+        }
+        h.files->set(otherPack.value("path").toString(), otherRows);
+        bool navigated = false;
+        connect(h.content.operations(), &OperationHistory::changed, &h.content, [&] {
+            if (!navigated && h.content.operations()->activeCount() == 1) {
+                navigated = true;
+                h.content.setContext(otherPack, otherRows);
+            }
+        });
+        h.content.updateAll();
+        QTRY_VERIFY(!h.content.busy());
+        QVERIFY(navigated);
+        QCOMPARE(h.installer->inputs.size(), 3);
+        for (const auto &input : h.installer->inputs)
+            QCOMPARE(input.pack.value("path"), h.pack.value("path"));
+        for (const auto &id : {"A", "B", "C"}) {
+            QCOMPARE(byId(h.files->get(h.temp.path()), id).value("version").toString(), QString("2.0"));
+            QCOMPARE(byId(h.files->get(otherPack.value("path").toString()), id).value("version").toString(),
+                     QString("9.0"));
+        }
+        QCOMPARE(h.content.rows().size(), otherRows.size());
+        for (const auto &id : {"A", "B", "C"})
+            QCOMPARE(byId(h.content.rows(), id).value("version").toString(), QString("9.0"));
+    }
     void policyChangesRecheckQueuedUpdatesAndKeepInstalledRowsVisible_data() {
         QTest::addColumn<QStringList>("targetPolicy");
         QTest::addColumn<QString>("installedStage");

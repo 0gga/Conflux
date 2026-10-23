@@ -1,13 +1,10 @@
 #include "ContentActions.h"
+#include "ContentUpdateIntent.h"
 #include "domain/ContentCompatibility.h"
 #include "domain/ContentTypes.h"
 #include "domain/ReleaseStages.h"
 #include <QPointer>
 namespace studio {
-static bool updateReady(const QVariantMap &row) {
-    return row.value("updateAvailable").toBool() && !row.value("locked").toBool() &&
-           !row.value("frozen").toBool() && !row.value("pending").toBool();
-}
 int ContentActions::updateCount() const {
     int count = 0;
     for (const auto &value : m_rows) {
@@ -21,18 +18,10 @@ int ContentActions::actionableUpdateCount() const {
     int count = 0;
     for (const auto &value : m_rows) {
         const auto row = value.toMap();
-        if (updateReady(row))
+        if (contentUpdateEligible(row))
             ++count;
     }
     return count;
-}
-ContentInstallRequest ContentActions::updateRequest(const QVariantMap &row) const {
-    return {releaseFromVariant(row.value("updateRelease").toMap()),
-            row.value("title").toString(),
-            QJsonObject::fromVariantMap(row.value("sourceIds").toMap()),
-            categoryType(row.value("category").toString()),
-            false,
-            row.value("relativePath").toString()};
 }
 void ContentActions::update(const QString &path) {
     const auto row = find(path);
@@ -46,7 +35,7 @@ void ContentActions::update(const QString &path) {
             reject("Unlock this content before updating it.", row.value("title").toString());
         return;
     }
-    install({updateRequest(row)});
+    install({contentUpdateRequest(row)});
 }
 void ContentActions::updateAll() {
     queueUpdates(m_rows);
@@ -55,20 +44,13 @@ void ContentActions::queueUpdates(const QVariantList &rows) {
     if (m_batchingUpdates)
         return;
     // Capture eligible intent once; publishing predictions must not invalidate this input.
-    const auto candidates = withPreferences(m_pack, rows);
+    const auto pack = m_pack;
+    const auto candidates = withPreferences(pack, rows);
     m_batchingUpdates = true;
     bool accepted = false;
-    for (const auto &value : candidates) {
-        const auto row = value.toMap();
-        if (!updateReady(row))
-            continue;
-        ContentOperation operation;
-        operation.kind = ContentOperation::Install;
-        operation.targets = {contentRowKey(row)};
-        operation.requests = {updateRequest(row)};
-        operation.predictions = {contentInstallPrediction(operation.requests.first(), m_pack, row)};
-        accepted = enqueue(std::move(operation)) || accepted;
-    }
+    for (const auto &value : candidates)
+        if (auto operation = planContentUpdate(pack, value.toMap()))
+            accepted = enqueue(std::move(*operation)) || accepted;
     m_batchingUpdates = false;
     if (accepted)
         publishProjection();

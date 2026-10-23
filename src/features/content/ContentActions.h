@@ -184,7 +184,6 @@ class ContentActions final : public QObject {
     void copyRequested(QString text);
 
   private:
-    ContentInstallRequest updateRequest(const QVariantMap &) const;
     void queueUpdates(const QVariantList &);
     QVariantMap find(const QString &) const;
     QString preferenceIdentity(const QVariantMap &) const;

@@ -8,6 +8,10 @@ using namespace studio;
 class DeferredVersionCatalogue final : public IContentCatalogue {
   public:
     QVector<VersionsCallback> pending;
+    int cancellations = 0;
+    void cancelVersions() override {
+        ++cancellations;
+    }
     void refresh(const QVariantList &rows, const QString &, const QString &, IndexCallback done) override {
         done(rows, {});
     }
@@ -33,6 +37,136 @@ class BrowseInstallsTests : public QObject {
                  QVariantMap{{"provider", "modrinth"}, {"projectId", "project"}, {"id", "version"}}}};
     }
   private slots:
+    void cancellationReleasesHeldLookupAndDiscardsQueuedObsoleteWork() {
+        auto source = std::make_shared<DeferredVersionCatalogue>();
+        BrowseInstalls model(source);
+        model.setTargetPath("a");
+        model.setContext({{"path", "a"}, {"minecraft", "1.21.1"}}, {}, false);
+        auto queued = project();
+        queued["sourceIds"] = QVariantMap{{"modrinth", "queued"}};
+        model.install(project());
+        model.install(queued);
+        QCOMPARE(source->pending.size(), 1);
+        model.cancelPending();
+        QCOMPARE(source->cancellations, 1);
+        auto latest = project();
+        latest["sourceIds"] = QVariantMap{{"modrinth", "latest"}};
+        model.install(latest);
+        QTRY_COMPARE_WITH_TIMEOUT(source->pending.size(), 2, 500);
+        QSignalSpy installs(&model, &BrowseInstalls::installRequested);
+        Release release;
+        release.provider = "modrinth";
+        release.url = "https://example.invalid/file.jar";
+        release.sha1 = QString(40, 'a');
+        release.gameVersions = {"1.21.1"};
+        source->pending.first()({release}, {}); // A late old completion cannot release/erase current work.
+        QVERIFY(model.lookupsPending());
+        QCOMPARE(installs.size(), 0);
+        source->pending.last()({release}, {});
+        QCOMPARE(installs.size(), 1);
+        QVERIFY(!model.lookupsPending());
+    }
+    void changingAnotherInstancesPolicyPreservesOriginalInstallIntent() {
+        QTemporaryDir temp;
+        auto policy = std::make_shared<PackReleasePolicy>(
+            std::make_shared<BrowseSettingsStore>(temp.path() + "/stages.ini"));
+        auto source = std::make_shared<DeferredVersionCatalogue>();
+        BrowseInstalls model(source);
+        model.setReleasePolicy(policy);
+        model.setTargetPath("a");
+        model.setContext({{"path", "a"}, {"minecraft", "1.21.1"}}, {}, false);
+        QSignalSpy installs(&model, &BrowseInstalls::installRequested);
+        model.install(project());
+        QCOMPARE(source->pending.size(), 1);
+        model.setTargetPath("b");
+        model.setContext({{"path", "b"}, {"minecraft", "1.21.1"}}, {}, false);
+        policy->setChannels("b", {"beta"});
+        Release release;
+        release.provider = "modrinth";
+        release.url = "https://example.invalid/file.jar";
+        release.sha1 = QString(40, 'a');
+        release.gameVersions = {"1.21.1"};
+        source->pending.first()({release}, {});
+        QCOMPARE(installs.size(), 1);
+        QCOMPARE(installs.first().last().toMap().value("targetPack").toMap().value("path").toString(),
+                 QString("a"));
+    }
+    void scopedPolicyCancellationKeepsOtherQueuedInstances() {
+        QTemporaryDir temp;
+        auto policy = std::make_shared<PackReleasePolicy>(
+            std::make_shared<BrowseSettingsStore>(temp.path() + "/stages.ini"));
+        auto source = std::make_shared<DeferredVersionCatalogue>();
+        BrowseInstalls model(source);
+        model.setReleasePolicy(policy);
+        model.setTargetPath("a");
+        model.setContext({{"path", "a"}, {"minecraft", "1.21.1"}}, {}, false);
+        model.install(project());
+        model.setTargetPath("b");
+        model.setContext({{"path", "b"}, {"minecraft", "1.21.1"}}, {}, false);
+        model.install(project());
+        model.setTargetPath("a");
+        model.setContext({{"path", "a"}, {"minecraft", "1.21.1"}}, {}, false);
+        policy->setChannels("a", {"beta"}); // Active A is obsolete; queued B still belongs to B.
+        QCOMPARE(source->cancellations, 1);
+        QTRY_COMPARE_WITH_TIMEOUT(source->pending.size(), 2, 500);
+        QSignalSpy installs(&model, &BrowseInstalls::installRequested);
+        Release release;
+        release.provider = "modrinth";
+        release.url = "https://example.invalid/file.jar";
+        release.sha1 = QString(40, 'a');
+        release.gameVersions = {"1.21.1"};
+        source->pending.last()({release}, {});
+        QCOMPARE(installs.size(), 1);
+        QCOMPARE(installs.first().last().toMap().value("targetPack").toMap().value("path").toString(),
+                 QString("b"));
+        source->pending.first()({release}, {});
+        QCOMPARE(installs.size(), 1);
+    }
+    void policyChangeCancelsOriginalInstanceAfterNavigation() {
+        QTemporaryDir temp;
+        auto policy = std::make_shared<PackReleasePolicy>(
+            std::make_shared<BrowseSettingsStore>(temp.path() + "/stages.ini"));
+        auto source = std::make_shared<DeferredVersionCatalogue>();
+        BrowseInstalls model(source);
+        model.setReleasePolicy(policy);
+        model.setTargetPath("a");
+        model.setContext({{"path", "a"}, {"minecraft", "1.21.1"}}, {}, false);
+        model.install(project());
+        model.setTargetPath("b");
+        model.setContext({{"path", "b"}, {"minecraft", "1.21.1"}}, {}, false);
+        policy->setChannels("a", {"beta"});
+        QCOMPARE(source->cancellations, 1);
+        QVERIFY(!model.lookupsPending());
+        QSignalSpy installs(&model, &BrowseInstalls::installRequested);
+        source->pending.first()({}, "obsolete failure");
+        QCOMPARE(installs.size(), 0);
+        QVERIFY(model.notice().isEmpty());
+    }
+    void reentrantCancellationCannotEraseReplacementIntent() {
+        auto source = std::make_shared<DeferredVersionCatalogue>();
+        BrowseInstalls model(source);
+        model.setTargetPath("a");
+        model.setContext({{"path", "a"}, {"minecraft", "1.21.1"}}, {}, false);
+        int installed = 0;
+        connect(&model, &BrowseInstalls::installRequested, &model, [&](auto, auto) {
+            if (++installed == 1) {
+                model.cancelPending();
+                model.install(project());
+            }
+        });
+        model.install(project());
+        Release release;
+        release.provider = "modrinth";
+        release.url = "https://example.invalid/file.jar";
+        release.sha1 = QString(40, 'a');
+        release.gameVersions = {"1.21.1"};
+        source->pending.first()({release}, {});
+        QVERIFY(model.lookupsPending());
+        QTRY_COMPARE_WITH_TIMEOUT(source->pending.size(), 2, 500);
+        source->pending.last()({release}, {});
+        QCOMPARE(installed, 2);
+        QVERIFY(!model.lookupsPending());
+    }
     void explicitStagesControlQuickAndSelectedInstalls_data() {
         QTest::addColumn<QString>("provider");
         QTest::addColumn<int>("mask");

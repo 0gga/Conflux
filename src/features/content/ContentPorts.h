@@ -51,6 +51,7 @@ class IContentCatalogue {
         refresh(rows, game, loader, std::move(callback));
     }
     virtual void versions(const QVariantMap &, const QString &, const QString &, VersionsCallback) = 0;
+    virtual void cancelVersions() {}
     virtual void setCurseforgeKey(const QByteArray &) = 0;
 };
 class IContentInstaller {

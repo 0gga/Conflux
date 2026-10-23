@@ -1,6 +1,7 @@
 #include "features/showcase/ProjectShowcase.h"
 #include "features/showcase/ReleaseFilters.h"
 #include "platform/CatalogueShowcaseSource.h"
+#include "services/ContentCatalogue.h"
 #include "services/GalleryImages.h"
 #include <QBuffer>
 #include <QImage>
@@ -97,6 +98,96 @@ class ShowcaseLoadingTests final : public QObject {
         return {{"provider", "modrinth"}, {"id", id}, {"title", id}, {"type", "mod"}};
     }
   private slots:
+    void versionCancellationAbortsTransportWithoutCancellingUpdateIdentification() {
+        LoadingHttp http;
+        http.project("first");
+        http.project("second");
+        http.held = {"/project/first/version", "/version_files"};
+        ContentCatalogue catalogue(nullptr, http.base(), http.base());
+        catalogue.setCurseforgeKey({});
+        int cancelled = 0, identified = 0, latest = 0;
+        catalogue.versions({{"category", "mods"}, {"sourceIds", QVariantMap{{"modrinth", "first"}}}},
+                           "1.21.1", "neoforge", [&](auto releases, QString error) {
+                               QVERIFY(releases.isEmpty());
+                               QVERIFY(error.contains("cancelled"));
+                               ++cancelled;
+                           });
+        catalogue.refresh({QVariantMap{{"sha1", QString(40, 'a')}, {"category", "mods"}}}, "1.21.1",
+                          "neoforge", [&](auto, QString error) {
+                              QVERIFY2(error.isEmpty(), qPrintable(error));
+                              ++identified;
+                          });
+        QTRY_VERIFY(!http.waiting.value("/project/first/version").isEmpty());
+        QTRY_VERIFY(!http.waiting.value("/version_files").isEmpty());
+        const auto oldSocket = http.waiting.value("/project/first/version").first();
+        const auto indexSocket = http.waiting.value("/version_files").first();
+        catalogue.cancelVersions();
+        QCOMPARE(cancelled, 1);
+        QTRY_VERIFY(!oldSocket || oldSocket->state() == QAbstractSocket::UnconnectedState);
+        QVERIFY(indexSocket && indexSocket->state() == QAbstractSocket::ConnectedState);
+        QCOMPARE(identified, 0);
+        catalogue.versions({{"category", "mods"}, {"sourceIds", QVariantMap{{"modrinth", "second"}}}},
+                           "1.21.1", "neoforge", [&](auto releases, QString error) {
+                               QVERIFY2(error.isEmpty(), qPrintable(error));
+                               QCOMPARE(releases.size(), 1);
+                               ++latest;
+                           });
+        QTRY_COMPARE(latest, 1);
+        http.release("/version_files");
+        QTRY_COMPARE(identified, 1);
+        QCOMPARE(cancelled, 1);
+    }
+    void cancelledCoalescedReadsCannotConsumeNewPendingWork() {
+        LoadingHttp http;
+        http.held = {"/search"};
+        http.responses["/search"] = "{\"hits\":[],\"total_hits\":0}";
+        CatalogueClient client(nullptr, http.base(), http.base());
+        client.setReadCacheLifetime(60000);
+        CatalogueQuery query;
+        query.provider = "modrinth";
+        int old = 0, current = 0;
+        client.fetch(query, 0, 20, [&](auto) { ++old; });
+        client.fetch(query, 0, 20, [&](auto) { ++old; });
+        QTRY_COMPARE(http.requests.count("/search"), 1);
+        client.cancelPendingReads();
+        client.fetch(query, 0, 20, [&](auto page) {
+            QVERIFY2(page.error.isEmpty(), qPrintable(page.error));
+            ++current;
+        });
+        QTRY_COMPARE(http.requests.count("/search"), 2);
+        http.release("/search");
+        QTRY_COMPARE(current, 1);
+        QCOMPARE(old, 0);
+        client.fetch(query, 0, 20, [&](auto) { ++old; }); // Cached callback is queued, then cancelled.
+        client.cancelPendingReads();
+        QTest::qWait(20);
+        QCOMPARE(old, 0);
+        client.fetch(query, 0, 20, [&](auto page) {
+            QVERIFY(page.error.isEmpty());
+            ++current;
+        });
+        QTRY_COMPARE(current, 2);
+        QCOMPARE(http.requests.count("/search"), 2);
+    }
+    void reentrantCancellationStopsRemainingCoalescedCallbacks() {
+        LoadingHttp http;
+        http.responses["/search"] = "{\"hits\":[],\"total_hits\":0}";
+        CatalogueClient client(nullptr, http.base(), http.base());
+        client.setReadCacheLifetime(60000);
+        CatalogueQuery query;
+        query.provider = "modrinth";
+        int first = 0, obsolete = 0, replacement = 0;
+        client.fetch(query, 0, 20, [&](auto) {
+            ++first;
+            client.cancelPendingReads();
+            client.fetch(query, 0, 20, [&](auto) { ++replacement; });
+        });
+        client.fetch(query, 0, 20, [&](auto) { ++obsolete; });
+        QTRY_COMPARE(replacement, 1);
+        QCOMPARE(first, 1);
+        QCOMPARE(obsolete, 0);
+        QCOMPARE(http.requests.count("/search"), 1);
+    }
     void descriptionAndVersionsDoNotWaitForGallery() {
         LoadingHttp http;
         const auto imageUrl = http.base().resolved(QUrl("image")).toString();

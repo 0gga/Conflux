@@ -326,3 +326,10 @@ The owner authorized this narrow metadata-write exception on23 October2026. Laun
 
 
 SourceLockIndex derives provider-qualified lookups from accepted sourceContent snapshots outside QML getters. ContentActions.storeState updates the state/index together; seedState merges accepted source metadata into captured install/lock targets so an old project snapshot cannot resurrect an obsolete lock. Raw or incomplete contexts retain the last accepted snapshot, while an explicit empty list clears it. Queries preserve original source ordering when several supplied provider IDs match. Pending lock operations remain owned by the queue and continue to override presentation intent before native confirmation.
+
+
+### Scoped cancellation of version reads
+
+BrowseInstalls keeps a global cancellation generation and normalized per-instance generations. Its private lookup queue discards only obsolete queued reads; policy changes cancel work for the original instance even after navigation. Active lookup completion is idempotent and released immediately, including when a test/legacy port retains its old callback. Late and reentrant callbacks cannot remove replacement intent or install obsolete releases. Accepted file transactions use a separate queue and continue to drain.
+
+ContentCatalogue isolates version requests in a dedicated CatalogueClient, preserving update-identification work when version reads are cancelled. cancelVersions aborts its network replies and finishes captured feature callbacks once. CatalogueClient read epochs reject obsolete network, queued-cache and worker-parse results before cache publication or pending-request removal. A cancellation during one coalesced callback suppresses remaining obsolete callbacks. Completed cache entries and reusable connections remain available; credentials still use the existing independent generation.

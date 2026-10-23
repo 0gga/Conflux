@@ -12,8 +12,10 @@ class ContentCatalogue final : public QObject, public IContentCatalogue {
     void refreshWithChannels(const QVariantList &, const QString &, const QString &, const QStringList &,
                              IndexCallback) override;
     void versions(const QVariantMap &, const QString &, const QString &, VersionsCallback) override;
+    void cancelVersions() override;
     void setCurseforgeKey(const QByteArray &key) override {
         m_client.setCurseforgeKey(key);
+        m_versionClient.setCurseforgeKey(key);
     }
 
   private:
@@ -23,7 +25,7 @@ class ContentCatalogue final : public QObject, public IContentCatalogue {
                            const QStringList &);
     QNetworkAccessManager m_network;
     QUrl m_api;
-    CatalogueClient m_client;
+    CatalogueClient m_client, m_versionClient;
     int m_generation = 0;
     QHash<int, VersionsCallback> m_versions;
 };

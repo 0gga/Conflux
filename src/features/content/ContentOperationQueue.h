@@ -9,7 +9,8 @@ class ContentOperationQueue final : public QObject {
     using Completion = std::function<void()>;
     using Task = std::function<void(Completion)>;
     explicit ContentOperationQueue(QObject *parent = nullptr) : QObject(parent) {}
-    void enqueue(Task);
+    void enqueue(Task, QString group = {});
+    void discardQueued(const QString &group = {});
     bool busy() const {
         return m_running || !m_tasks.isEmpty();
     }
@@ -18,7 +19,11 @@ class ContentOperationQueue final : public QObject {
 
   private:
     void startNext();
-    QQueue<Task> m_tasks;
+    struct QueuedTask {
+        Task run;
+        QString group;
+    };
+    QQueue<QueuedTask> m_tasks;
     bool m_running = false;
 };
 } // namespace studio

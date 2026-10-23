@@ -3,10 +3,16 @@
 #include <QTimer>
 #include <memory>
 namespace studio {
-void ContentOperationQueue::enqueue(Task task) {
-    m_tasks.enqueue(std::move(task));
+void ContentOperationQueue::enqueue(Task task, QString group) {
+    m_tasks.enqueue({std::move(task), std::move(group)});
     if (!m_running)
         startNext();
+}
+void ContentOperationQueue::discardQueued(const QString &group) {
+    const auto removed =
+        m_tasks.removeIf([&group](const QueuedTask &task) { return group.isEmpty() || task.group == group; });
+    if (removed)
+        emit changed();
 }
 void ContentOperationQueue::startNext() {
     if (m_tasks.isEmpty()) {
@@ -19,7 +25,7 @@ void ContentOperationQueue::startNext() {
     emit changed();
     const QPointer<ContentOperationQueue> guard(this);
     auto completed = std::make_shared<bool>(false);
-    task([guard, completed] {
+    task.run([guard, completed] {
         if (!guard || *completed)
             return;
         *completed = true;

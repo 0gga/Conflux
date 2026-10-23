@@ -58,3 +58,8 @@ A deterministic fixture covers5,000 addons,1,500 target entries and1,000 unique 
 SourceLockIndex builds provider-qualified project lookups when accepted instance metadata changes. ContentActions reads the index from UI-facing sourceLock calls; it does not scan every source file per card. Accepted state is kept separately from captured project targets, and initial operation state is seeded with the latest accepted source metadata. Raw/loading contexts cannot erase a known snapshot; an explicit empty snapshot clears it. Provider collisions, original-instance navigation and pending lock intent retain their scope.
 
 The deterministic5,000-entry fixture made2,000 source-lock reads in2,995ms before the change and2ms after it, within a1-second regression budget. A separate before-fix failure reproduces a captured target resurrecting an obsolete source lock; accepted-state and captured-install regressions now pass. These are local CPU/state measurements, not provider or disk latency claims.
+
+
+### Obsolete version lookup cancellation
+
+A deterministic deferred-provider regression holds an old version callback indefinitely. After cancellation, the next eligible request must start within500ms without releasing that old callback. A loopback integration fixture verifies that the held HTTP version socket is aborted while an unrelated update-identification socket stays connected and completes normally. Scoped queue tests preserve installs for other instances. Cache tests cover coalesced requests, reused request keys, queued cached responses and cancellation inside a callback. These enforce local scheduling and isolation rather than live provider latency; the20-second transfer timeout remains an independent bound.

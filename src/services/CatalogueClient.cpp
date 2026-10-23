@@ -5,6 +5,7 @@
 #include <QFutureWatcher>
 #include <QJsonArray>
 #include <QNetworkReply>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QTimer>
 #include <QUrlQuery>
@@ -83,6 +84,14 @@ void CatalogueClient::setCurseforgeKey(const QByteArray &key) {
     ++m_authGeneration;
     m_readCache.clear();
 }
+void CatalogueClient::cancelPendingReads() {
+    ++m_readGeneration;
+    m_pendingReads.clear();
+    const auto replies = m_network.findChildren<QNetworkReply *>();
+    for (auto *reply : replies)
+        if (reply->isRunning())
+            reply->abort();
+}
 void CatalogueClient::request(const QUrl &url, bool cf, JsonCallback callback, bool allowMissing,
                               const QByteArray &body) {
     const auto root = cf ? m_curseforgeApi : m_modrinthApi;
@@ -91,6 +100,7 @@ void CatalogueClient::request(const QUrl &url, bool cf, JsonCallback callback, b
     QUrl endpoint = root.resolved(QUrl(relative));
     endpoint.setQuery(url.query());
     const int authGeneration = m_authGeneration;
+    const int readGeneration = m_readGeneration;
     const QString cacheKey = QString::number(authGeneration) + ':' + endpoint.toString(QUrl::FullyEncoded) +
                              (allowMissing ? ":optional" : ":required");
     const bool cacheable = m_cacheLifetime > 0 && body.isEmpty();
@@ -98,13 +108,17 @@ void CatalogueClient::request(const QUrl &url, bool cf, JsonCallback callback, b
     if (cacheable) {
         if (const auto *cached = m_readCache.object(cacheKey);
             cached && cached->expires > m_cacheClock.elapsed()) {
-            QTimer::singleShot(
-                0, this, [this, callback = std::move(callback), document = cached->document, authGeneration] {
-                    if (authGeneration != m_authGeneration)
-                        callback({}, "The provider connection changed. Reopen the content page.");
-                    else
-                        callback(document, {});
-                });
+            QTimer::singleShot(0, this,
+                               [this, callback = std::move(callback), document = cached->document,
+                                authGeneration, readGeneration] {
+                                   if (readGeneration != m_readGeneration)
+                                       return;
+                                   if (authGeneration != m_authGeneration)
+                                       callback({},
+                                                "The provider connection changed. Reopen the content page.");
+                                   else
+                                       callback(document, {});
+                               });
             return;
         }
         if (auto existing = m_pendingReads.value(cacheKey)) {
@@ -115,8 +129,10 @@ void CatalogueClient::request(const QUrl &url, bool cf, JsonCallback callback, b
         pending->callbacks << std::move(callback);
         m_pendingReads.insert(cacheKey, pending);
     }
-    auto deliver = [this, cacheable, cacheKey, pending, callback = std::move(callback),
-                    authGeneration](QJsonDocument document, QString error, int bytes) {
+    auto deliver = [this, cacheable, cacheKey, pending, callback = std::move(callback), authGeneration,
+                    readGeneration](QJsonDocument document, QString error, int bytes) {
+        if (readGeneration != m_readGeneration)
+            return;
         if (authGeneration != m_authGeneration) {
             document = {};
             error = "The provider connection changed. Reopen the content page.";
@@ -131,8 +147,12 @@ void CatalogueClient::request(const QUrl &url, bool cf, JsonCallback callback, b
                                new CachedResponse{document, m_cacheClock.elapsed() + m_cacheLifetime},
                                qMax(1024, bytes * 2));
         const auto callbacks = std::move(pending->callbacks);
-        for (const auto &waiting : callbacks)
+        const QPointer<CatalogueClient> guard(this);
+        for (const auto &waiting : callbacks) {
+            if (!guard || readGeneration != guard->m_readGeneration)
+                return;
             waiting(document, error);
+        }
     };
     QNetworkRequest request(endpoint);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);

@@ -76,6 +76,11 @@ class BrowseInstalls final : public QObject {
     bool m_indexing = false;
     bool m_curseforgeEnabled = false;
     int m_lookupGeneration = 0;
+    QHash<QString, int> m_packLookupGenerations;
+    QHash<QString, QString> m_lookupPacks;
+    ContentOperationQueue::Completion m_activeLookup;
+    QString m_activeLookupPack;
+    void cancelPendingForPack(const QString &);
     int m_revision = 0;
     QHash<QString, QVariantMap> m_verifiedIdentities;
     ContentOperationQueue m_lookups;

@@ -12,10 +12,10 @@
 namespace studio {
 
 ContentCatalogue::ContentCatalogue(QObject *parent, QUrl api, QUrl curseforgeApi)
-    : QObject(parent), m_network(this), m_api(std::move(api)),
-      m_client(this, m_api, std::move(curseforgeApi)) {
-    m_client.setCurseforgeKey(qgetenv("CURSEFORGE_API_KEY"));
-    connect(&m_client, &CatalogueClient::detailFinished, this,
+    : QObject(parent), m_network(this), m_api(std::move(api)), m_client(this, m_api, curseforgeApi),
+      m_versionClient(this, m_api, curseforgeApi) {
+    setCurseforgeKey(qgetenv("CURSEFORGE_API_KEY"));
+    connect(&m_versionClient, &CatalogueClient::detailFinished, this,
             [this](int generation, const ProjectDetail &detail) {
                 const auto callback = m_versions.take(generation);
                 if (callback)
@@ -354,6 +354,14 @@ void ContentCatalogue::refreshCurseforge(QVariantList rows, const QString &game,
     };
     (*pump)();
 }
+void ContentCatalogue::cancelVersions() {
+    const auto callbacks = std::move(m_versions);
+    m_versions.clear();
+    m_versionClient.cancelPendingReads();
+    for (const auto &callback : callbacks)
+        if (callback)
+            callback({}, "Version lookup cancelled.");
+}
 void ContentCatalogue::versions(const QVariantMap &row, const QString &game, const QString &loader,
                                 VersionsCallback callback) {
     Project project;
@@ -367,6 +375,6 @@ void ContentCatalogue::versions(const QVariantMap &row, const QString &game, con
     }
     const int generation = ++m_generation;
     m_versions[generation] = std::move(callback);
-    m_client.loadProject(project, game, loader, generation);
+    m_versionClient.loadProject(project, game, loader, generation);
 }
 } // namespace studio

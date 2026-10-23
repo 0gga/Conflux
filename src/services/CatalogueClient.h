@@ -17,6 +17,8 @@ class CatalogueClient : public QObject, public ICatalogueSearch {
                              QUrl modrinthApi = QUrl("https://api.modrinth.com/v2/"),
                              QUrl curseforgeApi = QUrl("https://api.curseforge.com/v1/"));
     void setCurseforgeKey(const QByteArray &key);
+    // Owning features cancel their operations separately; obsolete read callbacks are discarded.
+    void cancelPendingReads();
     // Opt-in for read-only presentation clients, never installer validation.
     void setReadCacheLifetime(int milliseconds);
     bool hasCurseforgeKey() const {
@@ -58,7 +60,7 @@ class CatalogueClient : public QObject, public ICatalogueSearch {
     QCache<QString, CachedResponse> m_readCache{16 * 1024 * 1024};
     QHash<QString, std::shared_ptr<PendingRead>> m_pendingReads;
     QElapsedTimer m_cacheClock;
-    int m_cacheLifetime = 0, m_authGeneration = 0;
+    int m_cacheLifetime = 0, m_authGeneration = 0, m_readGeneration = 0;
     void request(const QUrl &url, bool curseforge, JsonCallback callback, bool allowMissing = false,
                  const QByteArray &body = {});
     void linkCurseforgeFiles(CataloguePage, QMap<QString, QStringList>, Callback);

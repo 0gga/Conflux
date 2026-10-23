@@ -1,3 +1,4 @@
+#include "features/content/ContentOperationQueue.h"
 #include "features/status/OperationHistory.h"
 #include "features/status/RunningInstances.h"
 #include "platform/InstanceProcessSource.h"
@@ -13,6 +14,35 @@ using namespace studio;
 class StatusTests : public QObject {
     Q_OBJECT
   private slots:
+    void queueDiscardPreservesActiveAndOtherInstanceTasks() {
+        ContentOperationQueue queue;
+        ContentOperationQueue::Completion finish;
+        QStringList ran;
+        queue.enqueue(
+            [&](auto done) {
+                ran << "active";
+                finish = done;
+            },
+            "a");
+        queue.enqueue(
+            [&](auto done) {
+                ran << "obsolete";
+                done();
+            },
+            "a");
+        queue.enqueue(
+            [&](auto done) {
+                ran << "other";
+                done();
+            },
+            "b");
+        queue.discardQueued("a");
+        QVERIFY(queue.busy());
+        finish();
+        finish();
+        QTRY_VERIFY(!queue.busy());
+        QCOMPARE(ran, (QStringList{"active", "other"}));
+    }
     void activeTasksStayAboveQueuedAndFinishedWithoutResettingTheModel() {
         OperationHistory history;
         QSignalSpy resets(&history, &QAbstractItemModel::modelReset);

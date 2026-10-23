@@ -235,8 +235,7 @@ void ContentCatalogue::refreshWithChannels(const QVariantList &input, const QStr
                         if (loaders.isEmpty())
                             continue;
                         loaders.sort();
-                        const auto channel = modrinthRelease(installed, hash).channel;
-                        const auto allowedChannels = updateReleaseStages(channel, selection);
+                        const auto allowedChannels = effectiveReleaseStages(selection);
                         const auto key = category + '|' + loaders.join('|') + '|' + allowedChannels.join(',');
                         channels[key] = allowedChannels;
                         if (!groups[key].contains(hash))
@@ -332,7 +331,7 @@ void ContentCatalogue::refreshCurseforge(QVariantList rows, const QString &game,
                     row["updateAvailable"] = false;
                     row.remove("updateRelease");
                     Release newest;
-                    const auto allowedChannels = updateReleaseStages(installed.channel, selection);
+                    const auto allowedChannels = effectiveReleaseStages(selection);
                     for (const auto &release : releases)
                         if (allowedChannels.contains(release.channel) && !release.url.isEmpty() &&
                             !release.sha1.isEmpty() && isNewerRelease(installed, release) &&

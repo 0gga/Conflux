@@ -147,9 +147,8 @@ Rectangle {
         contentItem: ColumnLayout {
             spacing: 3
             MenuOption { Layout.fillWidth: true; text: "View project"; iconName: "compass"; alignLeft: true; subtle: true; onClicked: { menu.close();root.opened() } }
-            MenuOption { Layout.fillWidth:true;visible:!!root.installState.locked && !root.installState.sourceLocked;text:"Unlock content";iconName:"unlock";subtle:true;alignLeft:true;onClicked:{menu.close();root.unlockRequested()} }
+            MenuOption { Layout.fillWidth:true;visible:!!root.installState.locked;text:"Unlock content";iconName:"unlock";subtle:true;alignLeft:true;onClicked:{menu.close();root.unlockRequested()} }
             MenuOption { Layout.fillWidth:true;visible:!!root.installState.sourceLocked && !!root.installState.sourceMissing;text:"Restore locked version";iconName:"restore";subtle:true;alignLeft:true;onClicked:{menu.close();root.restoreLockedRequested()} }
-            MenuOption { Layout.fillWidth:true;visible:!!root.installState.sourceLocked && !root.installState.sourceMissing;text:"Locked by Modrinth";iconName:"lock";enabled:false;subtle:true;alignLeft:true }
             MenuOption { objectName: "browseHideContent"; Layout.fillWidth: true; text: root.hiddenMode ? "Restore content" : "Hide content"; iconName: root.hiddenMode ? "restore" : "hide"; alignLeft: true; subtle: true; onClicked: { menu.close();root.visibilityRequested(!root.hiddenMode) } }
         }
     }

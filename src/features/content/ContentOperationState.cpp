@@ -88,6 +88,7 @@ QVariantList reconcileContentRows(const QVariantList &actual, const QVariantList
     for (const auto &value : actual) {
         auto row = value.toMap();
         row.remove("pending");
+        row.remove("lockPending");
         const auto category = row.value("category").toString(), hash = row.value("sha1").toString();
         const auto path = paths.value({category, normalized(row.value("relativePath").toString())});
         const auto same = path.value("sha1").toString() == hash        ? path
@@ -169,12 +170,15 @@ QVariantList projectContentOperations(QVariantList rows, const QList<ContentOper
                     removed = true;
                 }
             }
-        } else if (operation.kind == ContentOperation::Enable) {
+        } else if (operation.kind == ContentOperation::Enable || operation.kind == ContentOperation::Lock) {
             for (const auto &key : operation.targets) {
                 const auto found = indices.constFind(key);
                 if (found != indices.cend()) {
                     auto row = rows.at(*found).toMap();
-                    row["enabled"] = operation.enabled;
+                    if (operation.kind == ContentOperation::Lock)
+                        row["lockPending"] = operation.locked;
+                    else
+                        row["enabled"] = operation.enabled;
                     row["pending"] = true;
                     rows[*found] = row;
                 }

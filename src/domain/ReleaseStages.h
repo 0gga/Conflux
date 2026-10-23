@@ -13,17 +13,11 @@ inline QStringList normalizedReleaseStages(const QStringList &input) {
                 result << stage;
     return result;
 }
-// An empty selection preserves the automatic policy rather than enabling all stages.
-inline QStringList updateReleaseStages(const QString &installed, const QStringList &selection = {}) {
-    if (!selection.isEmpty())
-        return normalizedReleaseStages(selection);
-    if (installed == "alpha")
-        return releaseStages();
-    if (installed == "beta")
-        return {"release", "beta"};
-    return {"release"};
+// Missing and legacy empty selections default to Release for every install/update path.
+inline QStringList effectiveReleaseStages(const QStringList &selection = {}) {
+    return selection.isEmpty() ? QStringList{"release"} : normalizedReleaseStages(selection);
 }
 inline bool releaseStageAllowed(const QString &stage, const QStringList &selection) {
-    return releaseStages().contains(stage) && (selection.isEmpty() || selection.contains(stage));
+    return effectiveReleaseStages(selection).contains(stage);
 }
 } // namespace studio

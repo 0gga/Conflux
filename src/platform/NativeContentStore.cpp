@@ -87,8 +87,20 @@ ContentFileState NativeContentStore::reload(const QVariantMap &pack, const QVari
         current["mods"] = repository.manifest.value("mods").toArray().toVariantList();
         current["assets"] = repository.manifest.value("assets").toArray().toVariantList();
     }
-    if (!inspectInventory)
-        return {current, previous, {}};
+    if (!inspectInventory) {
+        auto rows = previous;
+        QHash<QString, bool> locks;
+        for (const auto &value : current.value("sourceContent").toList())
+            locks[value.toMap().value("relativePath").toString()] =
+                value.toMap().value("launcherLocked").toBool();
+        for (auto &value : rows) {
+            auto row = value.toMap();
+            row.remove("lockPending");
+            row["launcherLocked"] = locks.value(row.value("relativePath").toString());
+            value = row;
+        }
+        return {current, rows, {}};
+    }
     return {current, snapshot(current, PackContent::contentFiles(current)), {}};
 }
 QVariantList NativeContentStore::snapshot(const QVariantMap &pack, const QVariantList &files) const {
@@ -755,7 +767,7 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
             for (const auto &entry : sourceLocks) {
                 const auto lock = entry.toMap();
                 if (!lock.value("launcherLocked").toBool() || lock.value("projectId").toString() != id ||
-                    provider != "modrinth")
+                    provider != lock.value("provider", "modrinth").toString())
                     continue;
                 if (unchanged)
                     continue;

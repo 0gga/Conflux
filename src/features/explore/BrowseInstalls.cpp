@@ -39,8 +39,9 @@ void BrowseInstalls::setReleasePolicy(std::shared_ptr<PackReleasePolicy> policy)
         });
 }
 bool BrowseInstalls::releaseAllowed(const QVariantMap &release) const {
-    return !m_releasePolicy ||
-           m_releasePolicy->allows(m_pack.value("path").toString(), release.value("channel").toString());
+    return releaseStageAllowed(release.value("channel", "release").toString(),
+                               m_releasePolicy ? m_releasePolicy->channels(m_pack.value("path").toString())
+                                               : QStringList{});
 }
 void BrowseInstalls::setContext(const QVariantMap &pack, const QVariantList &rows, bool busy) {
     if (!m_identitiesChanged && pack == m_pack && rows == m_inputRows && busy == m_indexing)

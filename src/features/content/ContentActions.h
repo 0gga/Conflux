@@ -64,6 +64,9 @@ class ContentActions final : public QObject {
         return m_queue.busy();
     }
     int actionableUpdateCount() const;
+    void setLauncherLocks(std::shared_ptr<const ILauncherContentLocks> locks) {
+        m_executor->setLauncherLocks(std::move(locks));
+    }
     void setLockRegistry(std::shared_ptr<ContentLockRegistry> locks) {
         m_locks = std::move(locks);
     }
@@ -184,6 +187,8 @@ class ContentActions final : public QObject {
     QVariantMap find(const QString &) const;
     QString preferenceIdentity(const QVariantMap &) const;
     void applyPreferences();
+    void saveLockPreferences(const QString &, const QVariantList &, bool);
+    void changeLocks(const QVariantMap &, const QVariantList &, bool, bool sourceOnly = false);
     QVariantList filteredRows() const;
     void syncVisibleRows();
     bool hasPending(const QString &) const;

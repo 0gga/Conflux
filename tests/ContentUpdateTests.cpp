@@ -11,9 +11,9 @@ class ContentUpdateTests : public QObject {
         QTest::addColumn<QString>("installedStage");
         QTest::addColumn<QString>("candidateStage");
         QTest::newRow("explicit-release") << QStringList{"release"} << QString("release") << QString("beta");
-        QTest::newRow("stable-beta-back-to-automatic")
+        QTest::newRow("stable-beta-back-to-default")
             << QStringList{} << QString("release") << QString("beta");
-        QTest::newRow("beta-alpha-back-to-automatic") << QStringList{} << QString("beta") << QString("alpha");
+        QTest::newRow("beta-alpha-back-to-default") << QStringList{} << QString("beta") << QString("alpha");
     }
     void policyChangesRecheckQueuedUpdatesAndKeepInstalledRowsVisible() {
         QFETCH(QStringList, targetPolicy);
@@ -51,7 +51,7 @@ class ContentUpdateTests : public QObject {
         QCOMPARE(h.content.rows().size(), 2);
         QCOMPARE(h.content.actionableUpdateCount(), 0);
     }
-    void automaticPolicyStillAllowsDeliberateManualVersionSwitches() {
+    void defaultReleasePolicyAlsoGuardsManualVersionSwitches() {
         Harness h;
         auto policy = std::make_shared<studio::PackReleasePolicy>(
             std::make_shared<studio::BrowseSettingsStore>(h.temp.path() + "/stages.ini"));
@@ -61,10 +61,15 @@ class ContentUpdateTests : public QObject {
         next["channel"] = "beta";
         h.set({installed});
         QTRY_VERIFY(!h.content.busy());
+        QSignalSpy errors(&h.content, &ContentActions::operationFailed);
+        h.content.installRelease(next, {{"sourceIds", installed.value("sourceIds")}, {"type", "mod"}});
+        QCOMPARE(h.installer->calls.size(), 0);
+        QCOMPARE(errors.size(), 1);
+        policy->setChannels(h.temp.path(), {"beta"});
         h.content.installRelease(next, {{"sourceIds", installed.value("sourceIds")}, {"type", "mod"}});
         QTRY_VERIFY(!h.content.busy());
         QCOMPARE(h.installer->calls.size(), 1);
-        QVERIFY(!h.installer->calls.first().first().automaticUpdate);
+        QCOMPARE(h.installer->calls.first().first().allowedChannels, QStringList{"beta"});
         QCOMPARE(byId(h.files->get(h.temp.path()), "B").value("version").toString(), QString("2.0"));
     }
     void explicitPolicyBlocksSingleAndManualUpdatesBeforeQueueing() {

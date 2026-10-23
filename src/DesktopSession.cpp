@@ -7,6 +7,7 @@
 #include "platform/ConfigOwnershipStore.h"
 #include "platform/InstalledModIdentity.h"
 #include "platform/InstanceProcessSource.h"
+#include "platform/LauncherContentLocks.h"
 #include "platform/ReviewedProjectIdentities.h"
 #include "platform/WorldLaunchAdapters.h"
 #include "services/ContentCatalogue.h"
@@ -43,6 +44,7 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
     m_browse.setReleasePolicy(m_releasePolicy);
     m_content.setVisibility(m_visibility);
     m_content.setLockRegistry(m_contentLocks);
+    m_content.setLauncherLocks(std::make_shared<LauncherContentLocks>(backupRoot));
     connect(m_visibility.get(), &ContentVisibility::changed, &m_content, &ContentActions::visibilityChanged);
     connect(m_visibility.get(), &ContentVisibility::changed, &m_catalogue, &BrowseCatalogue::refresh);
     m_catalogue.setDefaults(m_browsePreferences.defaults());

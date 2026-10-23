@@ -3,13 +3,13 @@
 #include <QHash>
 namespace studio {
 struct ContentOperation {
-    enum Kind { Enable, Remove, Import, Install, Restore } kind = Enable;
+    enum Kind { Enable, Remove, Import, Install, Restore, Lock } kind = Enable;
     quint64 id = 0;
     QString packPath;
     QStringList targets, reservations;
     QHash<QString, QString> expectedHashes;
     QVariantMap sourceLock;
-    bool enabled = true;
+    bool enabled = true, locked = false;
     QList<QUrl> urls;
     QString category;
     QVector<ContentInstallRequest> requests;

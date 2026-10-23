@@ -43,7 +43,7 @@ Item {
             }
             BusyIndicator { visible: root.showcase.busy; running: visible; Layout.preferredWidth: 32; Layout.preferredHeight: 32 }
             ActionButton { objectName:"restoreSourceLockedContent";text:"Restore locked version";iconName:"restore";visible:!!root.launcherLock.missing;onClicked:root.contentController.restoreLocked(root.showcase.project) }
-            ActionButton { objectName:"unlockMissingContent";text:root.launcherLock.launcherLocked ? "Locked by Modrinth" : "Unlock content";iconName:"lock";visible:root.contentLocked && !root.launcherLock.missing;enabled:!root.launcherLock.launcherLocked;onClicked:root.contentController.setProjectLocked(root.showcase.project,false) }
+            ActionButton { objectName:"unlockMissingContent";text:"Unlock content";iconName:"lock";visible:root.contentLocked;onClicked:root.contentController.setProjectLocked(root.showcase.project,false) }
             ActionButton { text: "View project page"; subtle: true; visible: !!root.showcase.project.url; onClicked: root.app.openWeb(root.showcase.project.url) }
         }
         SectionTabs { objectName: "showcaseTabs"; entries: [{key:"description",label:"Description",icon:"info"}].concat(root.hasGallery ? [{key:"gallery",label:"Gallery",icon:"image"}] : []).concat([{key:"versions",label:"Versions",icon:"versions"},{key:"changelog",label:"Changelog",icon:"history"}]); current: root.displayedTab; onSelected: function(key) { root.tabRequested(key) } }

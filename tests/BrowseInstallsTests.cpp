@@ -79,8 +79,8 @@ class BrowseInstallsTests : public QObject {
         for (const auto &release : releases) {
             const auto count = installs.size();
             model.installVersion(release.toVariant(), project());
-            QCOMPARE(installs.size(),
-                     count + int(selection.isEmpty() || selection.contains(release.channel)));
+            QCOMPARE(installs.size(), count + int((selection.isEmpty() ? QStringList{"release"} : selection)
+                                                      .contains(release.channel)));
         }
     }
     void changingPolicyInvalidatesPendingLookupAndDoesNotBroadenAnotherInstance() {
@@ -109,7 +109,7 @@ class BrowseInstallsTests : public QObject {
         release.channel = "beta";
         source->pending.last()({release}, {});
         QCOMPARE(installs.size(), 1);
-        QCOMPARE(policy->channels("b"), QStringList{});
+        QCOMPARE(policy->channels("b"), QStringList{"release"});
     }
     void badgeReadsAndIdenticalContextUpdatesStayWithinBudget() {
         BrowseInstalls model(std::make_shared<DeferredVersionCatalogue>());

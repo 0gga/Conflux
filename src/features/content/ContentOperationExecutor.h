@@ -10,10 +10,14 @@ class ContentOperationExecutor final : public QObject {
     ContentOperationExecutor(std::shared_ptr<const IContentFileStore> files,
                              std::shared_ptr<IContentInstaller> installer, QObject *parent = nullptr)
         : QObject(parent), m_files(std::move(files)), m_installer(std::move(installer)) {}
+    void setLauncherLocks(std::shared_ptr<const ILauncherContentLocks> locks) {
+        m_launcherLocks = std::move(locks);
+    }
     void execute(ContentOperation, ContentFileState, Callback);
 
   private:
     std::shared_ptr<const IContentFileStore> m_files;
+    std::shared_ptr<const ILauncherContentLocks> m_launcherLocks;
     std::shared_ptr<IContentInstaller> m_installer;
 };
 } // namespace studio

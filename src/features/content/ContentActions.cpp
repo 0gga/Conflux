@@ -411,10 +411,16 @@ void ContentActions::syncVisibleRows() {
 QVariantList ContentActions::withPreferences(const QVariantMap &pack, QVariantList rows) const {
     const auto path = pack.value("path").toString();
     QSet<QString> sourceLocks;
+    QHash<QString, bool> sourcePaths;
     for (const auto &value : pack.value("sourceContent").toList()) {
         const auto source = value.toMap();
+        auto relative = source.value("relativePath").toString();
+        if (relative.endsWith(".disabled"))
+            relative.chop(9);
+        sourcePaths[relative] = source.value("launcherLocked").toBool();
         if (source.value("launcherLocked").toBool() && !source.value("projectId").toString().isEmpty())
-            sourceLocks.insert(source.value("projectId").toString());
+            sourceLocks.insert(source.value("provider", "modrinth").toString() + ':' +
+                               source.value("projectId").toString());
     }
     for (auto &value : rows) {
         auto row = value.toMap();
@@ -422,20 +428,21 @@ QVariantList ContentActions::withPreferences(const QVariantMap &pack, QVariantLi
         auto relative = row.value("relativePath").toString();
         if (relative.endsWith(".disabled"))
             relative.chop(9);
-        row["launcherLocked"] = row.value("launcherLocked").toBool();
         const auto ids = row.value("sourceIds").toMap();
-        row["launcherLocked"] =
-            row.value("launcherLocked").toBool() || sourceLocks.contains(ids.value("modrinth").toString());
+        bool sourceLocked = pack.contains("sourceContent") ? sourcePaths.value(relative)
+                                                           : row.value("launcherLocked").toBool();
+        for (auto it = ids.cbegin(); it != ids.cend(); ++it)
+            sourceLocked |= sourceLocks.contains(it.key() + ':' + it.value().toString());
+        row["launcherLocked"] = sourceLocked;
         bool locked = row.value("launcherLocked").toBool() || m_preferences->locked(path, "path:" + relative);
         for (auto it = ids.cbegin(); !locked && it != ids.cend(); ++it)
             if (!it.value().toString().isEmpty())
                 locked = m_preferences->locked(path, it.key() + ':' + it.value().toString());
-        row["locked"] = locked;
+        row["locked"] = row.contains("lockPending") ? row.value("lockPending").toBool() : locked;
         row["updatedAt"] = m_preferences->updatedAt(path, identity);
         row["frozen"] = m_preferences->frozen(path, identity);
         const auto updateStages =
-            updateReleaseStages(row.value("installedRelease").toMap().value("channel").toString(),
-                                m_releasePolicy ? m_releasePolicy->channels(path) : QStringList{});
+            effectiveReleaseStages(m_releasePolicy ? m_releasePolicy->channels(path) : QStringList{});
         if (m_releasePolicy && row.value("updateAvailable").toBool() &&
             !updateStages.contains(row.value("updateRelease").toMap().value("channel").toString())) {
             row["updateAvailable"] = false;
@@ -492,35 +499,62 @@ void ContentActions::publishProjection() {
     syncLocks(path);
     emit changed();
 }
+void ContentActions::saveLockPreferences(const QString &pack, const QVariantList &rows, bool locked) {
+    for (const auto &value : rows) {
+        const auto row = value.toMap();
+        const auto ids = row.value("sourceIds").toMap();
+        for (auto it = ids.cbegin(); it != ids.cend(); ++it)
+            if (!it.value().toString().isEmpty())
+                m_preferences->setLocked(pack, it.key() + ':' + it.value().toString(), locked);
+        auto path = row.value("relativePath").toString();
+        if (path.endsWith(".disabled"))
+            path.chop(9);
+        if (!path.isEmpty())
+            m_preferences->setLocked(pack, "path:" + path, locked);
+    }
+}
+void ContentActions::changeLocks(const QVariantMap &pack, const QVariantList &rows, bool locked,
+                                 bool sourceOnly) {
+    if (rows.isEmpty())
+        return;
+    for (const auto &value : rows)
+        if (value.toMap().value("pending").toBool()) {
+            reject("This content already has an active or queued operation. Wait for it to finish.");
+            return;
+        }
+    const auto path = pack.value("path").toString();
+    if (pack.value("provider") == "modrinth" || pack.value("provider") == "curseforge") {
+        if (!m_states.contains(path))
+            m_states[path] = {pack, rows, {}};
+        ContentOperation operation;
+        operation.kind = ContentOperation::Lock;
+        operation.packPath = path;
+        operation.locked = locked;
+        if (sourceOnly)
+            operation.sourceLock = rows.first().toMap();
+        else
+            for (const auto &value : rows)
+                operation.targets << contentRowKey(value.toMap());
+        enqueue(operation);
+        return;
+    }
+    for (const auto &value : rows)
+        if (value.toMap().value("launcherLocked").toBool()) {
+            reject("The source launcher for this lock is unavailable.");
+            return;
+        }
+    saveLockPreferences(path, rows, locked);
+    ++m_lockRevision;
+    applyPreferences();
+    if (m_states.contains(path))
+        m_states[path].rows = withPreferences(pack, m_states.value(path).rows);
+    syncLocks(path);
+    emit changed();
+}
 void ContentActions::setLocked(const QString &path, bool value) {
     const auto row = find(path);
-    if (row.isEmpty())
-        return;
-    if (row.value("launcherLocked").toBool()) {
-        reject("This lock is managed by Modrinth. Unlock it in Modrinth.", row.value("title").toString());
-        return;
-    }
-    if (hasPending(m_pack.value("path").toString())) {
-        reject("Wait for this instance's content operation before changing locks.",
-               row.value("title").toString());
-        return;
-    }
-    const auto pack = m_pack.value("path").toString();
-    ++m_lockRevision;
-    auto relative = row.value("relativePath").toString();
-    if (relative.endsWith(".disabled"))
-        relative.chop(9);
-    const auto identity = preferenceIdentity(row);
-    const auto ids = row.value("sourceIds").toMap();
-    for (auto it = ids.cbegin(); it != ids.cend(); ++it)
-        if (!it.value().toString().isEmpty())
-            m_preferences->setLocked(pack, it.key() + ':' + it.value().toString(), value);
-    m_preferences->setLocked(pack, "path:" + relative, value);
-    applyPreferences();
-    if (m_states.contains(pack))
-        m_states[pack].rows = withPreferences(m_pack, m_states.value(pack).rows);
-    syncLocks(pack);
-    emit changed();
+    if (!row.isEmpty())
+        changeLocks(m_pack, {row}, value);
 }
 bool ContentActions::enqueue(ContentOperation operation) {
     if (m_pack.isEmpty() && operation.packPath.isEmpty())
@@ -564,6 +598,7 @@ bool ContentActions::enqueue(ContentOperation operation) {
                                            : QString::number(qMax(1, titles.size())) + " items",
                         operation.kind == ContentOperation::Install
                             ? (operation.targets.isEmpty() ? "Installing" : "Updating")
+                        : operation.kind == ContentOperation::Lock    ? (operation.locked ? "Lock" : "Unlock")
                         : operation.kind == ContentOperation::Remove  ? "Remove"
                         : operation.kind == ContentOperation::Import  ? "Import"
                         : operation.kind == ContentOperation::Restore ? "Restore locked version"
@@ -596,24 +631,13 @@ void ContentActions::startOperation(ContentOperation operation, ContentOperation
         for (auto &request : operation.requests) {
             auto selection =
                 guard->m_releasePolicy ? guard->m_releasePolicy->channels(operation.packPath) : QStringList{};
-            if (request.automaticUpdate) {
-                QString installedStage;
-                for (const auto &value : before.rows) {
-                    const auto row = value.toMap();
-                    if (row.value("relativePath").toString() == request.installedPath) {
-                        installedStage = row.value("installedRelease").toMap().value("channel").toString();
-                        break;
-                    }
-                }
-                selection = updateReleaseStages(installedStage, selection);
-            }
             if (!releaseStageAllowed(request.release.channel, selection)) {
                 guard->completeOperation(operation,
                                          {false, "This version is excluded by the modpack's release stages."},
                                          before, done);
                 return;
             }
-            request.allowedChannels = selection;
+            request.allowedChannels = effectiveReleaseStages(selection);
         }
         before.rows = guard->withPreferences(before.pack, before.rows);
         if (before.error.isEmpty())
@@ -663,6 +687,12 @@ void ContentActions::completeOperation(ContentOperation operation, ContentWriteR
     }
     current.rows =
         reconcileContentRows(current.rows, before.rows, result.ok ? operation.predictions : QVariantList{});
+    if (result.ok && operation.kind == ContentOperation::Lock)
+        saveLockPreferences(operation.packPath,
+                            operation.sourceLock.isEmpty()
+                                ? resolveContentTargets(before.rows, operation.targets)
+                                : QVariantList{operation.sourceLock},
+                            false);
     if (result.ok && operation.kind == ContentOperation::Install) {
         QHash<QString, QVariant> previousHashes;
         previousHashes.reserve(before.rows.size());
@@ -686,7 +716,7 @@ void ContentActions::completeOperation(ContentOperation operation, ContentWriteR
             m_pendingOperations.removeAt(i);
             break;
         }
-    m_anyChanged = m_anyChanged || result.ok || result.changed;
+    m_anyChanged = m_anyChanged || (result.ok && operation.kind != ContentOperation::Lock) || result.changed;
     const bool cancelled = m_cancelRequested && !result.ok;
     m_activity = cancelled ? "cancelled" : result.error.isEmpty() ? "success" : "error";
     m_activityText.clear();
@@ -903,12 +933,27 @@ QVariantMap ContentActions::sourceLock(const QVariantMap &project) const {
     for (const auto &value : pack.value("sourceContent").toList()) {
         const auto lock = value.toMap();
         if (lock.value("launcherLocked").toBool() && !lock.value("projectId").toString().isEmpty() &&
-            ids.value("modrinth") == lock.value("projectId"))
+            ids.value(lock.value("provider", "modrinth").toString()) == lock.value("projectId"))
             return lock;
     }
     return {};
 }
 bool ContentActions::projectLocked(const QVariantMap &project) const {
+    const auto targetPath = project.value("targetPack", m_pack).toMap().value("path").toString();
+    const auto requestedIds = projectIds(project);
+    for (const auto &operation : m_pendingOperations) {
+        if (operation.kind != ContentOperation::Lock || operation.packPath != targetPath)
+            continue;
+        auto targets = resolveContentTargets(m_states.value(targetPath).rows, operation.targets);
+        if (!operation.sourceLock.isEmpty())
+            targets << operation.sourceLock;
+        for (const auto &value : targets) {
+            const auto ids = value.toMap().value("sourceIds").toMap();
+            for (auto it = requestedIds.cbegin(); it != requestedIds.cend(); ++it)
+                if (!it.value().toString().isEmpty() && ids.value(it.key()) == it.value())
+                    return operation.locked;
+        }
+    }
     if (!sourceLock(project).isEmpty())
         return true;
     const auto target = project.value("targetPack", m_pack).toMap();
@@ -920,28 +965,34 @@ bool ContentActions::projectLocked(const QVariantMap &project) const {
     return false;
 }
 void ContentActions::setProjectLocked(const QVariantMap &project, bool locked) {
-    if (!sourceLock(project).isEmpty()) {
-        reject("This lock is managed by Modrinth. Unlock it in Modrinth.");
-        return;
-    }
-    if (hasPending(m_pack.value("path").toString())) {
-        reject("Wait for this instance's content operation before changing locks.");
-        return;
-    }
+    const auto target = project.value("targetPack", m_pack).toMap();
+    const auto path = target.value("path").toString();
+    const auto inventory = path == m_pack.value("path").toString() ? m_rows : m_states.value(path).rows;
     const auto ids = projectIds(project);
-    for (const auto &value : m_rows) {
+    QVariantList matches;
+    for (const auto &value : inventory) {
         const auto row = value.toMap();
         const auto installed = row.value("sourceIds").toMap();
         for (auto it = ids.cbegin(); it != ids.cend(); ++it)
             if (!it.value().toString().isEmpty() && installed.value(it.key()) == it.value()) {
-                setLocked(row.value("relativePath").toString(), locked);
+                matches << row;
                 break;
             }
     }
-    for (auto it = ids.cbegin(); it != ids.cend(); ++it)
-        if (!it.value().toString().isEmpty())
-            m_preferences->setLocked(m_pack.value("path").toString(), it.key() + ':' + it.value().toString(),
-                                     locked);
+    if (!matches.isEmpty()) {
+        changeLocks(target, matches, locked);
+        return;
+    }
+    const auto source = sourceLock(project);
+    if (!source.isEmpty()) {
+        changeLocks(target, {source}, locked, true);
+        return;
+    }
+    if (target.value("provider") == "modrinth" || target.value("provider") == "curseforge") {
+        reject("Install or restore this content before changing its source launcher lock.");
+        return;
+    }
+    saveLockPreferences(path, {QVariantMap{{"sourceIds", ids}}}, locked);
     ++m_lockRevision;
     applyPreferences();
     emit changed();

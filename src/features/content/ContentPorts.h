@@ -13,6 +13,11 @@ struct ContentFileState {
     QVariantList rows;
     QString error;
 };
+class ILauncherContentLocks {
+  public:
+    virtual ~ILauncherContentLocks() = default;
+    virtual ContentWriteResult setLocked(const QVariantMap &, const QVariantList &, bool) const = 0;
+};
 class IContentFileStore {
   public:
     virtual ~IContentFileStore() = default;

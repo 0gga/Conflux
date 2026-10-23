@@ -570,7 +570,7 @@ class ContentActionsTests : public QObject {
         QCOMPARE(content.inventory().first().toMap().value("sha1").toString(), QString("2"));
         QCOMPARE(catalogue->refreshCount, 2);
     }
-    void refreshFindsNewCompatibleUploadsInTheInstalledChannel_data() {
+    void refreshHonorsDefaultReleaseAndExplicitStages_data() {
         QTest::addColumn<QString>("oldChannel");
         QTest::addColumn<QString>("newChannel");
         QTest::addColumn<QString>("candidateGame");
@@ -578,14 +578,17 @@ class ContentActionsTests : public QObject {
         QTest::addColumn<bool>("expected");
         QTest::addColumn<QStringList>("selection");
         QTest::newRow("SoundPhysics1.5.1-alpha-to1.5.2-beta")
-            << QString("alpha") << QString("beta") << QString("1.21.1") << QString("neoforge") << true
+            << QString("alpha") << QString("beta") << QString("1.21.1") << QString("neoforge") << false
             << QStringList{};
+        QTest::newRow("SoundPhysics-beta-explicitly-enabled")
+            << QString("alpha") << QString("beta") << QString("1.21.1") << QString("neoforge") << true
+            << QStringList{"beta"};
         QTest::newRow("beta-to-beta") << QString("beta") << QString("beta") << QString("1.21.1")
-                                      << QString("neoforge") << true << QStringList{};
+                                      << QString("neoforge") << false << QStringList{};
         QTest::newRow("beta-to-release") << QString("beta") << QString("release") << QString("1.21.1")
                                          << QString("neoforge") << true << QStringList{};
         QTest::newRow("alpha-to-alpha") << QString("alpha") << QString("alpha") << QString("1.21.1")
-                                        << QString("neoforge") << true << QStringList{};
+                                        << QString("neoforge") << false << QStringList{};
         QTest::newRow("stable-does-not-opt-into-beta")
             << QString("release") << QString("beta") << QString("1.21.1") << QString("neoforge") << false
             << QStringList{};
@@ -608,7 +611,7 @@ class ContentActionsTests : public QObject {
                     << selection.contains(stage) << selection;
         }
     }
-    void refreshFindsNewCompatibleUploadsInTheInstalledChannel() {
+    void refreshHonorsDefaultReleaseAndExplicitStages() {
         QFETCH(QStringList, selection);
         QFETCH(QString, oldChannel);
         QFETCH(QString, newChannel);
@@ -697,10 +700,8 @@ class ContentActionsTests : public QObject {
         QCOMPARE(queries.size(), 2);
         if (!selection.isEmpty())
             QCOMPARE(queries.last(), QJsonArray::fromStringList(selection));
-        else if (oldChannel == "alpha")
-            QVERIFY(queries.last().contains("alpha"));
-        if (selection.isEmpty() && oldChannel != "release")
-            QVERIFY(queries.last().contains("beta"));
+        else
+            QCOMPARE(queries.last(), QJsonArray{"release"});
         content.setFilter("updates", true);
         QCOMPARE(content.rows().size(), expected ? 1 : 0);
         if (expected)

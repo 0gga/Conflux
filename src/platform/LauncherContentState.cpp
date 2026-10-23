@@ -1,25 +1,43 @@
 #include "LauncherContentState.h"
+#include "CurseforgeContentState.h"
+#include "PackFileStore.h"
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QSqlRecord>
 #include <QUuid>
 namespace studio {
-QVariantList LauncherContentState::read(const QVariantMap &pack, QString *error) {
-    QVariantList rows;
-    if (pack.value("provider") != "modrinth")
-        return rows;
+QString LauncherContentState::databasePath(const QVariantMap &pack) {
     const auto profile = QDir(pack.value("path").toString());
     QDir root(profile);
     int ancestors = 0;
     while (root.dirName().compare("profiles", Qt::CaseInsensitive) != 0 && ancestors++ < 16)
         if (!root.cdUp())
-            return rows;
+            return {};
     if (root.dirName().compare("profiles", Qt::CaseInsensitive) != 0 || !root.cdUp())
+        return {};
+    return NativePackFileStore::resolve(root.absolutePath(), "app.db");
+}
+QVariantList LauncherContentState::read(const QVariantMap &pack, QString *error) {
+    QVariantList rows;
+    if (pack.value("provider") == "curseforge") {
+        const auto path =
+            NativePackFileStore::resolve(pack.value("path").toString(), "minecraftinstance.json");
+        QFile file(path);
+        if (path.isEmpty() || !file.open(QIODevice::ReadOnly) || file.size() > 32 * 1024 * 1024) {
+            if (error)
+                *error = "Could not read CurseForge content locks.";
+            return {};
+        }
+        return CurseforgeContentState::read(file.readAll(), pack, error);
+    }
+    if (pack.value("provider") != "modrinth")
         return rows;
-    const auto database = root.filePath("app.db");
-    if (!QFileInfo::exists(database))
+    const QDir profile(pack.value("path").toString());
+    const auto database = databasePath(pack);
+    if (database.isEmpty() || !QFileInfo::exists(database))
         return rows;
     const auto connection = QUuid::createUuid().toString();
     {
@@ -57,6 +75,7 @@ QVariantList LauncherContentState::read(const QVariantMap &pack, QString *error)
                     if (!query.value(3).toString().isEmpty())
                         ids["modrinth"] = query.value(3).toString();
                     rows << QVariantMap{{"relativePath", relative},
+                                        {"category", relative.section('/', 0, 0)},
                                         {"sha1", hash},
                                         {"enabled", query.value(2).toBool()},
                                         {"sourceIds", ids},

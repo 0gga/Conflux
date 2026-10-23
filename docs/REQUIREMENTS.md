@@ -158,3 +158,7 @@ All dropdown options fill their available popup width. Ordinary options have no 
 ## Modpack release stages (2026-10-23)
 
 The owner requests one per-modpack selection controlling eligible installs and updates, not which installed items are visible. Merge the providers' equivalent stages: Release, Beta and Alpha. Modrinth version_type and CurseForge FileReleaseType are stability stages; Minecraft snapshots and publication/review statuses are separate concepts. Saved selections apply to both platforms and every content category. Keep installed files in place when the selection changes.
+
+The owner subsequently removed Automatic: Release is the default for both installs and updates. Existing empty/Automatic settings resolve to Release; saved explicit Beta/Alpha combinations remain.
+
+The owner also explicitly authorizes per-content Lock/Unlock in imported Modrinth and CurseForge instances to update the source launcher lock state. This is content locking, not locking the entire modpack. Source synchronization must be real, queued and failure-visible.

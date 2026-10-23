@@ -8,10 +8,10 @@ PopupButton {
     property var policy: null
     property string packPath: ""
     readonly property var stages: { const revision=policy ? policy.revision : 0; return policy ? policy.channels(packPath) : [] }
-    readonly property string summary: stages.length === 0 ? "Auto" : stages.length === 3 ? "All" : stages.map(function(stage) { return stage.charAt(0).toUpperCase()+stage.slice(1) }).join(" + ")
+    readonly property string summary: stages.length === 3 ? "All" : stages.map(function(stage) { return stage.charAt(0).toUpperCase()+stage.slice(1) }).join(" + ")
     popup: menu; compact: true; iconName: "versions"
     text: "Stages: " + summary
-    hint: stages.length === 0 ? "Quick installs: Release. Updates: installed stage or more stable." : "Allowed stages for this modpack’s installs and updates"
+    hint: "Allowed stages for this modpack’s installs and updates"
     visible: !!policy && packPath.length > 0
     enabled: visible
     onPackPathChanged: menu.close()
@@ -20,12 +20,6 @@ PopupButton {
         background: Rectangle { radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border }
         contentItem: ColumnLayout {
             spacing: 3
-            MenuOption {
-                objectName: "releaseStageAuto"; Layout.fillWidth: true; text: "Automatic"; iconName: "refresh"; selected: root.stages.length === 0
-                hint: "Quick installs: Release. Updates: installed stage or more stable."
-                onClicked: { root.policy.setChannels(root.packPath,[]); menu.close() }
-            }
-            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.colors.border; Layout.topMargin: 3; Layout.bottomMargin: 3 }
             Repeater {
                 model: root.policy ? root.policy.choices : []
                 delegate: MenuOption {

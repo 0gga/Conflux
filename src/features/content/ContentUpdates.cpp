@@ -1,6 +1,7 @@
 #include "ContentActions.h"
 #include "domain/ContentCompatibility.h"
 #include "domain/ContentTypes.h"
+#include "domain/ReleaseStages.h"
 #include <QPointer>
 namespace studio {
 static bool updateReady(const QVariantMap &row) {
@@ -31,9 +32,7 @@ ContentInstallRequest ContentActions::updateRequest(const QVariantMap &row) cons
             QJsonObject::fromVariantMap(row.value("sourceIds").toMap()),
             categoryType(row.value("category").toString()),
             false,
-            row.value("relativePath").toString(),
-            {},
-            true};
+            row.value("relativePath").toString()};
 }
 void ContentActions::update(const QString &path) {
     const auto row = find(path);
@@ -110,8 +109,9 @@ void ContentActions::installVersion(int index) {
     installRelease(m_versions.at(index).toMap(), project);
 }
 bool ContentActions::releaseAllowed(const QVariantMap &release) const {
-    return !m_releasePolicy ||
-           m_releasePolicy->allows(m_pack.value("path").toString(), release.value("channel").toString());
+    return releaseStageAllowed(release.value("channel", "release").toString(),
+                               m_releasePolicy ? m_releasePolicy->channels(m_pack.value("path").toString())
+                                               : QStringList{});
 }
 void ContentActions::installRelease(const QVariantMap &release, const QVariantMap &project) {
     auto type = project.value("type", "mod").toString();

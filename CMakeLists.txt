@@ -89,6 +89,8 @@ target_sources(conflux_desktop PRIVATE
     src/features/preferences/ContentPreferences.h src/features/preferences/ContentPreferences.cpp
     src/platform/NativeContentStore.h src/platform/NativeContentStore.cpp
     src/platform/LauncherContentState.h src/platform/LauncherContentState.cpp
+    src/platform/LauncherContentLocks.h src/platform/LauncherContentLocks.cpp
+    src/platform/CurseforgeContentState.h src/platform/CurseforgeContentState.cpp
     src/platform/ContentInstaller.h src/platform/ContentInstaller.cpp
     src/platform/CurseforgeInstallSource.h src/platform/CurseforgeInstallSource.cpp
     src/services/ContentCatalogue.h src/services/ContentCatalogue.cpp
@@ -162,6 +164,9 @@ target_link_libraries(modpack-studio PRIVATE pack_foundation conflux_desktop con
 set_target_properties(modpack-studio PROPERTIES WIN32_EXECUTABLE TRUE MACOSX_BUNDLE TRUE)
 include(CTest)
 if(BUILD_TESTING)
+    qt_add_executable(launcher-content-lock-tests tests/LauncherContentLockTests.cpp)
+    target_link_libraries(launcher-content-lock-tests PRIVATE conflux_desktop Qt6::Test)
+    add_test(NAME launcher-content-locks COMMAND launcher-content-lock-tests -o "${CMAKE_CURRENT_BINARY_DIR}/launcher-content-lock-results.txt,txt")
     qt_add_executable(release-policy-tests tests/ReleasePolicyTests.cpp)
     target_link_libraries(release-policy-tests PRIVATE conflux_desktop conflux_styleplugin Qt6::Quick Qt6::QuickControls2 Qt6::Test)
     target_compile_definitions(release-policy-tests PRIVATE CONFLUX_QML_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")

@@ -213,7 +213,7 @@ class CurseforgeInstallTests final : public QObject {
             QVERIFY2(error.isEmpty(), qPrintable(error));
             QCOMPARE(rows.size(), 1);
             QCOMPARE(rows.first().toMap().value("updateAvailable").toBool(),
-                     (scenario == 0 || scenario == 3 || scenario == 6 || scenario == 7));
+                     (scenario == 0 || scenario == 6));
             QVERIFY(rows.first().toMap().value("locked").toBool());
         }
     }

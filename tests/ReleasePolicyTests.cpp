@@ -3,6 +3,7 @@
 #include "features/preferences/PackReleasePolicy.h"
 #include "platform/BrowseSettingsStore.h"
 #include "services/ContentCatalogue.h"
+#include <QCryptographicHash>
 #include <QElapsedTimer>
 #include <QFontDatabase>
 #include <QQmlComponent>
@@ -54,12 +55,9 @@ class ReleasePolicyTests final : public QObject {
             const auto mr = modrinthRelease({{"version_type", stages[i]}});
             const auto cf = curseforgeRelease({{"releaseType", i + 1}});
             QCOMPARE(mr.channel, cf.channel);
-            QCOMPARE(releaseStageAllowed(mr.channel, selection), mask == 0 || bool(mask & (1 << i)));
-            for (const auto &installed : stages) {
-                const auto expected =
-                    selection.isEmpty() ? stages.mid(0, stages.indexOf(installed) + 1) : selection;
-                QCOMPARE(updateReleaseStages(installed, selection), expected);
-            }
+            QCOMPARE(releaseStageAllowed(mr.channel, selection), mask == 0 ? i == 0 : bool(mask & (1 << i)));
+            const auto expected = selection.isEmpty() ? QStringList{"release"} : selection;
+            QCOMPARE(effectiveReleaseStages(selection), expected);
         }
         QVERIFY(!releaseStageAllowed("snapshot", selection));
         QVERIFY(!releaseStageAllowed("unknown", selection));
@@ -71,10 +69,10 @@ class ReleasePolicyTests final : public QObject {
         auto store = std::make_shared<BrowseSettingsStore>(temp.path() + "/prefs.ini");
         PackReleasePolicy policy(store);
         QSignalSpy changes(&policy, &PackReleasePolicy::changed);
-        QCOMPARE(policy.channels("pack-a"), QStringList{});
+        QCOMPARE(policy.channels("pack-a"), QStringList{"release"});
         policy.setChannels("pack-a", {" BETA ", "release", "beta"});
         QCOMPARE(policy.channels("pack-a"), (QStringList{"release", "beta"}));
-        QCOMPARE(policy.channels("pack-b"), QStringList{});
+        QCOMPARE(policy.channels("pack-b"), QStringList{"release"});
         policy.setChannels("pack-a", {"release", "beta"});
         policy.setChannels("pack-a", {"snapshot"});
         policy.setChannels("", {"alpha"});
@@ -82,15 +80,25 @@ class ReleasePolicyTests final : public QObject {
         {
             PackReleasePolicy reopened(std::make_shared<BrowseSettingsStore>(temp.path() + "/prefs.ini"));
             QCOMPARE(reopened.channels("pack-a"), (QStringList{"release", "beta"}));
-            QCOMPARE(reopened.channels("pack-b"), QStringList{});
+            QCOMPARE(reopened.channels("pack-b"), QStringList{"release"});
         }
 #ifdef Q_OS_WIN
         policy.setChannels("C:/Instances/Pack/", {"alpha"});
         QCOMPARE(policy.channels("c:/instances/pack"), QStringList{"alpha"});
 #endif
+        // Previously saved Automatic/empty values migrate to Release without changing explicit choices.
+        const auto legacyKey =
+            "content/release-stages/" +
+            QString::fromLatin1(
+                QCryptographicHash::hash(QByteArray("legacy"), QCryptographicHash::Sha256).toHex());
+        store->save(legacyKey, QStringList{});
+        PackReleasePolicy migrated(store);
+        QCOMPARE(migrated.channels("legacy"), QStringList{"release"});
+        QCOMPARE(migrated.channels("pack-a"), (QStringList{"release", "beta"}));
         policy.setChannels("pack-a", {});
-        QCOMPARE(policy.channels("pack-a"), QStringList{});
-        QVERIFY(policy.allows("pack-a", "beta"));
+        QCOMPARE(policy.channels("pack-a"), QStringList{"release"});
+        QVERIFY(!policy.allows("pack-a", "beta"));
+        QVERIFY(policy.allows("pack-a", "release"));
         QVERIFY(!policy.allows("pack-a", "archived"));
     }
     void repeatedReadsHaveNoWritesOrSignals() {
@@ -227,7 +235,11 @@ Item { required property var policyModel; Rectangle { anchors.fill:parent; color
                      .toInt(),
                  0);
         QVERIFY(beta->width() >= 200);
+        QCOMPARE(picker->property("text").toString(), QString("Stages: Release"));
+        QVERIFY(!item(window.contentItem(), "releaseStageAuto"));
         click(beta);
+        QCOMPARE(policy.channels("pack"), (QStringList{"release", "beta"}));
+        click(release);
         QCOMPARE(policy.channels("pack"), QStringList{"beta"});
         QCOMPARE(picker->property("text").toString(), QString("Stages: Beta"));
         click(release);
@@ -239,9 +251,7 @@ Item { required property var policyModel; Rectangle { anchors.fill:parent; color
         QCOMPARE(policy.channels("pack"), QStringList{"release"});
         click(release); // Last explicit stage cannot disappear accidentally.
         QCOMPARE(policy.channels("pack"), QStringList{"release"});
-        click(item(window.contentItem(), "releaseStageAuto"));
-        QCOMPARE(policy.channels("pack"), QStringList{});
-        QCOMPARE(picker->property("text").toString(), QString("Stages: Auto"));
+        QCOMPARE(picker->property("text").toString(), QString("Stages: Release"));
 #endif
     }
 };

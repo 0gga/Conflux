@@ -14,7 +14,7 @@ QString PackReleasePolicy::instanceKey(const QString &path) {
 }
 QStringList PackReleasePolicy::channels(const QString &path) const {
     if (path.isEmpty())
-        return {};
+        return {"release"};
     const auto key = instanceKey(path);
     if (!m_cache.contains(key)) {
         const auto storageKey =
@@ -23,14 +23,14 @@ QStringList PackReleasePolicy::channels(const QString &path) const {
         const auto saved = m_store->value(storageKey).toStringList();
         auto stages = normalizedReleaseStages(saved);
         // Corrupt/obsolete settings must not silently opt stable content into prereleases.
-        if (!saved.isEmpty() && stages.isEmpty())
+        if (stages.isEmpty())
             stages = {"release"};
         m_cache.insert(key, stages);
     }
     return m_cache.value(key);
 }
 void PackReleasePolicy::setChannels(const QString &path, const QStringList &input) {
-    const auto stages = normalizedReleaseStages(input);
+    const auto stages = effectiveReleaseStages(input);
     if (path.isEmpty() || (!input.isEmpty() && stages.isEmpty()) || channels(path) == stages)
         return;
     const auto storageKey =

@@ -102,7 +102,9 @@ Item { SelectBox { objectName:"sizeSelect";x:20;y:20;width:220;model:["10 per pa
         QVERIFY(select);
         QSignalSpy activated(select, SIGNAL(activated(int)));
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center(select));
-        QTRY_VERIFY(item(window.contentItem(), "selectBoxOption-0"));
+        QTRY_VERIFY(item(window.contentItem(), "selectBoxOption-0") &&
+                    item(window.contentItem(), "selectBoxOption-1") &&
+                    item(window.contentItem(), "selectBoxOption-2"));
         auto *option = item(window.contentItem(), "selectBoxOption-0"),
              *selected = item(window.contentItem(), "selectBoxOption-1");
         QVERIFY(selected);

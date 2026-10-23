@@ -2,6 +2,7 @@
 #include "domain/TextSearch.h"
 #include "features/content/ContentActions.h"
 #include "features/preferences/ContentPreferences.h"
+#include "platform/BrowseSettingsStore.h"
 #include "platform/ContentInstaller.h"
 #include "platform/InstalledModIdentity.h"
 #include "platform/NativeContentStore.h"
@@ -61,6 +62,57 @@ class ContentActionsTests : public QObject {
     }
   private slots:
 
+    void rapidPolicyChangesAreCoalescedAndOldResultsCannotRestoreUpdates() {
+        class DeferredCatalogue final : public IContentCatalogue {
+          public:
+            QList<IndexCallback> replies;
+            QList<QStringList> selections;
+            void refresh(const QVariantList &, const QString &, const QString &,
+                         IndexCallback callback) override {
+                replies << callback;
+            }
+            void refreshWithChannels(const QVariantList &, const QString &, const QString &,
+                                     const QStringList &stages, IndexCallback callback) override {
+                selections << stages;
+                replies << callback;
+            }
+            void versions(const QVariantMap &, const QString &, const QString &, VersionsCallback) override {}
+            void setCurseforgeKey(const QByteArray &) override {}
+        };
+        QTemporaryDir temp;
+        auto source = std::make_shared<DeferredCatalogue>();
+        auto policy = std::make_shared<PackReleasePolicy>(
+            std::make_shared<BrowseSettingsStore>(temp.path() + "/stages.ini"));
+        ContentActions content(std::make_shared<ContentFileFixture>(), source,
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        content.setReleasePolicy(policy);
+        const QVariantMap pack{{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "fabric"}};
+        const auto file = row("Example", "Author");
+        content.setContext(pack, {file});
+        QTRY_COMPARE(source->replies.size(), 1);
+        policy->setChannels(temp.path(), {"release", "beta"});
+        policy->setChannels(temp.path(), {"beta"});
+        policy->setChannels(temp.path(), {"alpha"});
+        QCOMPARE(content.rows().size(), 1);
+        QCOMPARE(content.updateCount(), 0);
+        source->replies.first()({file}, {}); // Obsolete in-flight stable result.
+        QCOMPARE(content.updateCount(), 0);
+        QTRY_COMPARE(source->replies.size(), 2);
+        QCOMPARE(source->selections.last(), QStringList{"alpha"});
+        source->replies.last()({file}, {}); // Defensive filtering even if an adapter ignores stages.
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(content.updateCount(), 0);
+        QCOMPARE(content.rows().size(), 1);
+        policy->setChannels(temp.path(), {"release"});
+        content.setContext({{"path", temp.path() + "/other"}, {"minecraft", "1.21.1"}, {"loader", "fabric"}},
+                           {file});
+        QTRY_COMPARE(source->replies.size(), 3);
+        source->replies.last()({file}, {});
+        QTRY_VERIFY(!content.busy());
+        QTest::qWait(200);
+        QCOMPARE(source->replies.size(), 3); // Old instance debounce was cancelled on navigation.
+    }
     void updateDoesNotSwitchLoaderEvenWhenConnectorAllowsFabricInstalls() {
         QTemporaryDir temp;
         auto files = std::make_shared<NativeContentStore>(nullptr, temp.path() + "/backups");
@@ -524,24 +576,40 @@ class ContentActionsTests : public QObject {
         QTest::addColumn<QString>("candidateGame");
         QTest::addColumn<QString>("candidateLoader");
         QTest::addColumn<bool>("expected");
+        QTest::addColumn<QStringList>("selection");
         QTest::newRow("SoundPhysics1.5.1-alpha-to1.5.2-beta")
-            << QString("alpha") << QString("beta") << QString("1.21.1") << QString("neoforge") << true;
-        QTest::newRow("beta-to-beta")
-            << QString("beta") << QString("beta") << QString("1.21.1") << QString("neoforge") << true;
-        QTest::newRow("beta-to-release")
-            << QString("beta") << QString("release") << QString("1.21.1") << QString("neoforge") << true;
-        QTest::newRow("alpha-to-alpha")
-            << QString("alpha") << QString("alpha") << QString("1.21.1") << QString("neoforge") << true;
+            << QString("alpha") << QString("beta") << QString("1.21.1") << QString("neoforge") << true
+            << QStringList{};
+        QTest::newRow("beta-to-beta") << QString("beta") << QString("beta") << QString("1.21.1")
+                                      << QString("neoforge") << true << QStringList{};
+        QTest::newRow("beta-to-release") << QString("beta") << QString("release") << QString("1.21.1")
+                                         << QString("neoforge") << true << QStringList{};
+        QTest::newRow("alpha-to-alpha") << QString("alpha") << QString("alpha") << QString("1.21.1")
+                                        << QString("neoforge") << true << QStringList{};
         QTest::newRow("stable-does-not-opt-into-beta")
-            << QString("release") << QString("beta") << QString("1.21.1") << QString("neoforge") << false;
+            << QString("release") << QString("beta") << QString("1.21.1") << QString("neoforge") << false
+            << QStringList{};
         QTest::newRow("beta-does-not-opt-into-alpha")
-            << QString("beta") << QString("alpha") << QString("1.21.1") << QString("neoforge") << false;
-        QTest::newRow("wrong-minecraft")
-            << QString("alpha") << QString("beta") << QString("1.20.1") << QString("neoforge") << false;
-        QTest::newRow("wrong-loader")
-            << QString("alpha") << QString("beta") << QString("1.21.1") << QString("fabric") << false;
+            << QString("beta") << QString("alpha") << QString("1.21.1") << QString("neoforge") << false
+            << QStringList{};
+        QTest::newRow("wrong-minecraft") << QString("alpha") << QString("beta") << QString("1.20.1")
+                                         << QString("neoforge") << false << QStringList{};
+        QTest::newRow("wrong-loader") << QString("alpha") << QString("beta") << QString("1.21.1")
+                                      << QString("fabric") << false << QStringList{};
+        for (int mask = 1; mask < 8; ++mask) {
+            QStringList selection;
+            const QStringList stages{"release", "beta", "alpha"};
+            for (int i = 0; i < 3; ++i)
+                if (mask & (1 << i))
+                    selection << stages[i];
+            for (const auto &stage : stages)
+                QTest::newRow(qPrintable(QString("explicit-%1-%2").arg(mask).arg(stage)))
+                    << QString("release") << stage << QString("1.21.1") << QString("neoforge")
+                    << selection.contains(stage) << selection;
+        }
     }
     void refreshFindsNewCompatibleUploadsInTheInstalledChannel() {
+        QFETCH(QStringList, selection);
         QFETCH(QString, oldChannel);
         QFETCH(QString, newChannel);
         QFETCH(QString, candidateGame);
@@ -593,7 +661,8 @@ class ContentActionsTests : public QObject {
                                               .value("version_types")
                                               .toArray();
                     queries << channels;
-                    const bool offer = published && channels.contains(newChannel);
+                    // Deliberately ignore the requested stages: the client must still reject bad responses.
+                    const bool offer = published;
                     response = QJsonDocument(QJsonObject{{hash, release(offer)}});
                 }
                 const auto body = response.toJson(QJsonDocument::Compact);
@@ -611,6 +680,10 @@ class ContentActionsTests : public QObject {
                                std::make_shared<ContentInstallerFixture>(),
                                std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
         const QVariantMap pack{{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "neoforge"}};
+        auto policy = std::make_shared<PackReleasePolicy>(
+            std::make_shared<BrowseSettingsStore>(temp.path() + "/stages.ini"));
+        policy->setChannels(temp.path(), selection);
+        content.setReleasePolicy(policy);
         content.setContext(pack, {QVariantMap{{"category", "mods"},
                                               {"relativePath", "mods/sound-physics.jar"},
                                               {"sha1", hash},
@@ -622,9 +695,11 @@ class ContentActionsTests : public QObject {
         QTRY_VERIFY(!content.busy());
         QCOMPARE(content.actionableUpdateCount(), expected ? 1 : 0);
         QCOMPARE(queries.size(), 2);
-        if (oldChannel == "alpha")
+        if (!selection.isEmpty())
+            QCOMPARE(queries.last(), QJsonArray::fromStringList(selection));
+        else if (oldChannel == "alpha")
             QVERIFY(queries.last().contains("alpha"));
-        if (oldChannel != "release")
+        if (selection.isEmpty() && oldChannel != "release")
             QVERIFY(queries.last().contains("beta"));
         content.setFilter("updates", true);
         QCOMPARE(content.rows().size(), expected ? 1 : 0);

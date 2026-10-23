@@ -45,7 +45,7 @@ class ModInstaller : public QObject {
     int m_generation = 0, m_downloadIndex = 0;
     bool m_busy = false, m_applying = false;
     QString m_path, m_game, m_loader;
-    QStringList m_allowedLoaders;
+    QStringList m_allowedLoaders, m_allowedChannels;
     QSet<QString> m_shallowRoots;
     QJsonObject m_expected;
     QQueue<Task> m_tasks;

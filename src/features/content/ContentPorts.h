@@ -41,6 +41,10 @@ class IContentCatalogue {
     using VersionsCallback = std::function<void(QVector<Release>, QString)>;
     virtual ~IContentCatalogue() = default;
     virtual void refresh(const QVariantList &, const QString &, const QString &, IndexCallback) = 0;
+    virtual void refreshWithChannels(const QVariantList &rows, const QString &game, const QString &loader,
+                                     const QStringList &, IndexCallback callback) {
+        refresh(rows, game, loader, std::move(callback));
+    }
     virtual void versions(const QVariantMap &, const QString &, const QString &, VersionsCallback) = 0;
     virtual void setCurseforgeKey(const QByteArray &) = 0;
 };

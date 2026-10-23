@@ -31,7 +31,9 @@ ContentInstallRequest ContentActions::updateRequest(const QVariantMap &row) cons
             QJsonObject::fromVariantMap(row.value("sourceIds").toMap()),
             categoryType(row.value("category").toString()),
             false,
-            row.value("relativePath").toString()};
+            row.value("relativePath").toString(),
+            {},
+            true};
 }
 void ContentActions::update(const QString &path) {
     const auto row = find(path);
@@ -106,6 +108,10 @@ void ContentActions::installVersion(int index) {
     auto project = m_versionTarget;
     project["type"] = categoryType(m_versionTarget.value("category").toString());
     installRelease(m_versions.at(index).toMap(), project);
+}
+bool ContentActions::releaseAllowed(const QVariantMap &release) const {
+    return !m_releasePolicy ||
+           m_releasePolicy->allows(m_pack.value("path").toString(), release.value("channel").toString());
 }
 void ContentActions::installRelease(const QVariantMap &release, const QVariantMap &project) {
     auto type = project.value("type", "mod").toString();

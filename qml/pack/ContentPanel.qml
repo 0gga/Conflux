@@ -8,6 +8,8 @@ import "../components"
 Item {
     id: root; objectName: "contentPanel"
     required property var controller
+    property var releasePolicy: null
+    property string packPath: ""
     property string minecraft: ""
     property string loader: ""
     signal showcaseRequested(string path, string tab)
@@ -37,6 +39,7 @@ Item {
                     delegate: ActionButton { required property var modelData; text: modelData.label; compact: true; pill: true; subtle: true; selectionOutlineOnly: true; selected: root.controller.category === modelData.key; onClicked: root.controller.category = modelData.key }
                 }
                 ActionButton { text: "Clear"; compact: true; subtle: true; visible: !!root.controller.filters.author || !!root.controller.filters.environment || !!root.controller.filters.state || root.controller.filters.openSource || root.controller.filters.external || root.controller.filters.locked || root.controller.filters.recent; onClicked: root.controller.clearFilters() }
+                ReleaseStagePicker { policy: root.releasePolicy; packPath: root.packPath }
                 PopupButton { id: filterButton; popup: filters; text: "Filter"; iconName: "plus"; compact: true }
             }
             Item {
@@ -138,7 +141,7 @@ Item {
         onRemoveRequested: { removeDialog.path = ""; removeDialog.modTitle = root.controller.selected.length + " selected projects"; removeDialog.open() }
     }
     ContentFilter { id: filters; objectName: "contentFilter"; parent: filterButton; y: filterButton.height+6; controller: root.controller }
-    VersionPicker { id: versions; objectName: "versionPicker"; controller: root.controller; minecraft: root.minecraft; preferredLoader: root.loader }
+    VersionPicker { id: versions; objectName: "versionPicker"; releasePolicy: root.releasePolicy; packPath: root.packPath; controller: root.controller; minecraft: root.minecraft; preferredLoader: root.loader }
     FileDialog { id: upload; title: "Add content to this pack"; fileMode: FileDialog.OpenFiles; nameFilters: ["Mods (*.jar)","Resource packs (*.zip)","Shader packs (*.zip)","Data packs (*.zip)"]; onAccepted: root.controller.importFiles(selectedFiles,["mods","resourcepacks","shaderpacks","datapacks"][selectedNameFilter.index]) }
     FocusDialog {
         id: removeDialog; property string path: ""; property string modTitle: ""

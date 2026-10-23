@@ -35,6 +35,7 @@ class DesktopSession final : public QObject {
     Q_PROPERTY(studio::ConfigLibrary *configs READ configs CONSTANT)
     Q_PROPERTY(studio::WorldLaunch *launch READ launch CONSTANT)
     Q_PROPERTY(studio::ProjectShowcase *showcase READ showcase CONSTANT)
+    Q_PROPERTY(studio::PackReleasePolicy *releasePolicy READ releasePolicy CONSTANT)
     Q_PROPERTY(studio::ReleaseFilters *releaseFilters READ releaseFilters CONSTANT)
     Q_PROPERTY(studio::ContentActions *content READ content CONSTANT)
     Q_PROPERTY(studio::BrowseInstalls *browse READ browse CONSTANT)
@@ -78,6 +79,9 @@ class DesktopSession final : public QObject {
     ReleaseFilters *releaseFilters() {
         return &m_releaseFilters;
     }
+    PackReleasePolicy *releasePolicy() {
+        return m_releasePolicy.get();
+    }
     ContentActions *content() {
         return &m_content;
     }
@@ -105,6 +109,7 @@ class DesktopSession final : public QObject {
   private:
     std::shared_ptr<IBrowseSettingsStore> m_browseStore;
     std::shared_ptr<ContentVisibility> m_visibility;
+    std::shared_ptr<PackReleasePolicy> m_releasePolicy;
     std::shared_ptr<const NativePackFileStore> m_fileStore;
     std::shared_ptr<ContentLockRegistry> m_contentLocks;
     std::shared_ptr<const NativeContentStore> m_contentFiles;

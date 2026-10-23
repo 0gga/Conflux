@@ -217,6 +217,63 @@ class CurseforgeInstallTests final : public QObject {
             QVERIFY(rows.first().toMap().value("locked").toBool());
         }
     }
+    void explicitStagesConstrainCurseforgeUpdates() {
+        CurseforgeFixture server;
+        auto old = server.file(11, 101, "old bytes");
+        old["fileDate"] = "2026-10-21T10:00:00Z";
+        auto candidate = server.file(11, 102, "new bytes");
+        server.responses["/version_files"] = "{}";
+        ContentCatalogue source(nullptr, server.base(), server.base());
+        source.setCurseforgeKey("fixture-key");
+        const auto installed = curseforgeRelease(old);
+        const QVariantMap row{{"category", "mods"},
+                              {"sha1", installed.sha1},
+                              {"installedRelease", installed.toVariant()},
+                              {"sourceIds", QVariantMap{{"curseforge", "11"}}}};
+        const QStringList stages{"release", "beta", "alpha"};
+        for (int mask = 1; mask < 8; ++mask) {
+            QStringList selection;
+            for (int i = 0; i < 3; ++i)
+                if (mask & (1 << i))
+                    selection << stages[i];
+            for (int stage = 1; stage <= 3; ++stage) {
+                candidate["releaseType"] = stage;
+                server.json("/mods/11/files", QJsonArray{candidate});
+                bool done = false;
+                source.refreshWithChannels(
+                    {row}, "1.21.1", "fabric", selection, [&](QVariantList rows, QString error) {
+                        QVERIFY2(error.isEmpty(), qPrintable(error));
+                        QCOMPARE(rows.first().toMap().value("updateAvailable").toBool(),
+                                 selection.contains(stages[stage - 1]));
+                        done = true;
+                    });
+                QTRY_VERIFY(done);
+            }
+        }
+    }
+    void excludedCurseforgeDependencyLeavesTheInitialInstallUnchanged() {
+        CurseforgeFixture server;
+        QTemporaryDir temp;
+        const auto root = server.file(11, 101, "root", {QJsonObject{{"modId", 12}, {"relationType", 3}}});
+        auto dependency = server.file(12, 102, "library");
+        dependency["releaseType"] = 2;
+        server.json("/mods/12/files", QJsonArray{dependency});
+        server.json("/mods/12/files/102", dependency);
+        CurseforgeInstallSource source(nullptr, server.base());
+        source.setKey("fixture-key");
+        auto selected = request(root);
+        selected.allowedChannels = {"release"};
+        bool done = false;
+        source.prepare({{"minecraft", "1.21.1"}, {"loader", "fabric"}}, {}, {selected},
+                       [&](QVector<ContentInstallRequest> rows, QString error) {
+                           QVERIFY(rows.isEmpty());
+                           QVERIFY(error.contains("dependency"));
+                           done = true;
+                       });
+        QTRY_VERIFY(done);
+        QVERIFY(!server.requests.contains("/download/101"));
+        QVERIFY(!server.requests.contains("/download/102"));
+    }
     void aCorruptDependencyDownloadLeavesTheWholeInitialInstallUnchanged() {
         CurseforgeFixture server;
         QTemporaryDir temp;

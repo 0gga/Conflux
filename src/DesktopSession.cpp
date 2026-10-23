@@ -14,6 +14,7 @@ namespace studio {
 DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString backupRoot)
     : QObject(parent), m_browseStore(std::make_shared<BrowseSettingsStore>(settingsFile)),
       m_visibility(std::make_shared<ContentVisibility>(m_browseStore)),
+      m_releasePolicy(std::make_shared<PackReleasePolicy>(m_browseStore)),
       m_fileStore(std::make_shared<NativePackFileStore>(backupRoot)),
       m_contentLocks(std::make_shared<ContentLockRegistry>()),
       m_contentFiles(std::make_shared<NativeContentStore>(
@@ -38,6 +39,8 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
                   m_visibility, ReviewedProjectIdentities::load(),
                   std::make_shared<BrowseFilterPreferences>(m_browseStore), this),
       m_changes(this) {
+    m_content.setReleasePolicy(m_releasePolicy);
+    m_browse.setReleasePolicy(m_releasePolicy);
     m_content.setVisibility(m_visibility);
     m_content.setLockRegistry(m_contentLocks);
     connect(m_visibility.get(), &ContentVisibility::changed, &m_content, &ContentActions::visibilityChanged);

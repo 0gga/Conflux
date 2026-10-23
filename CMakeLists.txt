@@ -23,7 +23,7 @@ add_library(miniz STATIC third_party/miniz.c third_party/miniz_tdef.c third_part
 target_include_directories(miniz PUBLIC third_party)
 
 qt_add_library(pack_foundation STATIC
-    src/domain/Catalogue.h src/domain/Catalogue.cpp src/domain/CatalogueSearch.h
+    src/domain/Catalogue.h src/domain/Catalogue.cpp src/domain/CatalogueSearch.h src/domain/ReleaseStages.h
     src/platform/ReviewedAuthorIdentities.h src/platform/ReviewedAuthorIdentities.cpp
     src/platform/ProjectAuthors.h src/platform/ProjectAuthors.cpp
     src/platform/ReviewedProjectIdentities.h src/platform/ReviewedProjectIdentities.cpp
@@ -68,6 +68,7 @@ qt_add_library(conflux_desktop STATIC
     src/features/config/ConfigEditor.h src/features/config/ConfigEditor.cpp)
 target_sources(conflux_desktop PRIVATE
     src/features/content/ContentPorts.h
+    src/features/preferences/PackReleasePolicy.h src/features/preferences/PackReleasePolicy.cpp
     src/features/explore/BrowseInstalls.h src/features/explore/BrowseInstalls.cpp
     src/features/explore/TolerantCatalogueSearch.h src/features/explore/TolerantCatalogueSearch.cpp
     src/features/explore/BrowseCatalogue.h src/features/explore/BrowseCatalogue.cpp
@@ -112,6 +113,7 @@ endif()
 qt_add_executable(modpack-studio src/main.cpp src/ApplicationController.h src/ApplicationController.cpp src/verification/DesktopSmokeTest.h src/verification/DesktopSmokeTest.cpp)
 qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     QML_FILES
+    qml/components/ReleaseStagePicker.qml
     qml/components/NotificationBanner.qml qml/components/ChangelogView.qml
     qml/components/SearchableSelect.qml qml/components/CreatePackDialog.qml qml/settings/GitSettings.qml
     qml/components/MenuList.qml qml/components/MenuOption.qml
@@ -160,6 +162,11 @@ target_link_libraries(modpack-studio PRIVATE pack_foundation conflux_desktop con
 set_target_properties(modpack-studio PROPERTIES WIN32_EXECUTABLE TRUE MACOSX_BUNDLE TRUE)
 include(CTest)
 if(BUILD_TESTING)
+    qt_add_executable(release-policy-tests tests/ReleasePolicyTests.cpp)
+    target_link_libraries(release-policy-tests PRIVATE conflux_desktop conflux_styleplugin Qt6::Quick Qt6::QuickControls2 Qt6::Test)
+    target_compile_definitions(release-policy-tests PRIVATE CONFLUX_QML_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")
+    add_test(NAME release-policy COMMAND release-policy-tests)
+    set_tests_properties(release-policy PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     qt_add_executable(content-transaction-tests tests/ContentTransactionTests.cpp)
     target_link_libraries(content-transaction-tests PRIVATE conflux_desktop Qt6::Test)
     add_test(NAME content-transactions COMMAND content-transaction-tests -o "${CMAKE_CURRENT_BINARY_DIR}/content-transaction-results.txt,txt")

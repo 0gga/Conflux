@@ -111,6 +111,37 @@ class InstallerTests : public QObject {
         return done ? result : RepositoryResult{false, "Test timed out"};
     }
   private slots:
+    void excludedDependencyDoesNotDownloadOrModifyTheInstance_data() {
+        QTest::addColumn<bool>("pinned");
+        QTest::newRow("project-dependency") << false;
+        QTest::newRow("exact-pinned-dependency") << true;
+    }
+    void excludedDependencyDoesNotDownloadOrModifyTheInstance() {
+        QFETCH(bool, pinned);
+        FixtureServer server;
+        QTemporaryDir temp;
+        auto pack = PackRepository::create(temp.path(), "Stage guard", "1.21.1", "fabric");
+        QVERIFY(pack.ok);
+        const auto before = read(pack.path + "/pack.json");
+        auto root = modrinthRelease(
+            server.version("root", "root-v1", "root bytes", {dep("library", pinned ? "library-v1" : "")}));
+        auto library = server.version("library", "library-v1", "library bytes");
+        library["version_type"] = "beta";
+        server.responses["/version/library-v1"] = QJsonDocument(library).toJson();
+        server.responses["/project/library/version"] = QJsonDocument(QJsonArray{library}).toJson();
+        ContentInstallRequest request{root, "Root", {{"modrinth", "root"}}};
+        request.allowedChannels = {"release"};
+        ModInstaller installer(nullptr, server.base());
+        QSignalSpy finished(&installer, &ModInstaller::finished);
+        installer.startBatch(pack.path, {request});
+        QTRY_COMPARE(finished.size(), 1);
+        const auto result = qvariant_cast<RepositoryResult>(finished.first().first());
+        QVERIFY(!result.ok);
+        QCOMPARE(read(pack.path + "/pack.json"), before);
+        QVERIFY(!QFile::exists(pack.path + "/mods/root-v1.jar"));
+        for (const auto &url : server.requests)
+            QVERIFY(!url.startsWith("/files/"));
+    }
 
     void initialInstallsKeepCachedIncompatibilityGuardsWithoutFetchingUnrelatedGraphs() {
         for (bool reverse : {false, true}) {

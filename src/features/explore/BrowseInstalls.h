@@ -1,6 +1,7 @@
 #pragma once
 #include "features/content/ContentOperationQueue.h"
 #include "features/content/ContentPorts.h"
+#include "features/preferences/PackReleasePolicy.h"
 #include <QHash>
 #include <QObject>
 #include <QSet>
@@ -17,6 +18,7 @@ class BrowseInstalls final : public QObject {
     Q_PROPERTY(int revision READ revision NOTIFY changed)
   public:
     explicit BrowseInstalls(std::shared_ptr<IContentCatalogue>, QObject *parent = nullptr);
+    void setReleasePolicy(std::shared_ptr<PackReleasePolicy>);
     void setContext(const QVariantMap &, const QVariantList &, bool indexing);
     void setTargetPath(const QString &);
     void rememberReleases(const QVariantMap &project, const QVariantList &groups);
@@ -55,6 +57,7 @@ class BrowseInstalls final : public QObject {
     Q_INVOKABLE QVariantMap state(const QVariantMap &) const;
     Q_INVOKABLE bool installed(const QVariantMap &, const QString &type = {}) const;
     Q_INVOKABLE void install(const QVariantMap &);
+    Q_INVOKABLE bool releaseAllowed(const QVariantMap &) const;
     Q_INVOKABLE void installVersion(const QVariantMap &, const QVariantMap &);
     Q_INVOKABLE void cancelPending();
   signals:
@@ -64,6 +67,7 @@ class BrowseInstalls final : public QObject {
 
   private:
     std::shared_ptr<IContentCatalogue> m_catalogue;
+    std::shared_ptr<PackReleasePolicy> m_releasePolicy;
     QVariantMap m_pack;
     QVariantList m_rows, m_inputRows;
     QHash<QString, int> m_projectRows;

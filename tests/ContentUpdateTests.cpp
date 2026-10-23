@@ -1,10 +1,95 @@
 #include "ContentUpdateFixtures.h"
+#include "platform/BrowseSettingsStore.h"
 #include <QPersistentModelIndex>
 #include <QtTest>
 using namespace update_fixture;
 class ContentUpdateTests : public QObject {
     Q_OBJECT
   private slots:
+    void policyChangesRecheckQueuedUpdatesAndKeepInstalledRowsVisible_data() {
+        QTest::addColumn<QStringList>("targetPolicy");
+        QTest::addColumn<QString>("installedStage");
+        QTest::addColumn<QString>("candidateStage");
+        QTest::newRow("explicit-release") << QStringList{"release"} << QString("release") << QString("beta");
+        QTest::newRow("stable-beta-back-to-automatic")
+            << QStringList{} << QString("release") << QString("beta");
+        QTest::newRow("beta-alpha-back-to-automatic") << QStringList{} << QString("beta") << QString("alpha");
+    }
+    void policyChangesRecheckQueuedUpdatesAndKeepInstalledRowsVisible() {
+        QFETCH(QStringList, targetPolicy);
+        QFETCH(QString, installedStage);
+        QFETCH(QString, candidateStage);
+        Harness h;
+        auto policy = std::make_shared<studio::PackReleasePolicy>(
+            std::make_shared<studio::BrowseSettingsStore>(h.temp.path() + "/stages.ini"));
+        policy->setChannels(h.temp.path(), {"release", "beta", "alpha"});
+        h.content.setReleasePolicy(policy);
+        auto a = row("A"), b = row("B");
+        auto next = b.value("updateRelease").toMap();
+        next["channel"] = candidateStage;
+        auto old = b.value("installedRelease").toMap();
+        old["channel"] = installedStage;
+        b["installedRelease"] = old;
+        b["updateRelease"] = next;
+        h.set({a, b});
+        QTRY_VERIFY(!h.content.busy());
+        h.installer->automatic = false;
+        QSignalSpy errors(&h.content, &ContentActions::operationFailed);
+        h.content.updateAll();
+        QTRY_COMPARE(h.installer->calls.size(), 1);
+        QCOMPARE(h.installer->calls.first().first().allowedChannels,
+                 (QStringList{"release", "beta", "alpha"}));
+        policy->setChannels(h.temp.path(), targetPolicy);
+        QCOMPARE(h.content.rows().size(), 2);
+        h.installer->finish();
+        QTRY_VERIFY(!h.content.busy());
+        QCOMPARE(h.installer->calls.size(), 1);
+        QCOMPARE(errors.size(), 1);
+        QVERIFY(errors.first().first().toString().contains("release stages"));
+        QCOMPARE(byId(h.files->get(h.temp.path()), "A").value("version").toString(), QString("2.0"));
+        QCOMPARE(byId(h.files->get(h.temp.path()), "B").value("version").toString(), QString("1.0"));
+        QCOMPARE(h.content.rows().size(), 2);
+        QCOMPARE(h.content.actionableUpdateCount(), 0);
+    }
+    void automaticPolicyStillAllowsDeliberateManualVersionSwitches() {
+        Harness h;
+        auto policy = std::make_shared<studio::PackReleasePolicy>(
+            std::make_shared<studio::BrowseSettingsStore>(h.temp.path() + "/stages.ini"));
+        h.content.setReleasePolicy(policy);
+        const auto installed = row("B");
+        auto next = installed.value("updateRelease").toMap();
+        next["channel"] = "beta";
+        h.set({installed});
+        QTRY_VERIFY(!h.content.busy());
+        h.content.installRelease(next, {{"sourceIds", installed.value("sourceIds")}, {"type", "mod"}});
+        QTRY_VERIFY(!h.content.busy());
+        QCOMPARE(h.installer->calls.size(), 1);
+        QVERIFY(!h.installer->calls.first().first().automaticUpdate);
+        QCOMPARE(byId(h.files->get(h.temp.path()), "B").value("version").toString(), QString("2.0"));
+    }
+    void explicitPolicyBlocksSingleAndManualUpdatesBeforeQueueing() {
+        Harness h;
+        auto policy = std::make_shared<studio::PackReleasePolicy>(
+            std::make_shared<studio::BrowseSettingsStore>(h.temp.path() + "/stages.ini"));
+        policy->setChannels(h.temp.path(), {"release"});
+        h.content.setReleasePolicy(policy);
+        auto b = row("B");
+        auto next = b.value("updateRelease").toMap();
+        next["channel"] = "beta";
+        b["updateRelease"] = next;
+        h.set({b});
+        QTRY_VERIFY(!h.content.busy());
+        QCOMPARE(h.content.rows().size(), 1);
+        QCOMPARE(h.content.updateCount(), 0);
+        h.content.update(b.value("relativePath").toString());
+        h.content.updateAll();
+        h.content.select(b.value("relativePath").toString(), true);
+        h.content.updateSelected();
+        QSignalSpy errors(&h.content, &ContentActions::operationFailed);
+        h.content.installRelease(next, {{"sourceIds", b.value("sourceIds")}, {"type", "mod"}});
+        QCOMPARE(errors.size(), 1);
+        QCOMPARE(h.installer->calls.size(), 0);
+    }
     void protectionAndSelectionMatrix_data() {
         QTest::addColumn<QString>("category");
         QTest::addColumn<QString>("policy");

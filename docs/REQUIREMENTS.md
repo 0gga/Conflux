@@ -153,3 +153,8 @@ Recent content dates: the owner requires coarse elapsed hours through and includ
 Library owns New modpack and instance navigation; do not repeat permanent Modpack/New modpack sidebar entries. Align instance rows with header/search right edges, remove modpack counts, and put instance actions in a three-dot menu including Open instance folder and Hide/Restore. Create modpack uses a searchable Minecraft release list and loader icons, without Git or marketing explanations. Keep concise action labels suitable for nontechnical users.
 
 All dropdown options fill their available popup width. Ordinary options have no nested outline; the selected option may use an accent outline. Platform selected counts include only available platforms. Installed badges use verified platform identities and exact binary hashes across providers; stale metadata must never erase fresh identification.
+
+
+## Modpack release stages (2026-10-23)
+
+The owner requests one per-modpack selection controlling eligible installs and updates, not which installed items are visible. Merge the providers' equivalent stages: Release, Beta and Alpha. Modrinth version_type and CurseForge FileReleaseType are stability stages; Minecraft snapshots and publication/review statuses are separate concepts. Saved selections apply to both platforms and every content category. Keep installed files in place when the selection changes.

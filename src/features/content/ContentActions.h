@@ -6,9 +6,11 @@
 #include "ContentOperationState.h"
 #include "ContentPorts.h"
 #include "features/preferences/ContentVisibility.h"
+#include "features/preferences/PackReleasePolicy.h"
 #include "features/status/OperationHistory.h"
 #include <QHash>
 #include <QObject>
+#include <QTimer>
 #include <memory>
 namespace studio {
 class ContentActions final : public QObject {
@@ -41,6 +43,7 @@ class ContentActions final : public QObject {
     ContentActions(std::shared_ptr<const IContentFileStore>, std::shared_ptr<IContentCatalogue>,
                    std::shared_ptr<IContentInstaller>, std::shared_ptr<IContentPreferences>,
                    QObject *parent = nullptr);
+    void setReleasePolicy(std::shared_ptr<PackReleasePolicy>);
     void setContext(const QVariantMap &, const QVariantList &, bool forceRefresh = false);
     void setCurseforgeKey(const QByteArray &key) {
         m_catalogue->setCurseforgeKey(key);
@@ -156,6 +159,7 @@ class ContentActions final : public QObject {
     Q_INVOKABLE void copySelected(const QString &format);
     Q_INVOKABLE void openVersions(const QString &);
     Q_INVOKABLE void installVersion(int index);
+    Q_INVOKABLE bool releaseAllowed(const QVariantMap &) const;
     Q_INVOKABLE void installRelease(const QVariantMap &release, const QVariantMap &project);
     Q_INVOKABLE void importFiles(const QList<QUrl> &, const QString &);
     Q_INVOKABLE void copyLink(const QString &);
@@ -196,10 +200,12 @@ class ContentActions final : public QObject {
     std::shared_ptr<IContentVisibility> m_visibility;
     std::shared_ptr<const IContentFileStore> m_files;
     std::shared_ptr<IContentCatalogue> m_catalogue;
+    std::shared_ptr<PackReleasePolicy> m_releasePolicy;
     std::shared_ptr<IContentInstaller> m_installer;
     std::shared_ptr<IContentPreferences> m_preferences;
     std::unique_ptr<ContentOperationExecutor> m_executor;
     ContentOperationQueue m_queue;
+    QTimer m_policyRefresh;
     OperationHistory m_operations;
     QHash<quint64, ContentOperation> m_failedOperations;
     quint64 m_activeOperationId = 0;

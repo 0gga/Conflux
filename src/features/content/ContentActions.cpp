@@ -1,6 +1,7 @@
 #include "ContentActions.h"
 #include "domain/ContentCompatibility.h"
 #include "domain/ContentTypes.h"
+#include "domain/ReleaseStages.h"
 #include "domain/TextSearch.h"
 #include <QDateTime>
 #include <QDir>
@@ -37,7 +38,32 @@ ContentActions::ContentActions(std::shared_ptr<const IContentFileStore> files,
                 refresh(true);
         }
     });
+    m_policyRefresh.setSingleShot(true);
+    m_policyRefresh.setInterval(150);
+    connect(&m_policyRefresh, &QTimer::timeout, this, [this] { refresh(true); });
     clearFilters();
+}
+void ContentActions::setReleasePolicy(std::shared_ptr<PackReleasePolicy> policy) {
+    if (m_releasePolicy)
+        disconnect(m_releasePolicy.get(), nullptr, this, nullptr);
+    m_releasePolicy = std::move(policy);
+    if (!m_releasePolicy)
+        return;
+    connect(m_releasePolicy.get(), &PackReleasePolicy::policyChanged, this, [this](const QString &path) {
+        if (!PackReleasePolicy::sameInstance(path, m_pack.value("path").toString()))
+            return;
+        ++m_generation;
+        m_busy = false;
+        for (auto &value : m_rows) {
+            auto row = value.toMap();
+            row["updateAvailable"] = false;
+            row.remove("updateRelease");
+            value = row;
+        }
+        m_checkUpdatesPending = true;
+        m_policyRefresh.start();
+        emit changed();
+    });
 }
 void ContentActions::setContext(const QVariantMap &pack, const QVariantList &files, bool forceRefresh) {
     const auto path = pack.value("path").toString();
@@ -51,6 +77,7 @@ void ContentActions::setContext(const QVariantMap &pack, const QVariantList &fil
     m_pack = pack;
     m_inventory = files;
     if (changedPack) {
+        m_policyRefresh.stop();
         m_selected.clear();
         m_query.clear();
         m_category = "all";
@@ -88,6 +115,7 @@ void ContentActions::setContext(const QVariantMap &pack, const QVariantList &fil
     refresh(changedPack);
 }
 void ContentActions::refresh(bool checkUpdates) {
+    m_policyRefresh.stop();
     m_checkUpdatesPending = m_checkUpdatesPending || checkUpdates;
     if (hasPending(m_pack.value("path").toString()) || m_pack.isEmpty())
         return;
@@ -158,9 +186,11 @@ void ContentActions::refresh(bool checkUpdates) {
                 emit changed();
                 if (checkUpdates || !unidentified.isEmpty()) {
                     const auto lookup = checkUpdates ? result : unidentified;
-                    m_catalogue->refresh(
+                    m_catalogue->refreshWithChannels(
                         lookup, m_pack.value("minecraft").toString(),
                         compatibleLoaders(m_pack.value("loader").toString(), result).join('|'),
+                        m_releasePolicy ? m_releasePolicy->channels(m_pack.value("path").toString())
+                                        : QStringList{},
                         [done, result, checkUpdates](QVariantList indexed, QString error) mutable {
                             if (checkUpdates) {
                                 done(indexed, error);
@@ -403,6 +433,14 @@ QVariantList ContentActions::withPreferences(const QVariantMap &pack, QVariantLi
         row["locked"] = locked;
         row["updatedAt"] = m_preferences->updatedAt(path, identity);
         row["frozen"] = m_preferences->frozen(path, identity);
+        const auto updateStages =
+            updateReleaseStages(row.value("installedRelease").toMap().value("channel").toString(),
+                                m_releasePolicy ? m_releasePolicy->channels(path) : QStringList{});
+        if (m_releasePolicy && row.value("updateAvailable").toBool() &&
+            !updateStages.contains(row.value("updateRelease").toMap().value("channel").toString())) {
+            row["updateAvailable"] = false;
+            row.remove("updateRelease");
+        }
         value = row;
     }
     return rows;
@@ -551,9 +589,32 @@ void ContentActions::startOperation(ContentOperation operation, ContentOperation
     m_activity = operation.kind == ContentOperation::Install ? "installing" : "applying";
     m_cancelRequested = false;
     const QPointer<ContentActions> guard(this);
-    auto execute = [guard, operation, done](ContentFileState before) {
+    auto execute = [guard, operation, done](ContentFileState before) mutable {
         if (!guard)
             return;
+        // Queued work uses the current policy for its original instance, even after navigation.
+        for (auto &request : operation.requests) {
+            auto selection =
+                guard->m_releasePolicy ? guard->m_releasePolicy->channels(operation.packPath) : QStringList{};
+            if (request.automaticUpdate) {
+                QString installedStage;
+                for (const auto &value : before.rows) {
+                    const auto row = value.toMap();
+                    if (row.value("relativePath").toString() == request.installedPath) {
+                        installedStage = row.value("installedRelease").toMap().value("channel").toString();
+                        break;
+                    }
+                }
+                selection = updateReleaseStages(installedStage, selection);
+            }
+            if (!releaseStageAllowed(request.release.channel, selection)) {
+                guard->completeOperation(operation,
+                                         {false, "This version is excluded by the modpack's release stages."},
+                                         before, done);
+                return;
+            }
+            request.allowedChannels = selection;
+        }
         before.rows = guard->withPreferences(before.pack, before.rows);
         if (before.error.isEmpty())
             guard->m_states[operation.packPath] = before;
@@ -573,7 +634,7 @@ void ContentActions::startOperation(ContentOperation operation, ContentOperation
     // A transient post-write read failure must not poison every remaining item.
     // Recover a verified inventory on a worker before permitting the next write.
     auto *watcher = new QFutureWatcher<ContentFileState>(this);
-    connect(watcher, &QFutureWatcher<ContentFileState>::finished, this, [watcher, execute] {
+    connect(watcher, &QFutureWatcher<ContentFileState>::finished, this, [watcher, execute]() mutable {
         const auto current = watcher->result();
         watcher->deleteLater();
         execute(current);
@@ -704,6 +765,12 @@ void ContentActions::install(const QVector<ContentInstallRequest> &requests, con
     if (requests.isEmpty())
         return;
     for (const auto &request : requests) {
+        const auto path = project.value("targetPack", m_pack).toMap().value("path").toString();
+        if (!releaseStageAllowed(request.release.channel,
+                                 m_releasePolicy ? m_releasePolicy->channels(path) : QStringList{})) {
+            reject("This version is excluded by the modpack's release stages.", request.title);
+            return;
+        }
         auto candidate = request.release.toVariant();
         candidate["sourceIds"] = request.sourceIds.toVariantMap();
         candidate["targetPack"] = project.value("targetPack", m_pack);

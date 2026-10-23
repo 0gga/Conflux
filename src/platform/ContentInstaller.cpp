@@ -2,6 +2,7 @@
 #include "ContentAccess.h"
 #include "domain/ContentCompatibility.h"
 #include "domain/ContentTypes.h"
+#include "domain/ReleaseStages.h"
 #include "platform/PackFileStore.h"
 #include <QDir>
 #include <QFile>
@@ -108,6 +109,10 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
         return;
     }
     for (const auto &request : requests) {
+        if (!releaseStageAllowed(request.release.channel, request.allowedChannels)) {
+            callback({false, "This version is excluded by the modpack's release stages."});
+            return;
+        }
         if (!request.release.gameVersions.contains(pack.value("minecraft").toString())) {
             callback({false, "The selected version does not support this instance's Minecraft version."});
             return;

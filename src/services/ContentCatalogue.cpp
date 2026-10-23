@@ -2,6 +2,7 @@
 #include "domain/ContentCompatibility.h"
 #include "domain/ContentTypes.h"
 #include "domain/LicensePolicy.h"
+#include "domain/ReleaseStages.h"
 #include "platform/ProjectAuthors.h"
 #include <QJsonArray>
 #include <QNetworkReply>
@@ -9,14 +10,6 @@
 #include <QUrlQuery>
 #include <memory>
 namespace studio {
-static QStringList updateChannels(const QString &installedChannel) {
-    QStringList channels{"release"};
-    if (installedChannel == "beta" || installedChannel == "alpha")
-        channels << "beta";
-    if (installedChannel == "alpha")
-        channels << "alpha";
-    return channels;
-}
 
 ContentCatalogue::ContentCatalogue(QObject *parent, QUrl api, QUrl curseforgeApi)
     : QObject(parent), m_network(this), m_api(std::move(api)),
@@ -57,8 +50,14 @@ void ContentCatalogue::request(const QString &path, const QJsonObject *body, Jso
 }
 void ContentCatalogue::refresh(const QVariantList &input, const QString &game, const QString &loader,
                                IndexCallback complete) {
-    const IndexCallback callback = [this, game, loader, complete](QVariantList rows, QString error) {
-        refreshCurseforge(std::move(rows), game, loader, complete, error);
+    refreshWithChannels(input, game, loader, {}, std::move(complete));
+}
+void ContentCatalogue::refreshWithChannels(const QVariantList &input, const QString &game,
+                                           const QString &loader, const QStringList &selection,
+                                           IndexCallback complete) {
+    const IndexCallback callback = [this, game, loader, complete, selection](QVariantList rows,
+                                                                             QString error) {
+        refreshCurseforge(std::move(rows), game, loader, complete, error, selection);
     };
     struct Batch {
         QVariantList rows;
@@ -79,7 +78,8 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
     }
     QJsonObject body{{"hashes", hashes}, {"algorithm", "sha1"}};
     request("version_files", &body,
-            [this, batch, game, loader, hashes, callback](const QJsonDocument &doc, const QString &error) {
+            [this, batch, game, loader, hashes, callback, selection](const QJsonDocument &doc,
+                                                                     const QString &error) {
                 if (!error.isEmpty())
                     batch->errors << "Identification: " + error;
                 batch->installed = doc.object();
@@ -236,8 +236,9 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
                             continue;
                         loaders.sort();
                         const auto channel = modrinthRelease(installed, hash).channel;
-                        const auto key = category + '|' + loaders.join('|') + '|' + channel;
-                        channels[key] = updateChannels(channel);
+                        const auto allowedChannels = updateReleaseStages(channel, selection);
+                        const auto key = category + '|' + loaders.join('|') + '|' + allowedChannels.join(',');
+                        channels[key] = allowedChannels;
                         if (!groups[key].contains(hash))
                             groups[key] << hash;
                         permitted[key] = loaders;
@@ -278,7 +279,8 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
             });
 }
 void ContentCatalogue::refreshCurseforge(QVariantList rows, const QString &game, const QString &loader,
-                                         IndexCallback callback, const QString &previousError) {
+                                         IndexCallback callback, const QString &previousError,
+                                         const QStringList &selection) {
     struct Batch {
         QVariantList rows;
         QList<int> pending;
@@ -300,7 +302,7 @@ void ContentCatalogue::refreshCurseforge(QVariantList rows, const QString &game,
     auto pump = std::make_shared<std::function<void()>>();
     std::weak_ptr<std::function<void()>> weak = pump;
     QPointer<ContentCatalogue> guard(this);
-    *pump = [guard, batch, game, loader, callback, weak] {
+    *pump = [guard, batch, game, loader, callback, weak, selection] {
         if (!guard)
             return;
         while (batch->active < 2 && !batch->pending.isEmpty()) {
@@ -323,14 +325,14 @@ void ContentCatalogue::refreshCurseforge(QVariantList rows, const QString &game,
             auto next = weak.lock();
             guard->m_client.curseforgeVersions(
                 installed.projectId, game, loaders,
-                [guard, batch, index, installed, next](QVector<Release> releases, QString error) {
+                [guard, batch, index, installed, next, selection](QVector<Release> releases, QString error) {
                     if (!guard)
                         return;
                     auto row = batch->rows[index].toMap();
                     row["updateAvailable"] = false;
                     row.remove("updateRelease");
                     Release newest;
-                    const auto allowedChannels = updateChannels(installed.channel);
+                    const auto allowedChannels = updateReleaseStages(installed.channel, selection);
                     for (const auto &release : releases)
                         if (allowedChannels.contains(release.channel) && !release.url.isEmpty() &&
                             !release.sha1.isEmpty() && isNewerRelease(installed, release) &&

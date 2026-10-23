@@ -1,5 +1,6 @@
 #include "ModInstaller.h"
 #include "domain/ContentCompatibility.h"
+#include "domain/ReleaseStages.h"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -95,6 +96,21 @@ void ModInstaller::startBatch(const QString &path, const QVector<ContentInstallR
     for (const auto &request : requests)
         if (!request.resolveDependencies)
             m_shallowRoots.insert(request.release.projectId);
+    m_allowedChannels.clear();
+    // Every root belongs to one modpack; intersect explicit policies defensively.
+    for (const auto &request : requests)
+        if (!request.allowedChannels.isEmpty()) {
+            if (m_allowedChannels.isEmpty())
+                m_allowedChannels = request.allowedChannels;
+            else
+                for (qsizetype i = m_allowedChannels.size() - 1; i >= 0; --i)
+                    if (!request.allowedChannels.contains(m_allowedChannels.at(i)))
+                        m_allowedChannels.removeAt(i);
+            if (m_allowedChannels.isEmpty()) {
+                fail("Conflicting release stages were selected for this install.");
+                return;
+            }
+        }
     m_existing.clear();
     m_disabledReferences.clear();
     m_titles.clear();
@@ -172,6 +188,10 @@ void ModInstaller::startBatch(const QString &path, const QVector<ContentInstallR
     resolveNext();
 }
 bool ModInstaller::addResolved(const Release &release) {
+    if (!releaseStageAllowed(release.channel, m_allowedChannels)) {
+        fail("A required version is excluded by the modpack's release stages. No changes were made.");
+        return false;
+    }
     if (m_disabledReferences.contains(release.projectId) && !m_rootIdentities.contains(release.projectId)) {
         fail("A required dependency is disabled: " +
              m_disabledReferences.value(release.projectId).value("projectTitle").toString(release.projectId) +
@@ -343,7 +363,8 @@ void ModInstaller::resolveNext() {
             for (const auto &value : doc.array()) {
                 const auto candidate = value.toObject();
                 const auto release = modrinthRelease(candidate);
-                if (!release.gameVersions.contains(m_game) ||
+                if (!releaseStageAllowed(release.channel, m_allowedChannels) ||
+                    !release.gameVersions.contains(m_game) ||
                     !sharesLoader(release.loaders, m_allowedLoaders))
                     continue;
                 const bool stable = candidate.value("version_type").toString() == "release",

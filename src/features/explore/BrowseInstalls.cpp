@@ -1,6 +1,7 @@
 #include "BrowseInstalls.h"
 #include "domain/ContentCompatibility.h"
 #include "domain/ContentTypes.h"
+#include "domain/ReleaseStages.h"
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPointer>
@@ -27,6 +28,20 @@ static QVariantMap verifiedRowProjects(const QVariantMap &row) {
 }
 BrowseInstalls::BrowseInstalls(std::shared_ptr<IContentCatalogue> source, QObject *parent)
     : QObject(parent), m_catalogue(std::move(source)) {}
+void BrowseInstalls::setReleasePolicy(std::shared_ptr<PackReleasePolicy> policy) {
+    if (m_releasePolicy)
+        disconnect(m_releasePolicy.get(), nullptr, this, nullptr);
+    m_releasePolicy = std::move(policy);
+    if (m_releasePolicy)
+        connect(m_releasePolicy.get(), &PackReleasePolicy::policyChanged, this, [this](const QString &path) {
+            if (PackReleasePolicy::sameInstance(path, m_pack.value("path").toString()))
+                cancelPending();
+        });
+}
+bool BrowseInstalls::releaseAllowed(const QVariantMap &release) const {
+    return !m_releasePolicy ||
+           m_releasePolicy->allows(m_pack.value("path").toString(), release.value("channel").toString());
+}
 void BrowseInstalls::setContext(const QVariantMap &pack, const QVariantList &rows, bool busy) {
     if (!m_identitiesChanged && pack == m_pack && rows == m_inputRows && busy == m_indexing)
         return;
@@ -194,6 +209,13 @@ bool BrowseInstalls::installed(const QVariantMap &release, const QString &type) 
     return false;
 }
 void BrowseInstalls::installVersion(const QVariantMap &release, const QVariantMap &project) {
+    if (!releaseAllowed(release)) {
+        m_notice = "This version is excluded by the modpack's release stages.";
+        ++m_revision;
+        emit changed();
+        emit operationFailed(m_notice);
+        return;
+    }
     if (release.value("provider") == "curseforge" && !m_curseforgeEnabled) {
         m_notice = "Connect an approved CurseForge API key in Settings.";
         ++m_revision;
@@ -246,12 +268,15 @@ void BrowseInstalls::install(const QVariantMap &project) {
     const auto pack = m_pack;
     const auto rows = m_rows;
     const auto loaders = versionLoaders();
+    const auto channels =
+        m_releasePolicy ? m_releasePolicy->channels(pack.value("path").toString()) : QStringList{};
+    const auto permittedChannels = channels.isEmpty() ? QStringList{"release"} : channels;
     const int generation = m_lookupGeneration;
     m_pendingLookups.insert(key);
     m_notice.clear();
     ++m_revision;
     emit changed();
-    m_lookups.enqueue([this, project, key, pack, rows, loaders,
+    m_lookups.enqueue([this, project, key, pack, rows, loaders, permittedChannels,
                        generation](ContentOperationQueue::Completion done) {
         if (generation != m_lookupGeneration) {
             done();
@@ -262,7 +287,8 @@ void BrowseInstalls::install(const QVariantMap &project) {
         const QPointer<BrowseInstalls> guard(this);
         m_catalogue->versions(
             row, pack.value("minecraft").toString(), loaders,
-            [guard, project, key, pack, rows, generation, done](QVector<Release> releases, QString error) {
+            [guard, project, key, pack, rows, generation, done, permittedChannels](QVector<Release> releases,
+                                                                                   QString error) {
                 if (!guard)
                     return;
                 if (generation != guard->m_lookupGeneration) {
@@ -277,7 +303,7 @@ void BrowseInstalls::install(const QVariantMap &project) {
                                      });
                 bool installed = false;
                 for (const auto &release : releases)
-                    if (release.channel == "release" &&
+                    if (permittedChannels.contains(release.channel) &&
                         (release.provider == "modrinth" ||
                          (release.provider == "curseforge" && guard->m_curseforgeEnabled)) &&
                         !release.url.isEmpty() && !release.sha1.isEmpty() &&
@@ -294,10 +320,11 @@ void BrowseInstalls::install(const QVariantMap &project) {
                     }
                 guard->m_pendingLookups.remove(key);
                 if (!installed) {
-                    const auto failure = error.isEmpty()
-                                             ? QString("No compatible stable download is available. Open "
-                                                       "Versions to review alternatives.")
-                                             : error;
+                    const auto failure =
+                        error.isEmpty()
+                            ? QString("No compatible download matches the modpack's release stages. Open "
+                                      "Versions to review alternatives.")
+                            : error;
                     guard->m_notice = failure;
                     emit guard->operationFailed(failure);
                 }

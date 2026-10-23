@@ -7,6 +7,8 @@ import "../components"
 FocusDialog {
     id: root
     required property var controller
+    property var releasePolicy: null
+    property string packPath: ""
     property string minecraft: ""
     property string preferredLoader: ""
     property int selectedVersion: -1
@@ -18,6 +20,7 @@ FocusDialog {
     ColumnLayout {
         width: parent.width; height: parent.height; spacing: 14
         Text { visible: root.controller.versionError.length > 0; Layout.fillWidth: true; text: root.controller.versionError; color: Theme.colors.warning; font.pixelSize: 12; wrapMode: Text.WordWrap }
+        ReleaseStagePicker { policy: root.releasePolicy; packPath: root.packPath }
         BusyIndicator { visible: root.controller.versionsBusy; running: visible; Layout.alignment: Qt.AlignHCenter }
         ContentListView { outsideColor: Theme.colors.card; cornerRadius: 8;
             id: list; Layout.fillWidth: true; Layout.fillHeight: true; clip: true; model: root.controller.versionGroups; spacing: 6;
@@ -42,7 +45,7 @@ FocusDialog {
             Layout.fillWidth: true
             ActionButton { text: "Cancel"; subtle: true; onClicked: root.close() }
             Item { Layout.fillWidth: true }
-            ActionButton { objectName: "versionPickerInstall"; text: "Install version"; primary: true; enabled: root.selectedVersion >= 0 && !root.controller.versionTarget.locked && !root.controller.versionTarget.frozen && (root.selectedRelease.provider === "modrinth" || root.selectedRelease.provider === "curseforge") && !!root.selectedRelease.url && !!root.selectedRelease.sha1; onClicked: { root.controller.installVersion(root.selectedVersion); root.close() } }
+            ActionButton { objectName: "versionPickerInstall"; text: "Install version"; primary: true; hint: stageAllowed ? "" : "Excluded by this modpack’s release stages"; property bool stageAllowed: { const revision=root.releasePolicy ? root.releasePolicy.revision : 0; return !root.releasePolicy || root.controller.releaseAllowed(root.selectedRelease) }; enabled: stageAllowed && root.selectedVersion >= 0 && !root.controller.versionTarget.locked && !root.controller.versionTarget.frozen && (root.selectedRelease.provider === "modrinth" || root.selectedRelease.provider === "curseforge") && !!root.selectedRelease.url && !!root.selectedRelease.sha1; onClicked: { root.controller.installVersion(root.selectedVersion); root.close() } }
         }
     }
 }

@@ -1,5 +1,6 @@
 #include "CurseforgeInstallSource.h"
 #include "domain/ContentCompatibility.h"
+#include "domain/ReleaseStages.h"
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QTimer>
@@ -187,7 +188,8 @@ void CurseforgeInstallSource::select(ContentInstallRequest request, const QJsonO
             for (const auto &value : files) {
                 auto file = value.toObject();
                 const auto release = curseforgeRelease(file);
-                if (release.projectId != request.release.projectId ||
+                if (!releaseStageAllowed(release.channel, request.allowedChannels) ||
+                    release.projectId != request.release.projectId ||
                     !release.gameVersions.contains(m_game) || !sharesLoader(release.loaders, m_loaders) ||
                     file.value("isAvailable") == false || release.url.isEmpty())
                     continue;
@@ -223,6 +225,10 @@ void CurseforgeInstallSource::accept(ContentInstallRequest request, const QJsonO
         (!request.release.sha1.isEmpty() &&
          release.sha1.compare(request.release.sha1, Qt::CaseInsensitive))) {
         finish("CurseForge returned different file metadata. Refresh and retry.");
+        return;
+    }
+    if (!releaseStageAllowed(release.channel, request.allowedChannels)) {
+        finish("A required version is excluded by the modpack's release stages. No changes were made.");
         return;
     }
     if (file.value("isAvailable") == false || release.url.isEmpty()) {
@@ -264,6 +270,7 @@ void CurseforgeInstallSource::accept(ContentInstallRequest request, const QJsonO
             if (retained)
                 continue;
             ContentInstallRequest next;
+            next.allowedChannels = request.allowedChannels;
             next.release.provider = "curseforge";
             next.release.projectId = dependency;
             next.sourceIds = {{"curseforge", dependency}};

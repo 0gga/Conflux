@@ -10,6 +10,7 @@ Item {
     objectName: "exploreContentPage"
     required property var app
     required property var content
+    property var releasePolicy: null
     required property var browse
     required property var catalogue
     required property var worlds
@@ -78,6 +79,7 @@ Item {
                         onClicked: filterPopup.opened ? filterPopup.close() : filterPopup.open()
                     }
                 }
+                ReleaseStagePicker { policy: root.releasePolicy; packPath: root.targetPath }
                 ActiveBrowseFilters { Layout.fillWidth: true; catalogue: root.catalogue; instanceLocked: root.browse.ready && !root.catalogue.filters.unlocked }
                 Text { Layout.fillWidth: true; visible: root.catalogue.notice.length>0; text: root.catalogue.notice; color: Theme.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
                 Item {

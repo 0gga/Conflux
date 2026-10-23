@@ -98,7 +98,7 @@ QVariantMap Release::toVariant() const {
 Release modrinthRelease(const QJsonObject &row, const QString &fileSha1) {
     Release r;
     r.provider = "modrinth";
-    r.channel = row.value("version_type").toString("release");
+    r.channel = row.value("version_type").toString("unknown");
     r.projectId = row.value("project_id").toString();
     r.id = row.value("id").toString();
     r.version = row.value("version_number").toString();

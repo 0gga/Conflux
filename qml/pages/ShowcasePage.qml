@@ -8,6 +8,7 @@ import "../showcase"
 
 Item {
     id: root
+    property var releasePolicy: null
     required property var browse
     required property var app
     required property var showcase
@@ -78,6 +79,7 @@ Item {
                     spacing: 14
                     Flow {
                         Layout.fillWidth: true; spacing: 6
+                        ReleaseStagePicker { policy: root.releasePolicy; packPath: root.browse.pack ? root.browse.pack.path || "" : "" }
                         ChoiceFilter { objectName: "versionChannelFilter"; label: "Channel"; choices: root.releaseFilters.options.channels || []; values: root.releaseFilters.filters.channels; onSelectionRequested: function(selection) { root.releaseFilters.configure({channels:selection}) } }
                         ChoiceFilter { searchable: true; label: "Game version"; choices: root.releaseFilters.options.versions || []; values: root.releaseFilters.filters.versions; onSelectionRequested: function(selection) { root.releaseFilters.configure({versions:selection}) } }
                         ChoiceFilter { objectName: "versionPlatformFilter"; visible: (root.releaseFilters.options.loaders || []).length > 0; label: "Platform"; loaderNames: true; choices: root.releaseFilters.options.loaders || []; values: root.releaseFilters.filters.loaders; onSelectionRequested: function(selection) { root.releaseFilters.configure({loaders:selection}) } }
@@ -92,6 +94,7 @@ Item {
                             property int variantIndex: 0
                             readonly property var release: modelData.variants[Math.min(variantIndex,modelData.variants.length - 1)] || ({})
                             readonly property string publishedLabel: ContentTime.dateLabel(release.published || "", ContentTime.now)
+                            readonly property bool stageAllowed: { const revision=root.releasePolicy ? root.releasePolicy.revision : 0; return !root.releasePolicy || root.browse.releaseAllowed(release) }
                             readonly property bool installed: { const inventoryRevision=root.browse.revision; const ready=root.browse.ready; const busy=root.browse.busy; return root.browse.installed(release,root.showcase.project.type || "mod") }
                             readonly property bool groupInstalled: { const inventoryRevision=root.browse.revision; const ready=root.browse.ready; const busy=root.browse.busy; return modelData.variants.some(function(item) { return root.browse.installed(item,root.showcase.project.type || "mod") }) }
                             width: versionList.viewportWidth; height: Math.max(version.modelData.variants.length > 1 ? 148 : 112, versionInfo.implicitHeight + 32); radius: ControlStyle.panelRadius; color: Theme.colors.card; border.color: Theme.colors.border
@@ -106,7 +109,7 @@ Item {
                                 }
                                 SourceBadge { source: version.release.provider || "modrinth"; iconOnly: true }
                                 Text { visible: version.groupInstalled && !version.installed; text: "Installed"; color: Theme.colors.accent; font.pixelSize: 12 }
-                                ActionButton { objectName: "installReleaseButton"; text: version.installed ? "Installed" : "Install version"; iconName: version.installed ? "check" : "plus"; primary: !version.installed; visible: version.release.provider === "modrinth" || version.release.provider === "curseforge"; hint: version.release.provider === "curseforge" && !root.app.curseforgeEnabled ? "Connect CurseForge in Settings" : !version.release.url ? "The author has not made this file available for download" : ""; enabled: root.browse.ready && !root.browse.busy && !root.app.navigationBusy && (version.release.provider !== "curseforge" || root.app.curseforgeEnabled) && !!version.release.url && !!version.release.sha1 && !root.browse.state(root.showcase.project).locked && !root.contentLocked && !version.installed; onClicked: root.browse.installVersion(version.release,root.showcase.project) }
+                                ActionButton { objectName: "installReleaseButton"; text: version.installed ? "Installed" : !version.stageAllowed ? "Stage excluded" : "Install version"; iconName: version.installed ? "check" : "plus"; primary: !version.installed; visible: version.release.provider === "modrinth" || version.release.provider === "curseforge"; hint: !version.stageAllowed ? "Excluded by this modpack’s release stages" : version.release.provider === "curseforge" && !root.app.curseforgeEnabled ? "Connect CurseForge in Settings" : !version.release.url ? "The author has not made this file available for download" : ""; enabled: version.stageAllowed && root.browse.ready && !root.browse.busy && !root.app.navigationBusy && (version.release.provider !== "curseforge" || root.app.curseforgeEnabled) && !!version.release.url && !!version.release.sha1 && !root.browse.state(root.showcase.project).locked && !root.contentLocked && !version.installed; onClicked: root.browse.installVersion(version.release,root.showcase.project) }
                                 ActionButton { text: "View release"; onClicked: root.app.openWeb(version.release.pageUrl) }
                             }
                         }

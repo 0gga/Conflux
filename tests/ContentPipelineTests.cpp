@@ -650,6 +650,7 @@ class ContentPipelineTests : public QObject {
                 QJsonObject{{"project_id", "lib"},
                             {"id", lib.id},
                             {"version_number", "1"},
+                            {"version_type", "release"},
                             {"game_versions", QJsonArray{"1.21.1"}},
                             {"loaders", QJsonArray{"fabric"}},
                             {"files", QJsonArray{QJsonObject{{"filename", "lib.jar"},

@@ -1,6 +1,8 @@
 #include "domain/ContentTypes.h"
 #include "features/explore/BrowseInstalls.h"
+#include "platform/BrowseSettingsStore.h"
 #include <QElapsedTimer>
+#include <QTemporaryDir>
 #include <QtTest>
 using namespace studio;
 class DeferredVersionCatalogue final : public IContentCatalogue {
@@ -31,6 +33,84 @@ class BrowseInstallsTests : public QObject {
                  QVariantMap{{"provider", "modrinth"}, {"projectId", "project"}, {"id", "version"}}}};
     }
   private slots:
+    void explicitStagesControlQuickAndSelectedInstalls_data() {
+        QTest::addColumn<QString>("provider");
+        QTest::addColumn<int>("mask");
+        for (const auto &provider : {"modrinth", "curseforge"})
+            for (int mask = 0; mask < 8; ++mask)
+                QTest::newRow(qPrintable(QString("%1-%2").arg(provider).arg(mask)))
+                    << QString(provider) << mask;
+    }
+    void explicitStagesControlQuickAndSelectedInstalls() {
+        QFETCH(QString, provider);
+        QFETCH(int, mask);
+        QTemporaryDir temp;
+        auto policy = std::make_shared<PackReleasePolicy>(
+            std::make_shared<BrowseSettingsStore>(temp.path() + "/stages.ini"));
+        const QStringList stages{"release", "beta", "alpha"};
+        QStringList selection;
+        for (int i = 0; i < 3; ++i)
+            if (mask & (1 << i))
+                selection << stages[i];
+        policy->setChannels("a", selection);
+        auto source = std::make_shared<DeferredVersionCatalogue>();
+        BrowseInstalls model(source);
+        model.setReleasePolicy(policy);
+        model.setCurseforgeKey("fixture");
+        model.setTargetPath("a");
+        model.setContext({{"path", "a"}, {"minecraft", "1.21.1"}}, {}, false);
+        QSignalSpy installs(&model, &BrowseInstalls::installRequested);
+        QVector<Release> releases;
+        for (const auto &stage : stages) {
+            Release release;
+            release.provider = provider;
+            release.channel = stage;
+            release.url = "https://example.invalid/file.jar";
+            release.sha1 = QString(40, 'a');
+            release.gameVersions = {"1.21.1"};
+            releases.prepend(release); // Newest alpha, then beta, then release.
+        }
+        model.install(project());
+        QCOMPARE(source->pending.size(), 1);
+        source->pending.first()(releases, {});
+        QCOMPARE(installs.size(), 1);
+        const auto expected = selection.isEmpty() ? QString("release") : selection.last();
+        QCOMPARE(installs.first().first().toMap().value("channel").toString(), expected);
+        for (const auto &release : releases) {
+            const auto count = installs.size();
+            model.installVersion(release.toVariant(), project());
+            QCOMPARE(installs.size(),
+                     count + int(selection.isEmpty() || selection.contains(release.channel)));
+        }
+    }
+    void changingPolicyInvalidatesPendingLookupAndDoesNotBroadenAnotherInstance() {
+        QTemporaryDir temp;
+        auto policy = std::make_shared<PackReleasePolicy>(
+            std::make_shared<BrowseSettingsStore>(temp.path() + "/stages.ini"));
+        auto source = std::make_shared<DeferredVersionCatalogue>();
+        BrowseInstalls model(source);
+        model.setReleasePolicy(policy);
+        model.setTargetPath("a");
+        model.setContext({{"path", "a"}, {"minecraft", "1.21.1"}}, {}, false);
+        QSignalSpy installs(&model, &BrowseInstalls::installRequested);
+        model.install(project());
+        QVERIFY(model.lookupsPending());
+        policy->setChannels("a", {"beta"});
+        QVERIFY(!model.lookupsPending());
+        Release release;
+        release.provider = "modrinth";
+        release.url = "https://example.invalid/mod.jar";
+        release.sha1 = QString(40, 'a');
+        release.gameVersions = {"1.21.1"};
+        source->pending.first()({release}, {});
+        QCOMPARE(installs.size(), 0);
+        model.install(project());
+        QTRY_COMPARE(source->pending.size(), 2);
+        release.channel = "beta";
+        source->pending.last()({release}, {});
+        QCOMPARE(installs.size(), 1);
+        QCOMPARE(policy->channels("b"), QStringList{});
+    }
     void badgeReadsAndIdenticalContextUpdatesStayWithinBudget() {
         BrowseInstalls model(std::make_shared<DeferredVersionCatalogue>());
         QVariantList rows;

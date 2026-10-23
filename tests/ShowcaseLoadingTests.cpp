@@ -188,6 +188,173 @@ class ShowcaseLoadingTests final : public QObject {
         QCOMPARE(obsolete, 0);
         QCOMPARE(http.requests.count("/search"), 1);
     }
+    void resultCallbacksMayDisposeTheirClient_data() {
+        QTest::addColumn<int>("status");
+        QTest::addColumn<bool>("cached");
+        QTest::addColumn<bool>("coalesced");
+        QTest::addColumn<bool>("large");
+        QTest::newRow("success") << 200 << false << false << false;
+        QTest::newRow("error") << 500 << false << false << false;
+        QTest::newRow("coalesced") << 200 << true << true << false;
+        QTest::newRow("large-worker-parse") << 200 << false << false << true;
+        QTest::newRow("cached-queued") << 200 << true << false << false;
+    }
+    void resultCallbacksMayDisposeTheirClient() {
+        QFETCH(int, status);
+        QFETCH(bool, cached);
+        QFETCH(bool, coalesced);
+        QFETCH(bool, large);
+        LoadingHttp http;
+        http.statuses["/search"] = status;
+        http.responses["/search"] = "{\"hits\":[],\"total_hits\":0}";
+        if (large)
+            http.responses["/search"] =
+                "{\"hits\":[],\"total_hits\":0,\"padding\":\"" + QByteArray(90000, 'p') + "\"}";
+        auto client = std::make_unique<CatalogueClient>(nullptr, http.base(), http.base());
+        if (cached)
+            client->setReadCacheLifetime(60000);
+        CatalogueQuery query;
+        query.provider = "modrinth";
+        if (cached && !coalesced) {
+            bool primed = false;
+            client->fetch(query, 0, 20, [&](auto) { primed = true; });
+            QTRY_VERIFY(primed);
+        }
+        int delivered = 0, obsolete = 0;
+        client->fetch(query, 0, 20, [&](auto page) {
+            QCOMPARE(page.error.isEmpty(), status == 200);
+            ++delivered;
+            client.reset();
+        });
+        if (coalesced)
+            client->fetch(query, 0, 20, [&](auto) { ++obsolete; });
+        QTRY_VERIFY(!client);
+        QTest::qWait(20);
+        QCOMPARE(delivered, 1);
+        QCOMPARE(obsolete, 0);
+    }
+    void optionalMissingResolutionMayDisposeItsClient() {
+        LoadingHttp http;
+        http.statuses["/version_file/missing"] = 404;
+        auto client = std::make_unique<CatalogueClient>(nullptr, http.base(), http.base());
+        int delivered = 0;
+        connect(client.get(), &CatalogueClient::projectResolved, &http,
+                [&](int generation, auto project, auto error) {
+                    QCOMPARE(generation, 7);
+                    QVERIFY(project.id.isEmpty());
+                    QVERIFY(error.isEmpty());
+                    ++delivered;
+                    client.reset();
+                });
+        client->resolveProject("missing", {}, 7);
+        QTRY_VERIFY(!client);
+        QCOMPARE(delivered, 1);
+        QTest::qWait(20);
+    }
+    void intermediateDescriptionsMayDisposeTheirClient_data() {
+        QTest::addColumn<bool>("resolving");
+        QTest::newRow("project-body") << false;
+        QTest::newRow("identity-resolution") << true;
+    }
+    void intermediateDescriptionsMayDisposeTheirClient() {
+        QFETCH(bool, resolving);
+        LoadingHttp http;
+        http.project("first");
+        http.held.insert("/project/first");
+        auto client = std::make_unique<CatalogueClient>(nullptr, http.base(), http.base());
+        int descriptions = 0, details = 0;
+        connect(client.get(), &CatalogueClient::descriptionReady, &http, [&](int, auto) {
+            ++descriptions;
+            client.reset();
+        });
+        connect(client.get(), &CatalogueClient::detailFinished, &http, [&](int, auto) { ++details; });
+        connect(client.get(), &CatalogueClient::projectResolved, &http, [&](int, auto, auto) { ++details; });
+        Project project;
+        project.id = "first";
+        project.provider = "modrinth";
+        project.sourceIds["modrinth"] = "first";
+        if (resolving)
+            client->resolveProject({}, {{"modrinth", "first"}}, 1);
+        else
+            client->loadProject(project, "1.21.1", "neoforge", 1);
+        QTRY_VERIFY(http.requests.contains("/project/first"));
+        if (!resolving) {
+            QTRY_VERIFY(http.requests.contains("/project/first/version"));
+            QTest::qWait(30);
+        }
+        http.release("/project/first");
+        QTRY_VERIFY(!client);
+        QCOMPARE(descriptions, 1);
+        QCOMPARE(details, 0);
+        QTest::qWait(20);
+    }
+    void intermediateCancellationCannotPublishAnObsoleteResult_data() {
+        QTest::addColumn<bool>("resolving");
+        QTest::newRow("project-body") << false;
+        QTest::newRow("identity-resolution") << true;
+    }
+    void intermediateCancellationCannotPublishAnObsoleteResult() {
+        QFETCH(bool, resolving);
+        LoadingHttp http;
+        http.project("first");
+        http.held.insert("/project/first");
+        CatalogueClient client(nullptr, http.base(), http.base());
+        int descriptions = 0, obsolete = 0;
+        connect(&client, &CatalogueClient::descriptionReady, &http, [&](int, auto) {
+            ++descriptions;
+            client.cancelPendingReads();
+        });
+        connect(&client, &CatalogueClient::detailFinished, &http, [&](int, auto) { ++obsolete; });
+        connect(&client, &CatalogueClient::projectResolved, &http, [&](int, auto, auto) { ++obsolete; });
+        if (resolving)
+            client.resolveProject({}, {{"modrinth", "first"}}, 1);
+        else {
+            Project project;
+            project.sourceIds["modrinth"] = "first";
+            project.provider = "modrinth";
+            project.id = "first";
+            client.loadProject(project, "1.21.1", "neoforge", 1);
+        }
+        QTRY_VERIFY(http.requests.contains("/project/first"));
+        if (!resolving) {
+            QTRY_VERIFY(http.requests.contains("/project/first/version"));
+            QTest::qWait(30);
+        }
+        http.release("/project/first");
+        QTRY_COMPARE(descriptions, 1);
+        QTest::qWait(20);
+        QCOMPARE(obsolete, 0);
+        bool latest = false;
+        CatalogueQuery query;
+        query.provider = "modrinth";
+        client.fetch(query, 0, 20, [&](auto page) { latest = page.error.isEmpty(); });
+        QTRY_VERIFY(latest);
+    }
+    void reentrantConnectionChangesRejectRemainingCoalescedResults() {
+        LoadingHttp http;
+        http.responses["/search"] = "{\"hits\":[],\"total_hits\":0}";
+        CatalogueClient client(nullptr, http.base(), http.base());
+        client.setReadCacheLifetime(60000);
+        CatalogueQuery query;
+        query.provider = "modrinth";
+        int first = 0, rejected = 0;
+        client.fetch(query, 0, 20, [&](auto page) {
+            QVERIFY(page.error.isEmpty());
+            ++first;
+            client.setCurseforgeKey("changed-fixture");
+        });
+        client.fetch(query, 0, 20, [&](auto page) {
+            QVERIFY(page.projects.isEmpty());
+            QVERIFY(page.error.contains("connection changed"));
+            ++rejected;
+        });
+        QTRY_COMPARE(first, 1);
+        QTRY_COMPARE(rejected, 1);
+        bool current = false;
+        client.fetch(query, 0, 20, [&](auto page) { current = page.error.isEmpty(); });
+        QTRY_VERIFY(current);
+        QCOMPARE(http.requests.count("/search"), 2);
+    }
     void descriptionAndVersionsDoNotWaitForGallery() {
         LoadingHttp http;
         const auto imageUrl = http.base().resolved(QUrl("image")).toString();

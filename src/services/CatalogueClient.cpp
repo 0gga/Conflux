@@ -151,7 +151,10 @@ void CatalogueClient::request(const QUrl &url, bool cf, JsonCallback callback, b
         for (const auto &waiting : callbacks) {
             if (!guard || readGeneration != guard->m_readGeneration)
                 return;
-            waiting(document, error);
+            if (authGeneration != guard->m_authGeneration)
+                waiting({}, "The provider connection changed. Reopen the content page.");
+            else
+                waiting(document, error);
         }
     };
     QNetworkRequest request(endpoint);
@@ -174,8 +177,8 @@ void CatalogueClient::request(const QUrl &url, bool cf, JsonCallback callback, b
     connect(reply, &QNetworkReply::finished, this, [this, reply, allowMissing, deliver] {
         const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (allowMissing && status == 404) {
-            deliver({}, {}, 0);
             reply->deleteLater();
+            deliver({}, {}, 0);
             return;
         }
         auto error = reply->error() == QNetworkReply::NoError ? QString{} : reply->errorString();
@@ -186,11 +189,13 @@ void CatalogueClient::request(const QUrl &url, bool cf, JsonCallback callback, b
         if (status == 429)
             error = "Rate limit reached. Wait a moment before searching again.";
         if (!error.isEmpty()) {
-            deliver({}, error, 0);
             reply->deleteLater();
+            deliver({}, error, 0);
             return;
         }
         const auto bytes = reply->readAll();
+        // A consumer may destroy this client (and its replies) during delivery.
+        reply->deleteLater();
         auto parse = [bytes, error]() mutable {
             QJsonParseError parseError;
             const auto document = QJsonDocument::fromJson(bytes, &parseError);
@@ -210,7 +215,6 @@ void CatalogueClient::request(const QUrl &url, bool cf, JsonCallback callback, b
             const auto result = parse();
             deliver(result.first, result.second, int(bytes.size()));
         }
-        reply->deleteLater();
     });
 }
 void CatalogueClient::linkCurseforgeFiles(CataloguePage page, QMap<QString, QStringList> hashes,
@@ -730,8 +734,13 @@ void CatalogueClient::loadProject(const Project &project, const QString &request
                         for (const auto &image : doc.object().value("gallery").toArray())
                             batch->images["modrinth"] << image.toObject().value("url").toString();
                     }
-                    if (error.isEmpty() && (!cf || !project.sourceIds.contains("modrinth")))
+                    if (error.isEmpty() && (!cf || !project.sourceIds.contains("modrinth"))) {
+                        const QPointer<CatalogueClient> guard(this);
+                        const int readGeneration = m_readGeneration;
                         emit descriptionReady(generation, batch->detail.description);
+                        if (!guard || readGeneration != guard->m_readGeneration)
+                            return;
+                    }
                     done();
                 });
         if (cf)
@@ -873,8 +882,13 @@ void CatalogueClient::resolveProject(const QString &sha1, QMap<QString, QString>
                                        : "https://modrinth.com/" + p.type + "/" + p.id;
                             if (!p.id.isEmpty() && p.id != "0")
                                 batch->projects << p;
-                            if (!cf && !p.id.isEmpty() && p.id != "0")
+                            if (!cf && !p.id.isEmpty() && p.id != "0") {
+                                const QPointer<CatalogueClient> guard(this);
+                                const int readGeneration = m_readGeneration;
                                 emit descriptionReady(generation, row.value("body").toString());
+                                if (!guard || readGeneration != guard->m_readGeneration)
+                                    return;
+                            }
                         }
                         done();
                     });

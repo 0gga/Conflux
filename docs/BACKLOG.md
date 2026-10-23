@@ -106,7 +106,7 @@ These are ideas, not delivered features or additional owner requirements.
 
 | Priority | Improvement | Acceptance criteria | State |
 | --- | --- | --- | --- |
-| P1 | Reentrant provider callback lifetime | Callbacks may dispose their catalogue client during success, error, optional missing responses, cached/coalesced delivery or intermediate signals; no later code may touch destroyed replies/clients or publish stale follow-up work. | Backlogged |
+| P1 | Reentrant provider callback lifetime | Callbacks may dispose their catalogue client during success, error, optional missing responses, cached/coalesced delivery or intermediate signals; no later code may touch destroyed replies/clients or publish stale follow-up work. | Delivered; 28 suites and packaged smoke pass |
 | P1 | Lossless lock patch correctness | Duplicate targets are idempotent; duplicate or shadowed source lock fields are rejected; invalid JSON never becomes a successful replacement; reused/null error outputs are safe; unrelated bytes remain exact. | Delivered; 26 suites and packaged smoke pass |
 | P1 | Indexed metadata mutation | Index source addons once and build replacements in one pass, replacing target-by-addon scans and repeated buffer shifts. Large-pack tests enforce correct scope, bounded runtime and exact output. | Delivered; 26 suites and packaged smoke pass |
 | P2 | Indexed source-lock UI lookup | Measure card/project lock reads against large source inventories, then remove repeated inventory scans while preserving original-instance and pending-operation semantics. | Delivered; 26 suites and packaged smoke pass |

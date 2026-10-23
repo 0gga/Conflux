@@ -7,6 +7,7 @@
 #include "platform/NativeContentStore.h"
 #include <QCryptographicHash>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -249,6 +250,94 @@ class LauncherContentLockTests final : public QObject {
         QVERIFY(result.error.contains("busy"));
         QCOMPARE(read(fixture.metadata), fixture.original);
 #endif
+    }
+    void duplicateCurseforgeTargetsAreIdempotent() {
+        Fixture fixture("curseforge");
+        QString error;
+        const auto once =
+            CurseforgeContentState::setLocked(fixture.original, fixture.pack, {fixture.row}, true, &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        const auto twice = CurseforgeContentState::setLocked(fixture.original, fixture.pack,
+                                                             {fixture.row, fixture.row}, true, &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(twice, once);
+        QJsonParseError parse;
+        QJsonDocument::fromJson(twice, &parse);
+        QCOMPARE(parse.error, QJsonParseError::NoError);
+    }
+    void shadowedCurseforgeLockFieldsAreRejected() {
+        Fixture fixture("curseforge");
+        auto bytes = fixture.original;
+        bytes.replace("\"isLocked\": false", "\"isLocked\": false, \"isLocked\": \"shadow\"");
+        QString error;
+        QVERIFY(
+            CurseforgeContentState::setLocked(bytes, fixture.pack, {fixture.row}, true, &error).isEmpty());
+        QVERIFY(!error.isEmpty());
+    }
+    void reusedCurseforgeErrorOutputDoesNotPoisonValidWork() {
+        Fixture fixture("curseforge");
+        QString error("Previous failure");
+        const auto bytes =
+            CurseforgeContentState::setLocked(fixture.original, fixture.pack, {fixture.row}, true, &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QVERIFY(!bytes.isEmpty());
+        error = "Previous failure";
+        QCOMPARE(CurseforgeContentState::read(fixture.original, fixture.pack, &error).size(), 1);
+        QVERIFY(error.isEmpty());
+    }
+    void nullErrorAndEscapedLockKeysAreSafe() {
+        Fixture fixture("curseforge");
+        QVERIFY(CurseforgeContentState::setLocked("{broken", fixture.pack, {fixture.row}, true, nullptr)
+                    .isEmpty());
+        auto escaped = fixture.original;
+        escaped.replace("\"isLocked\": false", "\"is\\u004cocked\": false");
+        QString error;
+        const auto output =
+            CurseforgeContentState::setLocked(escaped, fixture.pack, {fixture.row}, true, &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        const auto addons = QJsonDocument::fromJson(output).object().value("installedAddons").toArray();
+        QVERIFY(addons.first().toObject().value("isLocked").toBool());
+        QVERIFY(!addons.first().toObject().value("unknownNested").toObject().value("isLocked").toBool());
+        auto duplicateRoot = fixture.original;
+        duplicateRoot.insert(duplicateRoot.indexOf('{') + 1, "\"installedAddons\":null,");
+        QVERIFY(CurseforgeContentState::setLocked(duplicateRoot, fixture.pack, {fixture.row}, true, &error)
+                    .isEmpty());
+        QVERIFY(error.contains("ambiguous"));
+    }
+    void largeCurseforgeBatchUsesOneLosslessOutputPass() {
+        const QVariantMap pack{{"path", "C:/Instances/Large"}};
+        QJsonArray addons, expected;
+        QVariantList targets;
+        for (int i = 0; i < 5000; ++i) {
+            const auto name = QString("mod-%1.jar").arg(i);
+            QJsonObject addon{{"addonID", i + 1},
+                              {"modFolderPath", "C:/Instances/Large/mods"},
+                              {"fileNameOnDisk", name},
+                              {"isLocked", false},
+                              {"unknown", QJsonObject{{"preserve", "unchanged"}, {"isLocked", false}}}};
+            addons << addon;
+            if (i % 5 == 0) {
+                const QVariantMap target{{"relativePath", "mods/" + name},
+                                         {"sourceIds", QVariantMap{{"curseforge", QString::number(i + 1)}}}};
+                targets.prepend(target);
+                if (i % 10 == 0)
+                    targets.prepend(target); // Repeated targets remain idempotent.
+                addon["isLocked"] = true;
+            }
+            expected << addon;
+        }
+        const auto original =
+            QJsonDocument(QJsonObject{{"installedAddons", addons}}).toJson(QJsonDocument::Compact);
+        QString error;
+        QElapsedTimer elapsed;
+        elapsed.start();
+        const auto output = CurseforgeContentState::setLocked(original, pack, targets, true, &error);
+        const auto duration = elapsed.elapsed();
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(output,
+                 QJsonDocument(QJsonObject{{"installedAddons", expected}}).toJson(QJsonDocument::Compact));
+        qInfo() << "5000 addons / 1500 target entries / 1000 unique lock changes ms" << duration;
+        QVERIFY(duration < 3000);
     }
     void curseforgeAmbiguousAndMalformedMetadataRemainByteExact() {
         Fixture fixture("curseforge");

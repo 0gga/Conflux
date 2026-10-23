@@ -44,3 +44,10 @@ Observed 22 October 2026 (Release, deterministic 20-ms provider delay): the pre-
 ### Release-stage policy regression budgets
 
 Policy reads are cached per normalized instance path; repeated UI checks do not reread settings or emit notifications. Rapid selection changes coalesce into one150ms-delayed update refresh, invalidate old response generations and preserve installed rows. Explicit policy groups Modrinth requests by effective stages rather than the former installed channel. Tests exercise all seven nonempty selections across both providers, legacy-empty/default transitions, individual/bulk/selected install entry points, queued revalidation, unknown stages and blocked dependencies. These checks do not claim complete application coverage.
+
+
+### Lossless source-lock metadata patch budgets
+
+The CurseForge lock patcher indexes addon paths and provider IDs once, deduplicates target byte spans, sorts unique replacements and constructs one output buffer. It no longer rescans all addons per target or repeatedly shifts the metadata buffer. Ordinary JSON keys use a direct UTF8 decode; escaped keys retain Qt decoding. The bounded token walk avoids temporary byte arrays per character and rejects duplicate/shadowed lock fields regardless of value type.
+
+A deterministic fixture covers5,000 addons,1,500 target entries and1,000 unique changes with exact expected output, including nested unrelated lock fields. The Release build completed the patch in27ms under a3-second regression budget. Duplicate targets, escaped keys, duplicate source fields, stale/null error outputs and malformed metadata have independent correctness checks. This is an in-memory fixture measurement, not live launcher latency.

@@ -100,3 +100,15 @@ These are ideas, not delivered features or additional owner requirements.
 - Delivered per-instance Release/Beta/Alpha install/update policy, shared provider mapping and UI, dependency enforcement, generation guards and queued-policy revalidation. Release is the default; explicit choices keep installed files visible and never trigger a downgrade. Existing crash-recovery and full-coverage targets above remain open.
 
 - Delivered owner-authorized source content-lock synchronization for recognized Modrinth and CurseForge instances. Native metadata is authoritative after confirmation; unsupported schema/untracked identities remain visible failures rather than simulated source success. Crash journals and source-launcher cache notification protocols remain outside this change.
+
+
+## Technical improvement queue (23 October 2026)
+
+| Priority | Improvement | Acceptance criteria | State |
+| --- | --- | --- | --- |
+| P1 | Lossless lock patch correctness | Duplicate targets are idempotent; duplicate or shadowed source lock fields are rejected; invalid JSON never becomes a successful replacement; reused/null error outputs are safe; unrelated bytes remain exact. | Delivered; 26 suites and packaged smoke pass |
+| P1 | Indexed metadata mutation | Index source addons once and build replacements in one pass, replacing target-by-addon scans and repeated buffer shifts. Large-pack tests enforce correct scope, bounded runtime and exact output. | Delivered; 26 suites and packaged smoke pass |
+| P2 | Indexed source-lock UI lookup | Measure card/project lock reads against large source inventories, then remove repeated inventory scans while preserving original-instance and pending-operation semantics. | Audit next |
+| P2 | Cancel obsolete version lookups | A held obsolete provider lookup must not indefinitely delay newer eligible work; preserve concurrency caps, credential generations, callback lifetime and visible errors. | Backlogged |
+| P2 | Separate content operation coordination | Extract focused lock/update orchestration from ContentActions without duplicating inventory/queue state or moving storage logic into views; preserve all transaction and rendered interaction tests. | Backlogged |
+| P2 | Allocation budgets for policy/render helpers | Measure repeated stage eligibility and identity formatting before changing data structures; retain exact default Release behavior and invalid-stage rejection. | Backlogged |

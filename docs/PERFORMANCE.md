@@ -91,3 +91,10 @@ The deterministic900-task fixture performs20,000 reads of each count. It took5,3
 OperationHistory locates insertion/move destinations with binary search over the existing sorted rows. A changing row is omitted through logical indexing while the remaining rows retain their ordering. Running tasks keep descending IDs, queued tasks ascending IDs and finished tasks descending IDs. Native model insertion/move signals, count deltas and persistent-index behavior remain unchanged. Array movement and ID lookup are separate costs; this change bounds only destination searches.
 
 A deterministic5,000-task insertion fixture took1,795ms before the change and13ms after it, within a500ms regression budget. A separate reference sorts its own state map through out-of-order insertion and1,200 seeded start/failure/success/dismiss/progress transitions, including inactive pruning and final clearing. Existing model-observer count checks and persistent-index tests also pass. These are local CPU measurements, not end-to-end download/update times.
+
+
+### Bounded preference identity-key reuse
+
+SettingsContentPreferences reuses the three immutable settings keys derived from an exact instance/content identity pair. The keys retain the original SHA256 input bytes and frozen/locked/updated prefixes, including explicit false values and path fallback identities. A per-reader QCache uses a1MiB estimated entry-cost budget, evicts least-recently-used keys and bypasses entries larger than that budget. This is a bounded cost estimate rather than a measured allocator maximum.
+
+Every preference value is still read from QSettings; negative/default or populated values are never cached. Tests preserve legacy keys, Unicode paths, independent instances/providers, current writes across readers,6,000 identities through eviction and oversized-key fallback. The800,000-read single-identity fixture improved from922ms to217ms on this workstation under an800ms budget. First-time reads still derive keys and normal settings synchronization behavior is unchanged.

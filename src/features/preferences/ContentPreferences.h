@@ -1,5 +1,6 @@
 #pragma once
 #include "features/content/ContentPorts.h"
+#include <QCache>
 #include <QSettings>
 #include <memory>
 namespace studio {
@@ -15,7 +16,13 @@ class SettingsContentPreferences final : public IContentPreferences {
     void setUpdatedAt(const QString &, const QString &, qint64) override;
 
   private:
-    static QString key(const QString &, const QString &);
+    enum class Field { Frozen, Locked, Updated };
+    struct Keys {
+        QString frozen, locked, updated;
+    };
+    QString key(const QString &, const QString &, Field) const;
+    // Immutable derived keys only; QSettings remains authoritative for every value read.
+    mutable QCache<QPair<QString, QString>, Keys> m_keys{1024 * 1024};
     std::unique_ptr<QSettings> m_settings;
 };
 } // namespace studio

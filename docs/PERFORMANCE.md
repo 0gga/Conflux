@@ -63,3 +63,10 @@ The deterministic5,000-entry fixture made2,000 source-lock reads in2,995ms befor
 ### Obsolete version lookup cancellation
 
 A deterministic deferred-provider regression holds an old version callback indefinitely. After cancellation, the next eligible request must start within500ms without releasing that old callback. A loopback integration fixture verifies that the held HTTP version socket is aborted while an unrelated update-identification socket stays connected and completes normally. Scoped queue tests preserve installs for other instances. Cache tests cover coalesced requests, reused request keys, queued cached responses and cancellation inside a callback. These enforce local scheduling and isolation rather than live provider latency; the20-second transfer timeout remains an independent bound.
+
+
+### Release-stage eligibility read budgets
+
+releaseStageAllowed checks the three canonical provider stages directly, defaults an empty selection to Release, and uses exact selected-stage lookup before the existing trim/lowercase compatibility fallback. It no longer constructs effective and supported stage lists for each boolean read. Normalization and serialization still use the shared canonical list; unknown provider stages remain rejected.
+
+The1.6-million-read all-stages fixture took580ms before this change and8ms after it on this workstation. The regression budget is250ms and also exercises Release-only and empty/default selections. Separate equivalence cases compare the optimized predicate with effectiveReleaseStages for unusual selections, duplicates, case, whitespace, Unicode and unknown candidate stages. These are local CPU measurements, not download latency or application-wide allocation counts.

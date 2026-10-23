@@ -64,6 +64,48 @@ class ReleasePolicyTests final : public QObject {
         QCOMPARE(modrinthRelease({}).channel, QString("unknown"));
         QCOMPARE(curseforgeRelease({{"releaseType", 4}}).channel, QString("unknown"));
     }
+    void eligibilityMatchesNormalizedPolicyForUnusualInputs() {
+        const QList<QStringList> selections{{},
+                                            {"release"},
+                                            {"release", "beta", "alpha"},
+                                            {" BETA ", "release", "beta"},
+                                            {"snapshot"},
+                                            {"", "  "},
+                                            {"ALPHA", "unknown"},
+                                            {QString::fromUtf8("relea\xc5\xbf"
+                                                               "e")},
+                                            {QString::fromUtf8("\xc2\xa0"
+                                                               "Beta"
+                                                               "\xc2\xa0")}};
+        const QStringList candidates{"release",  "beta",    "alpha",  "unknown",
+                                     "snapshot", "Release", " beta ", ""};
+        for (const auto &selection : selections)
+            for (const auto &candidate : candidates)
+                QCOMPARE(releaseStageAllowed(candidate, selection),
+                         effectiveReleaseStages(selection).contains(candidate));
+    }
+    void repeatedEligibilityHasBoundedCpuCost_data() {
+        QTest::addColumn<QStringList>("selected");
+        QTest::addColumn<int>("expected");
+        QTest::newRow("all") << QStringList{"release", "beta", "alpha"} << 1200000;
+        QTest::newRow("release-only") << QStringList{"release"} << 400000;
+        QTest::newRow("default") << QStringList{} << 400000;
+    }
+    void repeatedEligibilityHasBoundedCpuCost() {
+        QFETCH(QStringList, selected);
+        QFETCH(int, expected);
+        const QStringList stages{"release", "beta", "alpha", "unknown"};
+        QElapsedTimer timer;
+        timer.start();
+        int accepted = 0;
+        for (int i = 0; i < 400000; ++i)
+            for (const auto &stage : stages)
+                accepted += releaseStageAllowed(stage, selected);
+        const auto elapsed = timer.elapsed();
+        QCOMPARE(accepted, expected);
+        qInfo() << "1600000 release-stage eligibility checks ms" << elapsed;
+        QVERIFY2(elapsed < 250, "Stage eligibility rebuilt too much temporary state.");
+    }
     void preferencesPersistPerInstanceAndRejectUnknownStages() {
         QTemporaryDir temp;
         auto store = std::make_shared<BrowseSettingsStore>(temp.path() + "/prefs.ini");

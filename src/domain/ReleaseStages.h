@@ -18,6 +18,17 @@ inline QStringList effectiveReleaseStages(const QStringList &selection = {}) {
     return selection.isEmpty() ? QStringList{"release"} : normalizedReleaseStages(selection);
 }
 inline bool releaseStageAllowed(const QString &stage, const QStringList &selection) {
-    return effectiveReleaseStages(selection).contains(stage);
+    // Provider stages are canonical; a user selection may still need normalization.
+    if (stage != QLatin1StringView("release") && stage != QLatin1StringView("beta") &&
+        stage != QLatin1StringView("alpha"))
+        return false;
+    if (selection.isEmpty())
+        return stage == QLatin1StringView("release");
+    if (selection.contains(stage))
+        return true;
+    for (const auto &value : selection)
+        if (value.trimmed().toLower() == stage)
+            return true;
+    return false;
 }
 } // namespace studio

@@ -84,3 +84,10 @@ A deterministic fixture acquires12,000 two-key operations, rejects12,000 conflic
 OperationHistory maintains active and failed totals when its single-threaded model inserts, changes, prunes, dismisses or clears entries. Getter calls return those totals without scanning task maps or constructing status lists. Counters are updated with the underlying row before completion notifications, so model observers see the same counts as the current entries. Task ordering and persistent indices retain the existing incremental model operations.
 
 The deterministic900-task fixture performs20,000 reads of each count. It took5,397ms before this change and less than1ms at millisecond timer resolution afterward, under a250ms regression budget. Transition tests independently recompute counts from entries during model and feature notifications, including repeated completion, reactivation, missing IDs, pruning and clearing. This is a read-path CPU result; insertion/reordering costs remain separate work.
+
+
+### Bounded task ordering searches
+
+OperationHistory locates insertion/move destinations with binary search over the existing sorted rows. A changing row is omitted through logical indexing while the remaining rows retain their ordering. Running tasks keep descending IDs, queued tasks ascending IDs and finished tasks descending IDs. Native model insertion/move signals, count deltas and persistent-index behavior remain unchanged. Array movement and ID lookup are separate costs; this change bounds only destination searches.
+
+A deterministic5,000-task insertion fixture took1,795ms before the change and13ms after it, within a500ms regression budget. A separate reference sorts its own state map through out-of-order insertion and1,200 seeded start/failure/success/dismiss/progress transitions, including inactive pruning and final clearing. Existing model-observer count checks and persistent-index tests also pass. These are local CPU measurements, not end-to-end download/update times.

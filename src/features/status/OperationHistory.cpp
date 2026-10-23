@@ -8,17 +8,22 @@ int OperationHistory::insertionIndex(const QVariantMap &row, int excluded) const
     };
     const auto rank = priority(row);
     const auto id = row.value("id").toULongLong();
-    int position = 0;
-    for (int i = 0; i < m_entries.size(); ++i) {
-        if (i == excluded)
-            continue;
-        const auto other = m_entries[i].toMap();
+    // The remaining rows stay sorted when one changed row is omitted.
+    int first = 0, last = int(m_entries.size()) - (excluded >= 0 ? 1 : 0);
+    while (first < last) {
+        const int middle = first + (last - first) / 2;
+        const int index = middle + (excluded >= 0 && middle >= excluded ? 1 : 0);
+        const auto other = m_entries[index].toMap();
         const auto otherRank = priority(other);
-        if (otherRank < rank || (otherRank == rank && (rank == 1 ? other.value("id").toULongLong() < id
-                                                                 : other.value("id").toULongLong() > id)))
-            ++position;
+        const bool precedes =
+            otherRank < rank || (otherRank == rank && (rank == 1 ? other.value("id").toULongLong() < id
+                                                                 : other.value("id").toULongLong() > id));
+        if (precedes)
+            first = middle + 1;
+        else
+            last = middle;
     }
-    return position;
+    return first;
 }
 int OperationHistory::reposition(int from) {
     const int to = insertionIndex(m_entries[from].toMap(), from);

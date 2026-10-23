@@ -7,9 +7,11 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QProcess>
+#include <QRandomGenerator>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
+#include <algorithm>
 using namespace studio;
 class StatusTests : public QObject {
     Q_OBJECT
@@ -108,6 +110,96 @@ class StatusTests : public QObject {
         history.dismiss(2);
         QCOMPARE(history.rowCount(), 0);
         verify();
+    }
+    void bulkTaskInsertionHasBoundedCpuCost() {
+        OperationHistory history;
+        QSignalSpy resets(&history, &QAbstractItemModel::modelReset);
+        QElapsedTimer elapsed;
+        elapsed.start();
+        for (quint64 id = 1; id <= 5000; ++id)
+            history.queued(id, {}, "Fixture", "Update");
+        const auto milliseconds = elapsed.elapsed();
+        QCOMPARE(history.activeCount(), 5000);
+        QCOMPARE(history.rowCount(), 5000);
+        QCOMPARE(history.entries().first().toMap().value("id").toULongLong(), quint64(1));
+        QCOMPARE(history.entries().last().toMap().value("id").toULongLong(), quint64(5000));
+        QCOMPARE(resets.size(), 0);
+        qInfo() << "5000 task insertions ms" << milliseconds;
+        QVERIFY2(milliseconds < 500, "Bulk task insertion rescans earlier tasks.");
+    }
+    void mixedTaskOrderingMatchesAnIndependentReference() {
+        OperationHistory history;
+        QSignalSpy resets(&history, &QAbstractItemModel::modelReset);
+        QHash<quint64, QString> states;
+        auto active = [](const QString &state) { return state == "queued" || state == "running"; };
+        auto ordered = [&] {
+            auto ids = states.keys();
+            const auto rank = [](const QString &state) {
+                return state == "running" ? 0 : state == "queued" ? 1 : 2;
+            };
+            std::sort(ids.begin(), ids.end(), [&](auto a, auto b) {
+                const auto left = rank(states.value(a)), right = rank(states.value(b));
+                if (left != right)
+                    return left < right;
+                return left == 1 ? a < b : a > b;
+            });
+            return ids;
+        };
+        auto prune = [&] {
+            const auto ids = ordered();
+            int inactive = 0;
+            for (auto id : ids)
+                if (!active(states.value(id)) && ++inactive > 100)
+                    states.remove(id);
+        };
+        auto verify = [&] {
+            QList<quint64> actual;
+            for (const auto &value : history.entries())
+                actual << value.toMap().value("id").toULongLong();
+            QCOMPARE(actual, ordered());
+        };
+        for (int i = 0; i < 221; ++i) {
+            const quint64 id = (i * 73) % 221 + 1;
+            history.queued(id, {}, "Fixture", "Update");
+            states[id] = "queued";
+            verify();
+        }
+        QRandomGenerator random(0x5eedu);
+        for (int i = 0; i < 1200; ++i) {
+            const quint64 id = random.bounded(221u) + 1;
+            switch (random.bounded(5u)) {
+            case 0:
+                history.start(id);
+                if (states.contains(id))
+                    states[id] = "running";
+                break;
+            case 1:
+                history.finish(id, false, "Failure");
+                if (states.contains(id))
+                    states[id] = "failed";
+                prune();
+                break;
+            case 2:
+                history.finish(id, true, {});
+                if (states.contains(id))
+                    states[id] = "done";
+                prune();
+                break;
+            case 3:
+                history.dismiss(id);
+                if (states.contains(id) && !active(states.value(id)))
+                    states.remove(id);
+                break;
+            case 4:
+                history.progress(id, "Progress");
+                break;
+            }
+            verify();
+        }
+        history.clearFinished();
+        states.removeIf([&](auto entry) { return !active(entry.value()); });
+        verify();
+        QCOMPARE(resets.size(), 0);
     }
     void activeTasksStayAboveQueuedAndFinishedWithoutResettingTheModel() {
         OperationHistory history;

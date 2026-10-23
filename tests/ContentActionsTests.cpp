@@ -62,6 +62,101 @@ class ContentActionsTests : public QObject {
     }
   private slots:
 
+    void projectLockReadsUseLatestAcceptedStateInsteadOfCapturedPackMetadata() {
+        QTemporaryDir temp;
+        ContentActions content(std::make_shared<ContentFileFixture>(),
+                               std::make_shared<ContentCatalogueFixture>(),
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        auto source =
+            QVariantMap{{"provider", "modrinth"}, {"projectId", "Example"}, {"launcherLocked", true}};
+        QVariantMap pack{{"path", temp.path()}, {"sourceContent", QVariantList{source}}};
+        content.setContext(pack, {row("Example", "Author")});
+        QTRY_VERIFY(!content.busy());
+        const QVariantMap capturedProject{{"sourceIds", QVariantMap{{"modrinth", "Example"}}},
+                                          {"targetPack", pack}};
+        QVERIFY(content.projectLocked(capturedProject));
+        source["launcherLocked"] = false;
+        pack["sourceContent"] = QVariantList{source};
+        content.setContext(pack, {row("Example", "Author")}, true);
+        QTRY_VERIFY(!content.busy());
+        QVERIFY(content.sourceLock(capturedProject).isEmpty());
+        QVERIFY(!content.projectLocked(capturedProject));
+    }
+    void sourceLockReadBudgetForLargeInstance() {
+        QTemporaryDir temp;
+        ContentActions content(std::make_shared<ContentFileFixture>(),
+                               std::make_shared<ContentCatalogueFixture>(),
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        QVariantList source;
+        for (int i = 0; i < 5000; ++i)
+            source << QVariantMap{
+                {"provider", "modrinth"}, {"projectId", QString::number(i)}, {"launcherLocked", true}};
+        const QVariantMap pack{{"path", temp.path()}, {"sourceContent", source}};
+        content.setContext(pack, {row("4999", "Author")});
+        QTRY_VERIFY(!content.busy());
+        const QVariantMap project{{"sourceIds", QVariantMap{{"modrinth", "4999"}}}};
+        QElapsedTimer elapsed;
+        elapsed.start();
+        for (int i = 0; i < 2000; ++i)
+            QVERIFY(!content.sourceLock(project).isEmpty());
+        qInfo() << "2000 source lock reads / 5000 source entries ms" << elapsed.elapsed();
+        QVERIFY(elapsed.elapsed() < 1000);
+    }
+    void sourceLockIndexScopesProvidersAndRetainsOnlyAcceptedSnapshots() {
+        SourceLockIndex index;
+        const QVariantMap cf{
+            {"provider", "curseforge"}, {"projectId", "same"}, {"launcherLocked", true}, {"missing", true}};
+        const QVariantMap mr{
+            {"provider", "modrinth"}, {"projectId", "same"}, {"launcherLocked", true}, {"missing", false}};
+        index.remember({{"path", "a"}, {"sourceContent", QVariantList{cf, mr}}});
+        QCOMPARE(index.find("a", {{"modrinth", "same"}}), mr);
+        QCOMPARE(index.find("a", {{"curseforge", "same"}}), cf);
+        QCOMPARE(index.find("a", {{"curseforge", "same"}, {"modrinth", "same"}}),
+                 cf);                    // Preserve original source order.
+        index.remember({{"path", "a"}}); // Loading context cannot erase accepted source metadata.
+        QCOMPARE(index.find("a", {{"modrinth", "same"}}), mr);
+        index.remember({{"path", "a"}, {"sourceContent", "incomplete"}});
+        QCOMPARE(index.find("a", {{"modrinth", "same"}}), mr);
+        index.remember({{"path", "b"}, {"sourceContent", QVariantList{mr}}});
+        index.remember({{"path", "a"}, {"sourceContent", QVariantList{}}});
+        QVERIFY(index.find("a", {{"modrinth", "same"}}).isEmpty());
+        QCOMPARE(index.find("b", {{"modrinth", "same"}}), mr);
+#ifdef Q_OS_WIN
+        index.remember({{"path", "C:/Instances/Pack/"}, {"sourceContent", QVariantList{mr}}});
+        QCOMPARE(index.find("c:/instances/pack", {{"modrinth", "same"}}), mr);
+#endif
+    }
+    void capturedInstallTargetCannotReseedAnObsoleteSourceLock() {
+        QTemporaryDir temp;
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        ContentActions content(std::make_shared<ContentFileFixture>(),
+                               std::make_shared<ContentCatalogueFixture>(), installer,
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        const auto file = row("Example", "Author");
+        auto source =
+            QVariantMap{{"provider", "modrinth"}, {"projectId", "Example"}, {"launcherLocked", true}};
+        QVariantMap pack{{"path", temp.path()}, {"sourceContent", QVariantList{source}}};
+        const auto captured = pack;
+        content.setContext(pack, {file});
+        QTRY_VERIFY(!content.busy());
+        source["launcherLocked"] = false;
+        pack["sourceContent"] = QVariantList{source};
+        content.setContext(pack, {file}, true);
+        QTRY_VERIFY(!content.busy());
+        content.setContext({{"path", temp.path() + "/other"}}, {});
+        content.installRelease(file.value("updateRelease").toMap(), {{"sourceIds", file.value("sourceIds")},
+                                                                     {"targetPack", captured},
+                                                                     {"targetRows", QVariantList{file}},
+                                                                     {"type", "mod"}});
+        QTRY_VERIFY(bool(installer->completion));
+        QVERIFY(
+            content.sourceLock({{"sourceIds", file.value("sourceIds")}, {"targetPack", captured}}).isEmpty());
+        auto finish = std::move(installer->completion);
+        finish({false, "Fixture cancelled"});
+        QTRY_VERIFY(!content.busy());
+    }
     void rapidPolicyChangesAreCoalescedAndOldResultsCannotRestoreUpdates() {
         class DeferredCatalogue final : public IContentCatalogue {
           public:

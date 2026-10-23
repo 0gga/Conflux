@@ -65,6 +65,15 @@ void ContentActions::setReleasePolicy(std::shared_ptr<PackReleasePolicy> policy)
         emit changed();
     });
 }
+void ContentActions::storeState(const QString &path, ContentFileState state) {
+    m_sourceLocks.remember(state.pack);
+    m_states.insert(path, std::move(state));
+}
+void ContentActions::seedState(const QString &path, ContentFileState state) {
+    if (m_sourceLocks.contains(path))
+        state.pack["sourceContent"] = m_sourceLocks.sourceRows(path);
+    storeState(path, std::move(state));
+}
 void ContentActions::setContext(const QVariantMap &pack, const QVariantList &files, bool forceRefresh) {
     const auto path = pack.value("path").toString();
     if (path == m_pack.value("path").toString() && hasPending(path)) {
@@ -75,6 +84,7 @@ void ContentActions::setContext(const QVariantMap &pack, const QVariantList &fil
         return;
     const bool changedPack = pack.value("path") != m_pack.value("path");
     m_pack = pack;
+    m_sourceLocks.remember(pack);
     m_inventory = files;
     if (changedPack) {
         m_policyRefresh.stop();
@@ -145,6 +155,7 @@ void ContentActions::refresh(bool checkUpdates) {
                     return;
                 }
                 m_pack = state.pack;
+                m_sourceLocks.remember(state.pack);
                 ++m_lockRevision;
                 auto result = reconcileContentRows(rows, previous);
                 QVariantList unidentified;
@@ -525,7 +536,7 @@ void ContentActions::changeLocks(const QVariantMap &pack, const QVariantList &ro
     const auto path = pack.value("path").toString();
     if (pack.value("provider") == "modrinth" || pack.value("provider") == "curseforge") {
         if (!m_states.contains(path))
-            m_states[path] = {pack, rows, {}};
+            seedState(path, {pack, rows, {}});
         ContentOperation operation;
         operation.kind = ContentOperation::Lock;
         operation.packPath = path;
@@ -573,7 +584,7 @@ bool ContentActions::enqueue(ContentOperation operation) {
                 }
     if (operation.packPath == m_pack.value("path").toString()) {
         if (!hasPending(operation.packPath))
-            m_states[operation.packPath] = {m_pack, reconcileContentRows(m_rows, m_rows), {}};
+            storeState(operation.packPath, {m_pack, reconcileContentRows(m_rows, m_rows), {}});
         ++m_generation;
         m_busy = false;
     }
@@ -641,7 +652,7 @@ void ContentActions::startOperation(ContentOperation operation, ContentOperation
         }
         before.rows = guard->withPreferences(before.pack, before.rows);
         if (before.error.isEmpty())
-            guard->m_states[operation.packPath] = before;
+            guard->storeState(operation.packPath, before);
         guard->syncLocks(operation.packPath);
         guard->m_executor->execute(
             operation, before,
@@ -706,7 +717,7 @@ void ContentActions::completeOperation(ContentOperation operation, ContentWriteR
                                             QDateTime::currentMSecsSinceEpoch());
         }
     }
-    m_states[operation.packPath] = current;
+    storeState(operation.packPath, current);
     if (m_pack.value("path") == operation.packPath) {
         m_pack = current.pack;
         m_inventory = current.rows;
@@ -815,7 +826,7 @@ void ContentActions::install(const QVector<ContentInstallRequest> &requests, con
     const auto target = project.value("targetPack", m_pack).toMap();
     operation.packPath = target.value("path").toString();
     if (!m_states.contains(operation.packPath))
-        m_states[operation.packPath] = {target, project.value("targetRows").toList(), {}};
+        seedState(operation.packPath, {target, project.value("targetRows").toList(), {}});
     const auto candidates = operation.packPath == m_pack.value("path").toString()
                                 ? m_rows
                                 : m_states.value(operation.packPath).rows;
@@ -925,18 +936,13 @@ static QVariantMap projectIds(const QVariantMap &project) {
 QVariantMap ContentActions::sourceLock(const QVariantMap &project) const {
     const auto target = project.value("targetPack", m_pack).toMap();
     const auto path = target.value("path").toString();
-    const auto pack = target.contains("sourceContent") ? target
-                      : path == m_pack.value("path").toString()
-                          ? m_pack
-                          : (m_states.contains(path) ? m_states.value(path).pack : target);
     const auto ids = projectIds(project);
-    for (const auto &value : pack.value("sourceContent").toList()) {
-        const auto lock = value.toMap();
-        if (lock.value("launcherLocked").toBool() && !lock.value("projectId").toString().isEmpty() &&
-            ids.value(lock.value("provider", "modrinth").toString()) == lock.value("projectId"))
-            return lock;
-    }
-    return {};
+    if (m_sourceLocks.contains(path))
+        return m_sourceLocks.find(path, ids);
+    // A not-yet-opened target can supply metadata, but cannot overwrite accepted state.
+    SourceLockIndex supplied;
+    supplied.remember(target);
+    return supplied.find(path, ids);
 }
 bool ContentActions::projectLocked(const QVariantMap &project) const {
     const auto targetPath = project.value("targetPack", m_pack).toMap().value("path").toString();

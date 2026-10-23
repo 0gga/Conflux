@@ -68,6 +68,7 @@ qt_add_library(conflux_desktop STATIC
     src/features/config/ConfigEditor.h src/features/config/ConfigEditor.cpp)
 target_sources(conflux_desktop PRIVATE
     src/features/content/ContentPorts.h
+    src/features/content/SourceLockIndex.h src/features/content/SourceLockIndex.cpp
     src/features/preferences/PackReleasePolicy.h src/features/preferences/PackReleasePolicy.cpp
     src/features/explore/BrowseInstalls.h src/features/explore/BrowseInstalls.cpp
     src/features/explore/TolerantCatalogueSearch.h src/features/explore/TolerantCatalogueSearch.cpp

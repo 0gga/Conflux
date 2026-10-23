@@ -5,6 +5,7 @@
 #include "ContentOperationQueue.h"
 #include "ContentOperationState.h"
 #include "ContentPorts.h"
+#include "SourceLockIndex.h"
 #include "features/preferences/ContentVisibility.h"
 #include "features/preferences/PackReleasePolicy.h"
 #include "features/status/OperationHistory.h"
@@ -187,6 +188,8 @@ class ContentActions final : public QObject {
     QVariantMap find(const QString &) const;
     QString preferenceIdentity(const QVariantMap &) const;
     void applyPreferences();
+    void storeState(const QString &, ContentFileState);
+    void seedState(const QString &, ContentFileState);
     void saveLockPreferences(const QString &, const QVariantList &, bool);
     void changeLocks(const QVariantMap &, const QVariantList &, bool, bool sourceOnly = false);
     QVariantList filteredRows() const;
@@ -218,6 +221,7 @@ class ContentActions final : public QObject {
     ContentListModel m_model;
     std::shared_ptr<ContentLockRegistry> m_locks;
     QHash<QString, ContentFileState> m_states;
+    SourceLockIndex m_sourceLocks;
     QList<ContentOperation> m_pendingOperations;
     QVariantList m_visibleRows;
     quint64 m_operationId = 0;

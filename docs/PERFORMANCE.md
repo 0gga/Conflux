@@ -51,3 +51,10 @@ Policy reads are cached per normalized instance path; repeated UI checks do not 
 The CurseForge lock patcher indexes addon paths and provider IDs once, deduplicates target byte spans, sorts unique replacements and constructs one output buffer. It no longer rescans all addons per target or repeatedly shifts the metadata buffer. Ordinary JSON keys use a direct UTF8 decode; escaped keys retain Qt decoding. The bounded token walk avoids temporary byte arrays per character and rejects duplicate/shadowed lock fields regardless of value type.
 
 A deterministic fixture covers5,000 addons,1,500 target entries and1,000 unique changes with exact expected output, including nested unrelated lock fields. The Release build completed the patch in27ms under a3-second regression budget. Duplicate targets, escaped keys, duplicate source fields, stale/null error outputs and malformed metadata have independent correctness checks. This is an in-memory fixture measurement, not live launcher latency.
+
+
+### Indexed source-lock UI reads
+
+SourceLockIndex builds provider-qualified project lookups when accepted instance metadata changes. ContentActions reads the index from UI-facing sourceLock calls; it does not scan every source file per card. Accepted state is kept separately from captured project targets, and initial operation state is seeded with the latest accepted source metadata. Raw/loading contexts cannot erase a known snapshot; an explicit empty snapshot clears it. Provider collisions, original-instance navigation and pending lock intent retain their scope.
+
+The deterministic5,000-entry fixture made2,000 source-lock reads in2,995ms before the change and2ms after it, within a1-second regression budget. A separate before-fix failure reproduces a captured target resurrecting an obsolete source lock; accepted-state and captured-install regressions now pass. These are local CPU/state measurements, not provider or disk latency claims.

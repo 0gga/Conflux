@@ -1,4 +1,5 @@
 #include "ContentActions.h"
+#include "ContentLockIntent.h"
 #include "domain/ContentCompatibility.h"
 #include "domain/ContentTypes.h"
 #include "domain/ReleaseStages.h"
@@ -526,34 +527,20 @@ void ContentActions::saveLockPreferences(const QString &pack, const QVariantList
 }
 void ContentActions::changeLocks(const QVariantMap &pack, const QVariantList &rows, bool locked,
                                  bool sourceOnly) {
-    if (rows.isEmpty())
+    const auto intent = planContentLockIntent(pack, rows, locked, sourceOnly);
+    if (intent.route == ContentLockIntent::Ignore)
         return;
-    for (const auto &value : rows)
-        if (value.toMap().value("pending").toBool()) {
-            reject("This content already has an active or queued operation. Wait for it to finish.");
-            return;
-        }
-    const auto path = pack.value("path").toString();
-    if (pack.value("provider") == "modrinth" || pack.value("provider") == "curseforge") {
-        if (!m_states.contains(path))
-            seedState(path, {pack, rows, {}});
-        ContentOperation operation;
-        operation.kind = ContentOperation::Lock;
-        operation.packPath = path;
-        operation.locked = locked;
-        if (sourceOnly)
-            operation.sourceLock = rows.first().toMap();
-        else
-            for (const auto &value : rows)
-                operation.targets << contentRowKey(value.toMap());
-        enqueue(operation);
+    if (intent.route == ContentLockIntent::Reject) {
+        reject(intent.error);
         return;
     }
-    for (const auto &value : rows)
-        if (value.toMap().value("launcherLocked").toBool()) {
-            reject("The source launcher for this lock is unavailable.");
-            return;
-        }
+    const auto path = pack.value("path").toString();
+    if (intent.route == ContentLockIntent::Source) {
+        if (!m_states.contains(path))
+            seedState(path, {pack, rows, {}});
+        enqueue(intent.operation);
+        return;
+    }
     saveLockPreferences(path, rows, locked);
     ++m_lockRevision;
     applyPreferences();

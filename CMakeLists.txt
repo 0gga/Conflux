@@ -87,6 +87,7 @@ target_sources(conflux_desktop PRIVATE
     src/features/content/ContentListModel.h src/features/content/ContentListModel.cpp
     src/features/content/ContentOperationState.h src/features/content/ContentOperationState.cpp
     src/features/content/ContentOperationReservations.h src/features/content/ContentOperationReservations.cpp
+    src/features/content/ContentLockIntent.h src/features/content/ContentLockIntent.cpp
     src/features/content/ContentLockRegistry.h src/features/content/ContentLockRegistry.cpp
     src/features/preferences/ContentPreferences.h src/features/preferences/ContentPreferences.cpp
     src/platform/NativeContentStore.h src/platform/NativeContentStore.cpp
@@ -224,6 +225,9 @@ if(BUILD_TESTING)
     target_compile_definitions(version-changelog-tests PRIVATE CONFLUX_QML_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")
     add_test(NAME version-changelogs COMMAND version-changelog-tests -o "${CMAKE_CURRENT_BINARY_DIR}/version-changelog-results.txt,txt")
     set_tests_properties(version-changelogs PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    qt_add_executable(content-lock-intent-tests tests/ContentLockIntentTests.cpp)
+    target_link_libraries(content-lock-intent-tests PRIVATE conflux_desktop Qt6::Test)
+    add_test(NAME content-lock-intent COMMAND content-lock-intent-tests -o "${CMAKE_CURRENT_BINARY_DIR}/content-lock-intent-results.txt,txt")
     qt_add_executable(content-preferences-tests tests/ContentPreferenceTests.cpp)
     target_link_libraries(content-preferences-tests PRIVATE conflux_desktop Qt6::Test)
     add_test(NAME content-preferences COMMAND content-preferences-tests -o "${CMAKE_CURRENT_BINARY_DIR}/content-preference-results.txt,txt")

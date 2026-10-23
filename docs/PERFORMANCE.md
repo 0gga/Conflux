@@ -70,3 +70,10 @@ A deterministic deferred-provider regression holds an old version callback indef
 releaseStageAllowed checks the three canonical provider stages directly, defaults an empty selection to Release, and uses exact selected-stage lookup before the existing trim/lowercase compatibility fallback. It no longer constructs effective and supported stage lists for each boolean read. Normalization and serialization still use the shared canonical list; unknown provider stages remain rejected.
 
 The1.6-million-read all-stages fixture took580ms before this change and8ms after it on this workstation. The regression budget is250ms and also exercises Release-only and empty/default selections. Separate equivalence cases compare the optimized predicate with effectiveReleaseStages for unusual selections, duplicates, case, whitespace, Unicode and unknown candidate stages. These are local CPU measurements, not download latency or application-wide allocation counts.
+
+
+### Operation reservation claim budgets
+
+ContentOperationReservations replaces pending-operation overlap scans with an instance-scoped hash index. Checking and acquiring a command is proportional to its reservation keys; release checks ownership before removing keys. Deriving target keys still scans the requested instance rows and is not claimed as an indexed inventory lookup. Inventory, pending command and rendered projection state remain outside the reservation component.
+
+A deterministic fixture acquires12,000 two-key operations, rejects12,000 conflicts and releases the claims in8ms under a1,500ms budget on this workstation. A separate3,000-step seeded sequence compares results with an ordered reference through mixed acquisitions and cancellations. Integration tests reproduce and fix background commands borrowing visible-instance aliases, and verify queued cancellation releases its own claims while active work remains protected. These measure in-memory claim handling, not end-to-end bulk update latency.

@@ -387,6 +387,88 @@ class ContentActionsTests : public QObject {
         QVERIFY(content.rows()[1].toMap().value("locked").toBool());
         QCOMPARE(files->paths.size(), 2);
     }
+    void backgroundReservationsNeverBorrowVisibleInstanceAliases() {
+        QTemporaryDir temp;
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        ContentActions content(std::make_shared<ContentFileFixture>(),
+                               std::make_shared<ContentCatalogueFixture>(), installer,
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        const QVariantMap originalPack{{"path", temp.path() + "/a"}};
+        auto first = row("Shared", "Author");
+        first["sourceIds"] = QVariantMap{{"modrinth", "original"}};
+        auto second = row("Other", "Author");
+        second["sourceIds"] = QVariantMap{{"modrinth", "unrelated"}};
+        content.setContext(originalPack, {first, second});
+        QTRY_VERIFY(!content.busy());
+        const auto capturedRows = content.rows();
+        auto visible = row("Shared", "Author");
+        visible["sourceIds"] = QVariantMap{{"modrinth", "unrelated"}};
+        content.setContext({{"path", temp.path() + "/b"}}, {visible});
+        QTRY_VERIFY(!content.busy());
+        QSignalSpy errors(&content, &ContentActions::operationFailed);
+        auto release = first.value("updateRelease").toMap();
+        release["projectId"] = "original";
+        release["filename"] = "first-new.jar";
+        content.installRelease(release, {{"sourceIds", first.value("sourceIds")},
+                                         {"targetPack", originalPack},
+                                         {"targetRows", capturedRows},
+                                         {"type", "mod"}});
+        QTRY_VERIFY(bool(installer->completion));
+        auto next = second.value("updateRelease").toMap();
+        next["projectId"] = "unrelated";
+        next["filename"] = "second-new.jar";
+        content.installRelease(next, {{"sourceIds", second.value("sourceIds")},
+                                      {"targetPack", originalPack},
+                                      {"targetRows", capturedRows},
+                                      {"type", "mod"}});
+        QCOMPARE(errors.size(), 0);
+        QCOMPARE(content.operations()->activeCount(), 2);
+        auto finish = std::move(installer->completion);
+        finish({false, "Fixture first cancelled"});
+        QTRY_VERIFY(bool(installer->completion));
+        QCOMPARE(installer->requested.first().release.projectId, QString("unrelated"));
+        finish = std::move(installer->completion);
+        finish({false, "Fixture second cancelled"});
+        QTRY_VERIFY(!content.operationsBusy());
+    }
+    void cancellingQueuedWorkReleasesOnlyItsOwnReservations() {
+        QTemporaryDir temp;
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        ContentActions content(std::make_shared<ContentFileFixture>(),
+                               std::make_shared<ContentCatalogueFixture>(), installer,
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        auto alpha = row("Alpha", "Author"), bravo = row("Bravo", "Author");
+        auto alphaRelease = alpha.value("updateRelease").toMap();
+        auto bravoRelease = bravo.value("updateRelease").toMap();
+        alphaRelease["filename"] = "Alpha-new.jar";
+        bravoRelease["filename"] = "Bravo-new.jar";
+        alpha["updateRelease"] = alphaRelease;
+        bravo["updateRelease"] = bravoRelease;
+        content.setContext({{"path", temp.path()}}, {alpha, bravo});
+        QTRY_VERIFY(!content.busy());
+        content.update("mods/Alpha.jar");
+        QTRY_VERIFY(bool(installer->completion));
+        content.update("mods/Bravo.jar");
+        quint64 queued = 0;
+        for (const auto &entry : content.operations()->entries())
+            if (entry.toMap().value("title") == "Bravo")
+                queued = entry.toMap().value("id").toULongLong();
+        QVERIFY(queued);
+        content.cancelOperation(queued);
+        QSignalSpy errors(&content, &ContentActions::operationFailed);
+        content.update("mods/Bravo.jar");
+        QCOMPARE(errors.size(), 0);
+        QCOMPARE(content.operations()->activeCount(), 2);
+        content.update("mods/Alpha-new.jar");
+        QCOMPARE(errors.size(), 1);
+        auto finish = std::move(installer->completion);
+        finish({false, "Fixture first cancelled"});
+        QTRY_VERIFY(bool(installer->completion));
+        QCOMPARE(installer->requested.first().release.projectId, QString("Bravo"));
+        finish = std::move(installer->completion);
+        finish({false, "Fixture second cancelled"});
+        QTRY_VERIFY(!content.operationsBusy());
+    }
     void backgroundReadExceptionsKeepRowsAndReportAnError() {
         class Files : public IContentFileStore {
           public:

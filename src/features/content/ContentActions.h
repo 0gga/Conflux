@@ -3,6 +3,7 @@
 #include "ContentLockRegistry.h"
 #include "ContentOperationExecutor.h"
 #include "ContentOperationQueue.h"
+#include "ContentOperationReservations.h"
 #include "ContentOperationState.h"
 #include "ContentPorts.h"
 #include "SourceLockIndex.h"
@@ -197,7 +198,6 @@ class ContentActions final : public QObject {
     bool hasPending(const QString &) const;
     bool enqueue(ContentOperation);
     void reject(const QString &, const QString &title = {});
-    QStringList reservations(const ContentOperation &) const;
     void startOperation(ContentOperation, ContentOperationQueue::Completion);
     void completeOperation(ContentOperation, ContentWriteResult, ContentFileState,
                            ContentOperationQueue::Completion);
@@ -223,6 +223,7 @@ class ContentActions final : public QObject {
     QHash<QString, ContentFileState> m_states;
     SourceLockIndex m_sourceLocks;
     QList<ContentOperation> m_pendingOperations;
+    ContentOperationReservations m_reservations;
     QVariantList m_visibleRows;
     quint64 m_operationId = 0;
     bool m_anyChanged = false, m_checkUpdatesPending = false;

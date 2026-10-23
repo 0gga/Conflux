@@ -573,15 +573,14 @@ bool ContentActions::enqueue(ContentOperation operation) {
     operation.id = ++m_operationId;
     if (operation.packPath.isEmpty())
         operation.packPath = m_pack.value("path").toString();
-    operation.reservations = reservations(operation);
-    for (const auto &pending : m_pendingOperations)
-        if (QDir::cleanPath(pending.packPath)
-                .compare(QDir::cleanPath(operation.packPath), Qt::CaseInsensitive) == 0)
-            for (const auto &key : operation.reservations)
-                if (pending.reservations.contains(key)) {
-                    reject("This content already has an active or queued operation. Wait for it to finish.");
-                    return false;
-                }
+    const auto instanceRows = operation.packPath == m_pack.value("path").toString()
+                                  ? m_rows
+                                  : m_states.value(operation.packPath).rows;
+    operation.reservations = ContentOperationReservations::keys(operation, instanceRows);
+    if (!m_reservations.acquire(operation)) {
+        reject("This content already has an active or queued operation. Wait for it to finish.");
+        return false;
+    }
     if (operation.packPath == m_pack.value("path").toString()) {
         if (!hasPending(operation.packPath))
             storeState(operation.packPath, {m_pack, reconcileContentRows(m_rows, m_rows), {}});
@@ -718,6 +717,7 @@ void ContentActions::completeOperation(ContentOperation operation, ContentWriteR
         }
     }
     storeState(operation.packPath, current);
+    m_reservations.release(operation);
     if (m_pack.value("path") == operation.packPath) {
         m_pack = current.pack;
         m_inventory = current.rows;
@@ -1022,41 +1022,6 @@ void ContentActions::reject(const QString &message, const QString &title) {
     emit operationFailed(message);
     emit changed();
 }
-QStringList ContentActions::reservations(const ContentOperation &operation) const {
-    QSet<QString> keys;
-    auto add = [&](const QVariantMap &row) {
-        auto path = row.value("relativePath").toString();
-        if (path.endsWith(".disabled"))
-            path.chop(9);
-#ifdef Q_OS_WIN
-        path = path.toCaseFolded();
-#endif
-        if (!path.isEmpty())
-            keys.insert("path:" + path);
-        const auto ids = projectIds(row);
-        for (auto it = ids.cbegin(); it != ids.cend(); ++it)
-            if (!it.value().toString().isEmpty())
-                keys.insert("project:" + row.value("category").toString() + ':' + it.key() + ':' +
-                            it.value().toString());
-    };
-    const auto state = m_states.value(operation.packPath);
-    for (const auto &value : resolveContentTargets(state.rows + m_rows, operation.targets))
-        add(value.toMap());
-    for (const auto &value : operation.predictions)
-        add(value.toMap());
-    for (const auto &request : operation.requests) {
-        auto row = request.release.toVariant();
-        row["sourceIds"] = request.sourceIds.toVariantMap();
-        row["category"] = contentCategory(request.contentType);
-        add(row);
-    }
-    if (!operation.sourceLock.isEmpty()) {
-        auto row = operation.sourceLock;
-        row["category"] = row.value("relativePath").toString().section('/', 0, 0);
-        add(row);
-    }
-    return keys.values();
-}
 void ContentActions::retryOperation(quint64 id) {
     if (!m_failedOperations.contains(id))
         return;
@@ -1074,6 +1039,7 @@ void ContentActions::cancelOperation(quint64 id) {
     }
     for (int i = 0; i < m_pendingOperations.size(); ++i)
         if (m_pendingOperations[i].id == id) {
+            m_reservations.release(m_pendingOperations[i]);
             m_pendingOperations.removeAt(i);
             m_operations.finish(id, true, {});
             publishProjection();

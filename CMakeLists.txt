@@ -86,6 +86,7 @@ target_sources(conflux_desktop PRIVATE
     src/features/content/ContentOperationExecutor.h src/features/content/ContentOperationExecutor.cpp
     src/features/content/ContentListModel.h src/features/content/ContentListModel.cpp
     src/features/content/ContentOperationState.h src/features/content/ContentOperationState.cpp
+    src/features/content/ContentOperationReservations.h src/features/content/ContentOperationReservations.cpp
     src/features/content/ContentLockRegistry.h src/features/content/ContentLockRegistry.cpp
     src/features/preferences/ContentPreferences.h src/features/preferences/ContentPreferences.cpp
     src/platform/NativeContentStore.h src/platform/NativeContentStore.cpp

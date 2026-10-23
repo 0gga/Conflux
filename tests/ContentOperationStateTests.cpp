@@ -1,5 +1,7 @@
 #include "ContentUpdateFixtures.h"
+#include "features/content/ContentOperationReservations.h"
 #include "services/PackRepository.h"
+#include <QElapsedTimer>
 #include <QFile>
 #include <QRandomGenerator>
 #include <QScopeGuard>
@@ -42,6 +44,141 @@ class ContentOperationStateTests : public QObject {
         return rows;
     }
   private slots:
+    void reservationKeysRetainExactAliasesPathsAndCategories() {
+        const auto original = row("first");
+        ContentOperation operation;
+        operation.targets = {contentRowKey(original)};
+        auto prediction = original;
+        prediction["relativePath"] = "mods/new-name.jar.disabled";
+        operation.predictions = {prediction};
+        auto release = releaseFromVariant(original.value("updateRelease").toMap());
+        operation.requests = {
+            {release, "first", QJsonObject{{"modrinth", "first"}, {"curseforge", "cf-first"}}, "mod"}};
+        const auto values = ContentOperationReservations::keys(operation, {original, row("ignored")});
+        const QSet<QString> keys(values.cbegin(), values.cend());
+        QVERIFY(keys.contains("path:mods/first-old.jar"));
+        QVERIFY(keys.contains("path:mods/new-name.jar"));
+        QVERIFY(keys.contains("project:mods:modrinth:first"));
+        QVERIFY(keys.contains("project:mods:curseforge:cf-first"));
+        QVERIFY(!keys.contains("project:mods:modrinth:ignored"));
+        operation = {};
+        operation.sourceLock = {
+            {"provider", "curseforge"}, {"projectId", "42"}, {"relativePath", "resourcepacks/unknown.zip"}};
+        const auto source = ContentOperationReservations::keys(operation, {});
+        QVERIFY(source.contains("path:resourcepacks/unknown.zip"));
+        QVERIFY(source.contains("project:resourcepacks:curseforge:42"));
+    }
+    void reservationsAreAtomicScopedAndReleasedOnlyByTheirOwner() {
+        ContentOperationReservations reservations;
+        ContentOperation first;
+        first.id = 1;
+        first.packPath = "instance-a";
+        first.reservations = {"path:mods/shared.jar", "project:mods:modrinth:one"};
+        QVERIFY(reservations.acquire(first));
+        auto conflict = first;
+        conflict.id = 2;
+        conflict.reservations = {"path:mods/free.jar", "project:mods:modrinth:one"};
+        QVERIFY(!reservations.acquire(conflict));
+        auto free = conflict;
+        free.id = 3;
+        free.reservations = {"path:mods/free.jar"};
+        QVERIFY(reservations.acquire(free)); // Rejected acquisition left no partial claim.
+        auto other = first;
+        other.id = 4;
+        other.packPath = "instance-b";
+        QVERIFY(reservations.acquire(other));
+        reservations.release(conflict); // Rejected/late owner cannot release another command.
+        QVERIFY(!reservations.acquire(conflict));
+        reservations.release(first);
+        reservations.release(free);
+        QVERIFY(reservations.acquire(conflict));
+        reservations.release(first); // Stale completion cannot release the replacement owner.
+        auto replacementConflict = conflict;
+        replacementConflict.id = 5;
+        QVERIFY(!reservations.acquire(replacementConflict));
+        reservations.release(conflict);
+        reservations.release(free);
+        QVERIFY(reservations.acquire(replacementConflict));
+        reservations.release(other);
+    }
+    void indexedReservationsMatchAnOrderedReferenceAcrossCancellation() {
+        ContentOperationReservations reservations;
+        QList<ContentOperation> active;
+        QRandomGenerator random(0x51c0u);
+        for (int i = 0; i < 3000; ++i) {
+            if (!active.isEmpty() && random.bounded(3u) == 0) {
+                const auto removed = active.takeAt(random.bounded(int(active.size())));
+                reservations.release(removed);
+                reservations.release(removed);
+            }
+            ContentOperation operation;
+            operation.id = i + 1;
+            operation.packPath = "instance-" + QString::number(random.bounded(3u));
+            for (int key = 0; key < 3; ++key)
+                operation.reservations << "project:mods:modrinth:" + QString::number(random.bounded(70u));
+            bool expected = true;
+            for (const auto &previous : active)
+                if (previous.packPath == operation.packPath)
+                    for (const auto &key : operation.reservations)
+                        if (previous.reservations.contains(key))
+                            expected = false;
+            QCOMPARE(reservations.acquire(operation), expected);
+            if (expected)
+                active << operation;
+        }
+        for (const auto &operation : active)
+            reservations.release(operation);
+        for (const auto &operation : active) {
+            QVERIFY(reservations.acquire(operation));
+            reservations.release(operation);
+        }
+        ContentOperation invalid;
+        QVERIFY(!reservations.acquire(invalid));
+    }
+    void reservationScopeNormalizesWindowsPaths() {
+#ifdef Q_OS_WIN
+        ContentOperationReservations reservations;
+        ContentOperation first;
+        first.id = 1;
+        first.packPath = "C:/Instances/Example/";
+        first.reservations = {"path:mods/shared.jar"};
+        QVERIFY(reservations.acquire(first));
+        auto conflict = first;
+        conflict.id = 2;
+        conflict.packPath = "c:\\instances\\example";
+        QVERIFY(!reservations.acquire(conflict));
+        reservations.release(first);
+        QVERIFY(reservations.acquire(conflict));
+#endif
+    }
+    void thousandsOfReservationClaimsHaveBoundedCpuCost() {
+        ContentOperationReservations reservations;
+        QList<ContentOperation> operations;
+        operations.reserve(12000);
+        for (int i = 0; i < 12000; ++i) {
+            ContentOperation operation;
+            operation.id = i + 1;
+            operation.packPath = "large-instance";
+            operation.reservations = {"path:mods/" + QString::number(i) + ".jar",
+                                      "project:mods:modrinth:" + QString::number(i)};
+            operations << operation;
+        }
+        QElapsedTimer elapsed;
+        elapsed.start();
+        for (const auto &operation : operations)
+            QVERIFY(reservations.acquire(operation));
+        for (const auto &operation : operations) {
+            auto conflict = operation;
+            conflict.id += operations.size();
+            QVERIFY(!reservations.acquire(conflict));
+        }
+        for (const auto &operation : operations)
+            reservations.release(operation);
+        qInfo() << "12000 reservation acquisition/conflict/release cycles ms" << elapsed.elapsed();
+        QVERIFY(elapsed.elapsed() < 1500);
+        for (const auto &operation : operations)
+            QVERIFY(reservations.acquire(operation));
+    }
     void freshIdentificationIsNotReplacedByOldEmptyMetadata() {
         auto old = row("Identity");
         old["sourceIds"] = QVariantMap{};

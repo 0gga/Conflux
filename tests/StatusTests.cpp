@@ -43,6 +43,72 @@ class StatusTests : public QObject {
         QTRY_VERIFY(!queue.busy());
         QCOMPARE(ran, (QStringList{"active", "other"}));
     }
+    void countReadsStayBoundedWithLargeTaskInventories() {
+        OperationHistory history;
+        for (quint64 id = 1; id <= 1000; ++id)
+            history.queued(id, {}, "Fixture", "Update");
+        for (quint64 id = 1; id <= 200; ++id)
+            history.finish(id, false, "Fixture failure");
+        QCOMPARE(history.activeCount(), 800);
+        QCOMPARE(history.failedCount(), 100);
+        QSignalSpy changes(&history, &OperationHistory::changed);
+        QElapsedTimer elapsed;
+        elapsed.start();
+        qint64 active = 0, failed = 0;
+        for (int i = 0; i < 20000; ++i) {
+            active += history.activeCount();
+            failed += history.failedCount();
+        }
+        const auto milliseconds = elapsed.elapsed();
+        QCOMPARE(active, qint64(16000000));
+        QCOMPARE(failed, qint64(2000000));
+        QCOMPARE(changes.size(), 0);
+        qInfo() << "40000 HUD count reads over 900 tasks ms" << milliseconds;
+        QVERIFY2(milliseconds < 250, "HUD count reads rescan the task inventory.");
+    }
+    void modelObserversSeeConsistentCountsAcrossEveryTransition() {
+        OperationHistory history;
+        auto verify = [&] {
+            int active = 0, failed = 0;
+            for (const auto &value : history.entries()) {
+                const auto state = value.toMap().value("state").toString();
+                active += state == "queued" || state == "running";
+                failed += state == "failed";
+            }
+            QCOMPARE(history.activeCount(), active);
+            QCOMPARE(history.failedCount(), failed);
+        };
+        connect(&history, &OperationHistory::changed, &history, verify);
+        connect(&history, &QAbstractItemModel::rowsInserted, &history, verify);
+        connect(&history, &QAbstractItemModel::rowsRemoved, &history, verify);
+        connect(&history, &QAbstractItemModel::rowsMoved, &history, verify);
+        connect(&history, &QAbstractItemModel::dataChanged, &history, verify);
+        history.queued(1, {}, "First", "Update");
+        history.queued(2, {}, "Second", "Update");
+        history.start(1);
+        history.progress(1, "Downloading");
+        history.finish(1, false, "Failure");
+        history.finish(1, false, "Failure again");
+        history.start(1);
+        history.finish(1, true, {});
+        history.dismiss(2); // Active tasks remain protected.
+        history.progress(999, "Missing");
+        history.clearFinished();
+        QCOMPARE(history.activeCount(), 1);
+        for (quint64 id = 3; id <= 150; ++id) {
+            history.queued(id, {}, "Later", "Update");
+            history.finish(id, false, "Later failure");
+        }
+        QCOMPARE(history.failedCount(), 100);
+        history.dismiss(150);
+        history.clearFinished();
+        QCOMPARE(history.failedCount(), 0);
+        QCOMPARE(history.activeCount(), 1);
+        history.finish(2, true, {});
+        history.dismiss(2);
+        QCOMPARE(history.rowCount(), 0);
+        verify();
+    }
     void activeTasksStayAboveQueuedAndFinishedWithoutResettingTheModel() {
         OperationHistory history;
         QSignalSpy resets(&history, &QAbstractItemModel::modelReset);

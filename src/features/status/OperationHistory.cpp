@@ -35,18 +35,15 @@ QVariant OperationHistory::data(const QModelIndex &index, int role) const {
     return m_entries[index.row()];
 }
 int OperationHistory::activeCount() const {
-    int count = 0;
-    for (const auto &value : m_entries)
-        if (QStringList{"queued", "running"}.contains(value.toMap().value("state").toString()))
-            ++count;
-    return count;
+    return m_activeCount;
 }
 int OperationHistory::failedCount() const {
-    int count = 0;
-    for (const auto &value : m_entries)
-        if (value.toMap().value("state") == "failed")
-            ++count;
-    return count;
+    return m_failedCount;
+}
+void OperationHistory::adjustCounts(const QString &before, const QString &after) {
+    const auto active = [](const QString &state) { return state == "queued" || state == "running"; };
+    m_activeCount += int(active(after)) - int(active(before));
+    m_failedCount += int(after == "failed") - int(before == "failed");
 }
 void OperationHistory::queued(quint64 id, const QVariantMap &pack, const QString &title,
                               const QString &action) {
@@ -62,6 +59,7 @@ void OperationHistory::queued(quint64 id, const QVariantMap &pack, const QString
     const auto position = insertionIndex(row);
     beginInsertRows({}, position, position);
     m_entries.insert(position, row);
+    adjustCounts({}, row.value("state").toString());
     endInsertRows();
     prune();
     emit changed();
@@ -75,6 +73,7 @@ void OperationHistory::prune() {
         const auto id = row.value("id").toULongLong();
         beginRemoveRows({}, i, i);
         m_entries.removeAt(i);
+        adjustCounts(row.value("state").toString());
         endRemoveRows();
         --inactive;
         emit dismissed(id);
@@ -84,6 +83,8 @@ void OperationHistory::set(quint64 id, const QString &key, const QVariant &value
     for (int i = 0; i < m_entries.size(); ++i) {
         auto row = m_entries[i].toMap();
         if (row.value("id").toULongLong() == id) {
+            if (key == "state")
+                adjustCounts(row.value("state").toString(), value.toString());
             row[key] = value;
             m_entries[i] = row;
             const auto position = key == "state" ? reposition(i) : i;
@@ -104,7 +105,9 @@ void OperationHistory::finish(quint64 id, bool ok, const QString &error, bool re
         auto row = m_entries[i].toMap();
         if (row.value("id").toULongLong() != id)
             continue;
-        row["state"] = ok && error.isEmpty() ? "done" : "failed";
+        const QString state = ok && error.isEmpty() ? "done" : "failed";
+        adjustCounts(row.value("state").toString(), state);
+        row["state"] = state;
         row["message"] = error;
         row["retryable"] = !ok && retryable;
         m_entries[i] = row;
@@ -125,6 +128,7 @@ void OperationHistory::dismiss(quint64 id) {
                 return;
             beginRemoveRows({}, i, i);
             m_entries.removeAt(i);
+            adjustCounts(state);
             endRemoveRows();
             emit changed();
             emit dismissed(id);
@@ -140,6 +144,7 @@ void OperationHistory::clearFinished() {
         ids << m_entries[i].toMap().value("id").toULongLong();
     beginRemoveRows({}, first, m_entries.size() - 1);
     m_entries.erase(m_entries.begin() + first, m_entries.end());
+    m_failedCount = 0;
     endRemoveRows();
     emit changed();
     for (const auto id : ids)

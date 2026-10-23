@@ -42,6 +42,8 @@ class OperationHistory final : public QAbstractListModel {
 
   private:
     QVariantList m_entries;
+    int m_activeCount = 0, m_failedCount = 0;
+    void adjustCounts(const QString &before, const QString &after = {});
     void set(quint64, const QString &, const QVariant &);
     void prune();
     int insertionIndex(const QVariantMap &, int excluded = -1) const;

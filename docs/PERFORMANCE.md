@@ -77,3 +77,10 @@ The1.6-million-read all-stages fixture took580ms before this change and8ms after
 ContentOperationReservations replaces pending-operation overlap scans with an instance-scoped hash index. Checking and acquiring a command is proportional to its reservation keys; release checks ownership before removing keys. Deriving target keys still scans the requested instance rows and is not claimed as an indexed inventory lookup. Inventory, pending command and rendered projection state remain outside the reservation component.
 
 A deterministic fixture acquires12,000 two-key operations, rejects12,000 conflicts and releases the claims in8ms under a1,500ms budget on this workstation. A separate3,000-step seeded sequence compares results with an ordered reference through mixed acquisitions and cancellations. Integration tests reproduce and fix background commands borrowing visible-instance aliases, and verify queued cancellation releases its own claims while active work remains protected. These measure in-memory claim handling, not end-to-end bulk update latency.
+
+
+### Constant-time operation HUD counts
+
+OperationHistory maintains active and failed totals when its single-threaded model inserts, changes, prunes, dismisses or clears entries. Getter calls return those totals without scanning task maps or constructing status lists. Counters are updated with the underlying row before completion notifications, so model observers see the same counts as the current entries. Task ordering and persistent indices retain the existing incremental model operations.
+
+The deterministic900-task fixture performs20,000 reads of each count. It took5,397ms before this change and less than1ms at millisecond timer resolution afterward, under a250ms regression budget. Transition tests independently recompute counts from entries during model and feature notifications, including repeated completion, reactivation, missing IDs, pruning and clearing. This is a read-path CPU result; insertion/reordering costs remain separate work.

@@ -44,7 +44,8 @@ struct ContentInstallRequest {
     QString contentType = "mod";
     bool resolveDependencies = true;
     QString installedPath;
-    QStringList allowedChannels; // Effective pack policy, captured when this operation starts.
+    QStringList allowedChannels;      // Effective pack policy, captured when this operation starts.
+    bool dependenciesHandled = false; // A coordinator owns expansion; preserve initial-install compatibility.
 };
 // Only explicit, reviewed provider:id -> shared identity mappings may collapse projects.
 QVector<Project> mergeProjects(const QVector<Project> &projects,

@@ -1,5 +1,6 @@
 #include "CatalogueClient.h"
 #include "domain/ContentCompatibility.h"
+#include "domain/ReleaseStages.h"
 #include "platform/ProjectAuthors.h"
 #include "platform/ReviewedAuthorIdentities.h"
 #include <QFutureWatcher>
@@ -72,6 +73,57 @@ CatalogueClient::CatalogueClient(QObject *parent, QUrl modrinthApi, QUrl cursefo
     : QObject(parent), m_network(this), m_modrinthApi(std::move(modrinthApi)),
       m_curseforgeApi(std::move(curseforgeApi)) {
     m_cacheClock.start();
+}
+void CatalogueClient::modrinthDependency(const QString &projectId, const QString &versionId,
+                                         const QString &game, const QStringList &loaders,
+                                         const QStringList &channels,
+                                         std::function<void(Release, QString)> callback) {
+    static const QRegularExpression identifier("^[A-Za-z0-9_-]+$");
+    if ((projectId.isEmpty() && versionId.isEmpty()) ||
+        (!projectId.isEmpty() && !identifier.match(projectId).hasMatch()) ||
+        (!versionId.isEmpty() && !identifier.match(versionId).hasMatch())) {
+        callback({}, "This dependency has no valid Modrinth project or version identity.");
+        return;
+    }
+    QUrl url("https://api.modrinth.com/v2/" +
+             (versionId.isEmpty() ? "project/" + projectId + "/version" : "version/" + versionId));
+    if (versionId.isEmpty()) {
+        QUrlQuery query;
+        query.addQueryItem("game_versions", jsonArray(game));
+        query.addQueryItem(
+            "loaders",
+            QString::fromUtf8(
+                QJsonDocument(QJsonArray::fromStringList(loaders)).toJson(QJsonDocument::Compact)));
+        url.setQuery(query);
+    }
+    request(url, false,
+            [projectId, versionId, game, loaders, channels,
+             callback = std::move(callback)](QJsonDocument doc, QString error) mutable {
+                if (!error.isEmpty()) {
+                    callback({}, error);
+                    return;
+                }
+                Release best;
+                const auto candidates = versionId.isEmpty() ? doc.array() : QJsonArray{doc.object()};
+                for (const auto &value : candidates) {
+                    const auto release = modrinthRelease(value.toObject());
+                    if (release.id.isEmpty() || release.projectId.isEmpty() ||
+                        (!projectId.isEmpty() && release.projectId != projectId) ||
+                        (!versionId.isEmpty() && release.id != versionId) ||
+                        !release.gameVersions.contains(game) || !sharesLoader(release.loaders, loaders) ||
+                        !releaseStageAllowed(release.channel, channels))
+                        continue;
+                    if (best.id.isEmpty() || (release.channel == "release" && best.channel != "release") ||
+                        ((release.channel == "release") == (best.channel == "release") &&
+                         release.published > best.published))
+                        best = release;
+                }
+                const auto failure =
+                    best.id.isEmpty()
+                        ? QString("No compatible dependency version is available for Minecraft ") + game + "."
+                        : QString{};
+                callback(std::move(best), failure);
+            });
 }
 void CatalogueClient::setReadCacheLifetime(int milliseconds) {
     m_cacheLifetime = qBound(0, milliseconds, 300000);

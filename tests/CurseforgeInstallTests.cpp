@@ -523,7 +523,7 @@ class CurseforgeInstallTests final : public QObject {
         QVERIFY(!server.requests.contains("/mods/99"));
         QCOMPARE(PackRepository::inspectContent(created.path).manifest.value("mods").toArray().size(), 2);
     }
-    void disabledDependenciesAndCancellationDoNotPublishPreparedRequests() {
+    void disabledDependenciesAreRetainedAndCancellationDoesNotPublish() {
         CurseforgeFixture server;
         const auto f = server.file(11, 101, "root", {QJsonObject{{"modId", 12}, {"relationType", 3}}});
         CurseforgeInstallSource source(nullptr, server.base());
@@ -531,17 +531,21 @@ class CurseforgeInstallTests final : public QObject {
         const QVariantMap pack{{"minecraft", "1.21.1"}, {"loader", "fabric"}};
         bool done = false;
         QString error;
+        QVector<ContentInstallRequest> preparedRequests;
         source.prepare(pack,
                        {QVariantMap{{"category", "mods"},
                                     {"enabled", false},
                                     {"sourceIds", QVariantMap{{"curseforge", "12"}}}}},
                        {request(f)}, [&](auto prepared, QString result) {
-                           QVERIFY(prepared.isEmpty());
+                           preparedRequests = prepared;
                            error = result;
                            done = true;
                        });
         QTRY_VERIFY(done);
-        QVERIFY(error.contains("disabled"));
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(preparedRequests.size(), 1);
+        QCOMPARE(preparedRequests.first().release.projectId, QString("11"));
+        QVERIFY(!server.requests.contains("/mods/12"));
         int callbacks = 0;
         source.prepare(pack, {}, {request(f)}, [&](auto prepared, QString result) {
             QVERIFY(prepared.isEmpty());

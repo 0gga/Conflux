@@ -22,6 +22,9 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
           std::make_shared<NativeInstalledModIdentity>(m_fileStore),
           backupRoot.isEmpty() ? QString{} : backupRoot + "/content", m_contentLocks)),
       m_contentInstaller(std::make_shared<ContentInstaller>(m_contentFiles)),
+      m_dependencySource(std::make_shared<ContentDependencySource>()),
+      m_dependencyInstaller(std::make_shared<ContentDependencyInstaller>(m_contentInstaller,
+                                                                         m_dependencySource, m_contentFiles)),
       m_running(std::make_shared<InstanceProcessSource>(), this), m_navigation(this),
       m_input(m_navigation, this),
       m_warnings(std::make_shared<SettingsWarningPreferenceStore>(settingsFile), this),
@@ -33,7 +36,7 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
                m_fileStore, this),
       m_showcase(std::make_shared<CatalogueShowcaseSource>(),
                  std::make_shared<NativeInstalledModIdentity>(m_fileStore), this),
-      m_content(m_contentFiles, std::make_shared<ContentCatalogue>(), m_contentInstaller,
+      m_content(m_contentFiles, std::make_shared<ContentCatalogue>(), m_dependencyInstaller,
                 std::make_shared<SettingsContentPreferences>(settingsFile), this),
       m_browse(std::make_shared<ContentCatalogue>(), this), m_browsePreferences(m_browseStore, this),
       m_catalogue(std::make_shared<TolerantCatalogueSearch>(std::make_shared<CatalogueClient>()),
@@ -106,6 +109,8 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
         activateRoute();
     });
     connect(m_contentInstaller.get(), &ContentInstaller::progress, &m_content, &ContentActions::setProgress);
+    connect(m_dependencyInstaller.get(), &ContentDependencyInstaller::progress, &m_content,
+            &ContentActions::setProgress);
     connect(&m_content, &ContentActions::contentChanged, this, [this] { m_workspace.refresh(); });
     connect(&m_changes, &PackChangeMonitor::changed, this, [this] {
         if (m_content.busy() || m_workspace.busy()) {

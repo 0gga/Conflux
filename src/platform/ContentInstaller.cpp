@@ -3,6 +3,7 @@
 #include "domain/ContentCompatibility.h"
 #include "domain/ContentTypes.h"
 #include "domain/ReleaseStages.h"
+#include "features/content/ContentOperationState.h"
 #include "platform/PackFileStore.h"
 #include <QDir>
 #include <QFile>
@@ -24,6 +25,20 @@ ContentInstaller::ContentInstaller(std::shared_ptr<const NativeContentStore> fil
             [this](const RepositoryResult &result) { finishBatch({result.ok, result.error}); });
 }
 void ContentInstaller::finish(ContentWriteResult result) {
+    if (result.ok)
+        for (const auto &request : m_directRequests) {
+            QVariantMap previous;
+            for (const auto &value : m_targetRows) {
+                const auto row = value.toMap();
+                if (!request.installedPath.isEmpty() && row.value("relativePath") == request.installedPath)
+                    previous = row;
+                const auto ids = row.value("sourceIds").toMap();
+                for (auto it = request.sourceIds.begin(); it != request.sourceIds.end(); ++it)
+                    if (!it.value().toString().isEmpty() && ids.value(it.key()) == it.value().toVariant())
+                        previous = row;
+            }
+            result.installedPredictions << contentInstallPrediction(request, m_targetPack, previous);
+        }
     auto callback = std::move(m_callback);
     m_callback = {};
     m_stage.reset();
@@ -136,6 +151,12 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
                 return;
             }
         }
+        if (request.dependenciesHandled && request.contentType == "mod" &&
+            !sharesLoader(request.release.loaders,
+                          compatibleLoaders(pack.value("loader").toString(), rows))) {
+            callback({false, "The selected version does not support this instance's loader."});
+            return;
+        }
         if (!request.resolveDependencies) {
             if (!request.release.gameVersions.contains(pack.value("minecraft").toString())) {
                 callback({false, "The selected version does not support this instance's Minecraft version."});
@@ -196,7 +217,7 @@ void ContentInstaller::prepareDownloads(const QVector<ContentInstallRequest> &re
     const auto rows = m_targetRows;
     bool direct = !requests.isEmpty();
     for (const auto &request : requests)
-        direct &= !request.resolveDependencies || request.contentType != "mod";
+        direct &= request.dependenciesHandled || !request.resolveDependencies || request.contentType != "mod";
     if (direct) {
         m_directRequests = requests;
         m_directIndex = 0;
@@ -377,7 +398,7 @@ void ContentInstaller::downloadDirect() {
         return;
     }
     const auto request = m_directRequests[m_directIndex++];
-    if (request.contentType != "mod" && request.resolveDependencies &&
+    if (request.contentType != "mod" && request.resolveDependencies && !request.dependenciesHandled &&
         !request.release.requiredDependencies.isEmpty()) {
         finish({false, "This pack requires dependencies that cannot be installed automatically."});
         return;

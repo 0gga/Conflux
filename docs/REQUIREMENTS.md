@@ -162,3 +162,11 @@ The owner requests one per-modpack selection controlling eligible installs and u
 The owner subsequently removed Automatic: Release is the default for both installs and updates. Existing empty/Automatic settings resolve to Release; saved explicit Beta/Alpha combinations remain.
 
 The owner also explicitly authorizes per-content Lock/Unlock in imported Modrinth and CurseForge instances to update the source launcher lock state. This is content locking, not locking the entire modpack. Source synchronization must be real, queued and failure-visible.
+
+
+## Best-effort initial dependencies
+
+Initial content installation attempts declared required dependencies recursively, but a dependency lookup, policy, transfer, verification or write failure must not fail or undo the selected content. Install the selected file first and each dependency in an independent atomic transaction; continue other dependency attempts after a failure. Retain disabled dependencies without enabling or upgrading them. Report dependency problems separately from the selected content's successful task. Explicit version changes and updates remain shallow. Preserve content locks, exact identities/hashes, allowed release stages, Minecraft and loader compatibility, safe paths and truthful selected-file transfer/storage errors. Cancelling after the selected file commits keeps it installed and stops remaining dependency work. The owner clarified this behavior on24 October2026.
+
+
+Only required dependencies install automatically. Offer optional dependencies in a focused in-app overlay with individually selectable Install actions similar to Discover. Users can disable this optional-dependency prompt in Settings. Optional lookup or installation failures must leave the selected content and successful required dependencies installed. The owner explicitly clarified this on24 October2026.

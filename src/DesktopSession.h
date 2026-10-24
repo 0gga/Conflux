@@ -16,6 +16,7 @@
 #include "features/workspace/PackLogViewer.h"
 #include "features/workspace/PackWorkspace.h"
 #include "features/workspace/PackWorldList.h"
+#include "platform/ContentDependencySource.h"
 #include "platform/ContentInstaller.h"
 #include "platform/NativeContentStore.h"
 #include "platform/PackChangeMonitor.h"
@@ -100,6 +101,7 @@ class DesktopSession final : public QObject {
         m_content.setCurseforgeKey(key);
         m_browse.setCurseforgeKey(key);
         m_contentInstaller->setCurseforgeKey(key);
+        m_dependencySource->setCurseforgeKey(key);
     }
     void setPack(const QVariantMap &);
     void attachWindow(QObject &window) {
@@ -114,6 +116,8 @@ class DesktopSession final : public QObject {
     std::shared_ptr<ContentLockRegistry> m_contentLocks;
     std::shared_ptr<const NativeContentStore> m_contentFiles;
     std::shared_ptr<ContentInstaller> m_contentInstaller;
+    std::shared_ptr<ContentDependencySource> m_dependencySource;
+    std::shared_ptr<ContentDependencyInstaller> m_dependencyInstaller;
     RunningInstances m_running;
     NavigationHistory m_navigation;
     NavigationInput m_input;

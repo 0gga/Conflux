@@ -506,6 +506,92 @@ class ContentActionsTests : public QObject {
         QVERIFY(content.notice().contains("Fixture read failure"));
         QCOMPARE(content.operations()->failedCount(), 1);
     }
+    void verifiedDependencyMetadataSurvivesRawExternalInventoryReload() {
+        struct RawFiles final : IContentFileStore {
+            QVariantList rows;
+            QVariantList snapshot(const QVariantMap &, const QVariantList &) const override {
+                return rows;
+            }
+            ContentWriteResult setEnabled(const QVariantMap &, const QVariantMap &, bool) const override {
+                return {};
+            }
+            ContentWriteResult remove(const QVariantMap &, const QVariantList &) const override {
+                return {};
+            }
+            ContentWriteResult importFiles(const QVariantMap &, const QList<QUrl> &,
+                                           const QString &) const override {
+                return {};
+            }
+        };
+        QTemporaryDir temp;
+        auto files = std::make_shared<RawFiles>();
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        files->rows = {row("Root", "Author")};
+        ContentActions content(files, std::make_shared<ContentCatalogueFixture>(), installer,
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        content.setContext({{"path", temp.path()}}, files->rows);
+        QTRY_VERIFY(!content.busy());
+        content.update("mods/Root.jar");
+        QVERIFY(bool(installer->completion));
+        auto dependency = row("Dependency", "Dependency author");
+        dependency["sha1"] = QString(40, 'a');
+        const QVariantMap exact{{"provider", "curseforge"},
+                                {"projectId", "12"},
+                                {"id", "123"},
+                                {"sha1", dependency.value("sha1")}};
+        dependency["sourceIds"] = QVariantMap{{"curseforge", "12"}};
+        dependency["installedRelease"] = exact;
+        auto raw = dependency;
+        raw.remove("sourceIds");
+        raw.remove("installedRelease");
+        raw["title"] = "Raw dependency file";
+        raw["author"] = "";
+        files->rows << raw;
+        ContentWriteResult result{true, {}};
+        result.installedPredictions = {dependency};
+        installer->completion(result);
+        QTRY_VERIFY(!content.busy());
+        bool found = false;
+        for (const auto &value : content.inventory()) {
+            const auto item = value.toMap();
+            if (item.value("relativePath") != "mods/Dependency.jar")
+                continue;
+            QCOMPARE(item.value("sourceIds").toMap().value("curseforge").toString(), "12");
+            QCOMPARE(item.value("installedRelease").toMap(), exact);
+            found = true;
+        }
+        QVERIFY(found);
+    }
+    void dependencyWarningsDoNotFailTheSelectedContentTask() {
+        QTemporaryDir temp;
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        ContentActions content(std::make_shared<ContentFileFixture>(),
+                               std::make_shared<ContentCatalogueFixture>(), installer,
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        content.setContext({{"path", temp.path()}}, {row("Root", "Author")});
+        QTRY_VERIFY(!content.busy());
+        QSignalSpy notifications(&content, &ContentActions::operationFailed);
+        content.update("mods/Root.jar");
+        QVERIFY(bool(installer->completion));
+        ContentWriteResult result{true, {}};
+        result.warnings = {"Dependency download failed; selected content was kept."};
+        installer->completion(result);
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(notifications.size(), 1);
+        QCOMPARE(content.operations()->failedCount(), 1);
+        bool selectedSucceeded = false, dependenciesFailed = false;
+        for (const auto &value : content.operations()->entries()) {
+            const auto entry = value.toMap();
+            if (entry.value("title") == "Root")
+                selectedSucceeded = entry.value("state") == "done";
+            if (entry.value("title") == "Dependencies") {
+                dependenciesFailed = entry.value("state") == "failed";
+                QVERIFY(!entry.value("retryable").toBool());
+            }
+        }
+        QVERIFY(selectedSucceeded);
+        QVERIFY(dependenciesFailed);
+    }
     void renamedUpdateStaysOneEntryAndFailedWorkCanBeRetried() {
         QTemporaryDir temp;
         auto files = std::make_shared<ContentFileFixture>();

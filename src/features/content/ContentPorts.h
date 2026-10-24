@@ -7,6 +7,8 @@ struct ContentWriteResult {
     bool ok = false;
     QString error, backupPath;
     bool changed = false;
+    QStringList warnings;
+    QVariantList installedPredictions; // Metadata only; always reconcile against verified bytes.
 };
 struct ContentFileState {
     QVariantMap pack;

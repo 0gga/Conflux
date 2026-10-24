@@ -727,6 +727,14 @@ void ContentActions::completeOperation(ContentOperation operation, ContentWriteR
         m_failedOperations[operation.id] = operation;
     m_operations.finish(operation.id, result.ok || cancelled, cancelled ? QString{} : result.error,
                         !result.changed);
+    if (!result.warnings.isEmpty()) {
+        const auto message = result.warnings.join('\n');
+        const auto warningId = ++m_operationId;
+        m_operations.queued(warningId, current.pack, "Dependencies", "Installing dependencies");
+        m_operations.finish(warningId, false, message, false);
+        m_notice = message;
+        emit operationFailed(message);
+    }
     m_activeOperationId = 0;
     ++m_lockRevision;
     publishProjection();

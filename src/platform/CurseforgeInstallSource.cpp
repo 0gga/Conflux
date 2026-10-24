@@ -95,7 +95,7 @@ void CurseforgeInstallSource::prepare(const QVariantMap &pack, const QVariantLis
             continue;
         }
         const auto &release = request.release;
-        if (!request.resolveDependencies)
+        if (!request.resolveDependencies || request.dependenciesHandled)
             m_shallow.insert(release.projectId);
         if (!QRegularExpression("^[1-9][0-9]*$").match(release.projectId).hasMatch() ||
             !QRegularExpression("^[1-9][0-9]*$").match(release.id).hasMatch()) {
@@ -113,6 +113,31 @@ void CurseforgeInstallSource::prepare(const QVariantMap &pack, const QVariantLis
         }
         m_pending.enqueue(request);
     }
+    next();
+}
+void CurseforgeInstallSource::resolveDependency(const QVariantMap &pack, const QVariantList &rows,
+                                                ContentInstallRequest request, Callback callback) {
+    if (busy()) {
+        callback({}, "Another dependency lookup is in progress.");
+        return;
+    }
+    if (request.release.provider != "curseforge" ||
+        !QRegularExpression("^[1-9][0-9]*$").match(request.release.projectId).hasMatch() ||
+        !request.release.id.isEmpty()) {
+        callback({}, "This dependency has no valid CurseForge project identity.");
+        return;
+    }
+    m_callback = std::move(callback);
+    ++m_generation;
+    m_game = pack.value("minecraft").toString();
+    m_loaders = compatibleLoaders(pack.value("loader").toString(), rows);
+    m_rows = rows;
+    m_prepared.clear();
+    m_pending.clear();
+    m_selected.clear();
+    m_shallow = {request.release.projectId};
+    request.dependenciesHandled = true;
+    m_pending.enqueue(std::move(request));
     next();
 }
 void CurseforgeInstallSource::next() {
@@ -249,7 +274,7 @@ void CurseforgeInstallSource::accept(ContentInstallRequest request, const QJsonO
         return;
     }
     m_selected[release.projectId] = release.id;
-    if (request.resolveDependencies && request.contentType == "mod") {
+    if (request.resolveDependencies && !request.dependenciesHandled && request.contentType == "mod") {
         for (const auto &dependency : release.requiredDependencies) {
             if (m_selected.contains(dependency))
                 continue;
@@ -260,8 +285,8 @@ void CurseforgeInstallSource::accept(ContentInstallRequest request, const QJsonO
                     row.value("category") != "mods")
                     continue;
                 if (!row.value("enabled", true).toBool()) {
-                    finish("A required CurseForge dependency is disabled. Enable it before retrying.");
-                    return;
+                    retained = true;
+                    continue;
                 }
                 const auto installed = releaseFromVariant(row.value("installedRelease").toMap());
                 if (installed.gameVersions.contains(m_game) && sharesLoader(installed.loaders, m_loaders))
@@ -281,12 +306,14 @@ void CurseforgeInstallSource::accept(ContentInstallRequest request, const QJsonO
             m_selected[dependency] = {};
             m_pending.enqueue(next);
         }
-    } else if (request.resolveDependencies && !release.requiredDependencies.isEmpty()) {
+    } else if (request.resolveDependencies && !request.dependenciesHandled &&
+               !release.requiredDependencies.isEmpty()) {
         finish("This ZIP requires unsupported dependencies.");
         return;
     }
     request.release = release;
-    request.resolveDependencies = false;
+    if (!request.dependenciesHandled)
+        request.resolveDependencies = false;
     request.sourceIds["curseforge"] = release.projectId;
     m_prepared << request;
     // Yield between projects; network completions never synchronously walk a large graph.

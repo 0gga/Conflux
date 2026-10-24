@@ -67,6 +67,8 @@ qt_add_library(conflux_desktop STATIC
     src/features/workspace/PackWorldList.h src/features/workspace/PackWorldList.cpp
     src/features/config/ConfigEditor.h src/features/config/ConfigEditor.cpp)
 target_sources(conflux_desktop PRIVATE
+    src/features/content/ContentDependencyInstaller.h src/features/content/ContentDependencyInstaller.cpp
+    src/platform/ContentDependencySource.h src/platform/ContentDependencySource.cpp
     src/features/content/ContentPorts.h
     src/features/content/SourceLockIndex.h src/features/content/SourceLockIndex.cpp
     src/features/preferences/PackReleasePolicy.h src/features/preferences/PackReleasePolicy.cpp
@@ -176,6 +178,12 @@ if(BUILD_TESTING)
     target_compile_definitions(release-policy-tests PRIVATE CONFLUX_QML_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")
     add_test(NAME release-policy COMMAND release-policy-tests)
     set_tests_properties(release-policy PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    qt_add_executable(content-dependency-tests tests/ContentDependencyTests.cpp)
+    target_link_libraries(content-dependency-tests PRIVATE conflux_desktop miniz Qt6::Test)
+    add_test(NAME content-dependencies COMMAND content-dependency-tests -o "${CMAKE_CURRENT_BINARY_DIR}/content-dependency-results.txt,txt")
+    qt_add_executable(catalogue-dependency-tests tests/CatalogueLoadingTests.cpp)
+    target_link_libraries(catalogue-dependency-tests PRIVATE pack_foundation miniz Qt6::Test)
+    add_test(NAME catalogue-dependencies COMMAND catalogue-dependency-tests -o "${CMAKE_CURRENT_BINARY_DIR}/catalogue-dependency-results.txt,txt")
     qt_add_executable(content-transaction-tests tests/ContentTransactionTests.cpp)
     target_link_libraries(content-transaction-tests PRIVATE conflux_desktop Qt6::Test)
     add_test(NAME content-transactions COMMAND content-transaction-tests -o "${CMAKE_CURRENT_BINARY_DIR}/content-transaction-results.txt,txt")

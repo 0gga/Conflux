@@ -44,6 +44,8 @@ void ContentOperationExecutor::execute(ContentOperation operation, ContentFileSt
             return;
         *started = true;
         auto predicted = result.ok ? projectContentOperations(before.rows, {operation}) : before.rows;
+        if (result.ok)
+            predicted += result.installedPredictions;
         const bool inspectInventory = !result.ok || (operation.kind != ContentOperation::Enable &&
                                                      operation.kind != ContentOperation::Remove &&
                                                      operation.kind != ContentOperation::Lock);
@@ -68,9 +70,13 @@ void ContentOperationExecutor::execute(ContentOperation operation, ContentFileSt
                              watcher->deleteLater();
                              callback(result, std::move(current));
                          });
-        watcher->setFuture(QtConcurrent::run([files, before, predicted, inspectInventory] {
+        const auto installed = result.installedPredictions;
+        watcher->setFuture(QtConcurrent::run([files, before, predicted, inspectInventory, installed] {
             try {
-                return files->reload(before.pack, predicted, inspectInventory);
+                auto current = files->reload(before.pack, predicted, inspectInventory);
+                if (current.error.isEmpty() && !installed.isEmpty())
+                    current.rows = reconcileContentRows(current.rows, {}, installed);
+                return current;
             } catch (const std::exception &e) {
                 return ContentFileState{before.pack, before.rows,
                                         QString("Could not verify content: ") + QString::fromUtf8(e.what())};

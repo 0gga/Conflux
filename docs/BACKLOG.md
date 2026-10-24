@@ -58,7 +58,7 @@ These are ideas, not delivered features or additional owner requirements.
 | Priority | Idea | Acceptance criteria |
 | --- | --- | --- |
 | P1 | Install/update plan with rollback | Preview dependencies, replaced files, sizes and conflicts; create a reversible snapshot before applying; restore with hash checks. |
-| P1 | Cross-type asset dependencies | Resolve required mod/resource/shader/data-pack dependencies as one reviewed transaction. Current ZIP installs visibly reject required dependencies. |
+| P1 | Cross-type asset dependencies | Resolve provider-declared content types through independent verified dependency transactions. Desktop selected files now commit independently; unsupported cross-type dependency metadata must become a separate warning, never undo the root. |
 | P1 | Per-instance update channels | Choose stable/beta/alpha with per-project exceptions/freezes; show a changelog and compatibility diff before Update all. |
 | P1 | Shader-engine and side checks | Detect Iris/Oculus/OptiFine and client/server requirements from verified metadata; explain prerequisites and offer reviewed alternatives. |
 | P2 | Batch install queue and saved searches | Queue projects, review the combined dependency plan and preserve named searches beyond the implemented per-instance/content-type compatibility preferences. |
@@ -106,6 +106,9 @@ These are ideas, not delivered features or additional owner requirements.
 
 | Priority | Improvement | Acceptance criteria | State |
 | --- | --- | --- | --- |
+| P1 | Post-commit inventory recovery | Keep a verified committed install successful if a later inventory read fails; show separate verification diagnostics, preserve known state and block unsafe follow-up writes until a fresh read succeeds. | Backlogged |
+| P1 | Optional dependency overlay | After initial installation, offer declared optional dependencies in a focused overlay with per-item Install actions and a Settings toggle. Required dependencies remain automatic; optional failures never undo installed content. | Backlogged; owner requested24 Oct2026 |
+| P1 | Independent initial dependency attempts | Commit selected content first; attempt each declared required dependency independently, retain disabled/locked files and report dependency failures separately. Verify both providers, cancellation, hash/write failures, cycles and bounded responsiveness. | Delivered; 32 suites and packaged smoke pass |
 | P1 | Captured bulk update destination | Reentrant task notifications may change the visible instance; every accepted bulk update must retain the original instance and leave the other inventory unchanged. | Delivered; 29 suites and packaged smoke pass |
 | P1 | Reentrant provider callback lifetime | Callbacks may dispose their catalogue client during success, error, optional missing responses, cached/coalesced delivery or intermediate signals; no later code may touch destroyed replies/clients or publish stale follow-up work. | Delivered; 28 suites and packaged smoke pass |
 | P1 | Lossless lock patch correctness | Duplicate targets are idempotent; duplicate or shadowed source lock fields are rejected; invalid JSON never becomes a successful replacement; reused/null error outputs are safe; unrelated bytes remain exact. | Delivered; 26 suites and packaged smoke pass |

@@ -62,6 +62,54 @@ class ContentTransactionTests : public QObject {
         return {{"path", path}, {"provider", "modrinth"}, {"minecraft", "1.21.1"}, {"loader", "fabric"}};
     }
   private slots:
+    void disabledDependenciesNeverBlockStagedInstall_data() {
+        QTest::addColumn<QString>("identity");
+        QTest::addColumn<QString>("dependencyForm");
+        QTest::addColumn<bool>("related");
+        for (const auto &identity : {"modrinth", "curseforge", "unidentified"})
+            for (const auto &form : {"project", "version", "both"})
+                for (bool related : {false, true})
+                    QTest::newRow(qPrintable(QString("%1-%2-%3").arg(identity, form).arg(related)))
+                        << QString(identity) << QString(form) << related;
+    }
+    void disabledDependenciesNeverBlockStagedInstall() {
+        QFETCH(QString, identity);
+        QFETCH(QString, dependencyForm);
+        QFETCH(bool, related);
+        QTemporaryDir temp, stage;
+        const QVariantMap pack{{"path", temp.path()}};
+        const QByteArray disabled = "existing disabled dependency", incoming = "selected content";
+        const QString disabledPath = "mods/retained.jar.disabled";
+        write(temp.path() + '/' + disabledPath, disabled);
+        write(stage.path() + "/mods/selected.jar", incoming);
+        NativeContentStore files(nullptr, temp.path() + "/backups");
+        auto rows = files.snapshot(pack, {QVariantMap{{"relativePath", disabledPath}, {"category", "mods"}}});
+        QCOMPARE(rows.size(), 1);
+        auto retained = rows.first().toMap();
+        retained["locked"] = true;
+        if (identity != "unidentified") {
+            retained["sourceIds"] = QVariantMap{{identity, "disabled-project"}};
+            retained["installedRelease"] = QVariantMap{{"id", "disabled-version"}};
+        }
+        rows[0] = retained;
+        QJsonObject dependency{{"dependency_type", "required"}};
+        if (dependencyForm != "version")
+            dependency["project_id"] = related ? "disabled-project" : "unrelated-project";
+        if (dependencyForm != "project")
+            dependency["version_id"] = related ? "disabled-version" : "unrelated-version";
+        const QJsonObject manifest{
+            {"mods", QJsonArray{QJsonObject{{"provider", "modrinth"},
+                                            {"projectId", "selected"},
+                                            {"sha1", hash(incoming)},
+                                            {"filename", "selected.jar"},
+                                            {"installPath", "mods/selected.jar"},
+                                            {"dependencyRefs", QJsonArray{dependency}}}}}};
+        const auto result = files.commitStagedContent(pack, rows, stage.path(), manifest, {});
+        QVERIFY2(result.ok, qPrintable(result.error));
+        QCOMPARE(read(temp.path() + "/mods/selected.jar"), incoming);
+        QCOMPARE(read(temp.path() + '/' + disabledPath), disabled);
+        QVERIFY(!QFileInfo::exists(temp.path() + "/mods/retained.jar"));
+    }
     void retainedFilesAreNotReplacedOrReidentified_data() {
         QTest::addColumn<bool>("duplicateIdentity");
         QTest::newRow("locked-without-project-metadata") << false;

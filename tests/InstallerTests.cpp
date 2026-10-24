@@ -249,7 +249,18 @@ class InstallerTests : public QObject {
             }
         QVERIFY(unionQuery);
     }
-    void disabledDependenciesAreNotSilentlyEnabledOrTreatedAsActive() {
+    void disabledDependenciesDoNotBlockInstallOrChangeExistingState_data() {
+        QTest::addColumn<QString>("dependencyProject");
+        QTest::addColumn<QString>("dependencyVersion");
+        QTest::newRow("project-only") << QString("lib") << QString{};
+        QTest::newRow("exact-version") << QString("lib") << QString("lib-v1");
+        QTest::newRow("version-only") << QString{} << QString("lib-v1");
+        QTest::newRow("different-version-project") << QString("lib") << QString("lib-v2");
+        QTest::newRow("different-version-only") << QString{} << QString("lib-v2");
+    }
+    void disabledDependenciesDoNotBlockInstallOrChangeExistingState() {
+        QFETCH(QString, dependencyProject);
+        QFETCH(QString, dependencyVersion);
         FixtureServer server;
         QTemporaryDir temp;
         const auto pack = PackRepository::create(temp.path(), "Disabled dependency", "1.21.1", "fabric");
@@ -263,15 +274,20 @@ class InstallerTests : public QObject {
         const auto path = ref.value("installPath").toString();
         QVERIFY(QFile::rename(pack.path + '/' + path, pack.path + '/' + path + ".disabled"));
         ref["installPath"] = path + ".disabled";
+        ref["enabled"] = false;
         refs[0] = ref;
         QVERIFY(PackRepository::updateContentPins(pack.path, current.manifest, refs).ok);
-        const auto before = read(pack.path + "/pack.json");
-        const auto required =
-            modrinthRelease(server.version("root", "required", "root", {dep("lib", "lib-v1")}));
-        const auto failed = install(installer, pack.path, required);
-        QVERIFY(!failed.ok);
-        QVERIFY(failed.error.contains("disabled", Qt::CaseInsensitive));
-        QCOMPARE(read(pack.path + "/pack.json"), before);
+        const auto before = read(pack.path + '/' + path + ".disabled");
+        server.version("lib", "lib-v2", "new library version");
+        server.requests.clear();
+        const auto required = modrinthRelease(
+            server.version("root", "required", "root", {dep(dependencyProject, dependencyVersion)}));
+        const auto installed = install(installer, pack.path, required);
+        QVERIFY2(installed.ok, qPrintable(installed.error));
+        QCOMPARE(PackRepository::inspect(pack.path).manifest.value("mods").toArray().size(), 2);
+        QCOMPARE(read(pack.path + '/' + path + ".disabled"), before);
+        QVERIFY(!QFileInfo::exists(pack.path + '/' + path));
+        QVERIFY(!server.requests.contains("/files/lib-v2"));
         const auto incompatible = modrinthRelease(
             server.version("root", "incompatible", "other-root", {dep("lib", "", "incompatible")}));
         const auto success = install(installer, pack.path, incompatible);

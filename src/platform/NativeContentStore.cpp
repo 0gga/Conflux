@@ -637,8 +637,7 @@ ContentWriteResult NativeContentStore::restoreLocked(const QVariantMap &pack,
 }
 ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pack,
                                                            const QVariantList &expected, const QString &stage,
-                                                           const QJsonObject &manifest,
-                                                           const QSet<QString> &shallowProjects,
+                                                           const QJsonObject &manifest, const QSet<QString> &,
                                                            bool selectedOnly) const {
     ContentAccess access(pack.value("path").toString(), ContentAccess::Write);
     if (!access.ok())
@@ -664,7 +663,6 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
         return {false, "Content changed during download. Nothing was applied; refresh and retry."};
     const auto stageFiles = PackContent::contentFiles({{"path", stage}, {"loader", pack.value("loader")}});
     QMap<QString, int> beforeIds, afterIds;
-    QSet<QString> disabledProjects, disabledVersions;
     for (const auto &value : expected) {
         const auto row = value.toMap();
         if (row.value("category") != "mods")
@@ -672,9 +670,6 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
         if (row.value("enabled").toBool()) {
             if (!row.value("modId").toString().isEmpty())
                 ++beforeIds[row.value("modId").toString()];
-        } else {
-            disabledProjects.insert(row.value("sourceIds").toMap().value("modrinth").toString());
-            disabledVersions.insert(row.value("installedRelease").toMap().value("id").toString());
         }
     }
     for (const auto &value : stageFiles) {
@@ -716,18 +711,6 @@ ContentWriteResult NativeContentStore::commitStagedContent(const QVariantMap &pa
             }
             if (source.isEmpty() || sha1File(source) != hash)
                 return {false, "Staged content failed final verification. Nothing was applied."};
-            bool unchangedInput = false;
-            for (const auto &value : expected)
-                if (value.toMap().value("sha1").toString() == hash)
-                    unchangedInput = true;
-            if (!unchangedInput && !shallowProjects.contains(ref.value("projectId").toString()))
-                for (const auto &dependency : ref.value("dependencyRefs").toArray()) {
-                    const auto dep = dependency.toObject();
-                    if (dep.value("dependency_type") == "required" &&
-                        (disabledProjects.contains(dep.value("project_id").toString()) ||
-                         disabledVersions.contains(dep.value("version_id").toString())))
-                        return {false, "A required dependency is disabled. Nothing was applied."};
-                }
             QVariantMap old;
             int matches = 0;
             for (const auto &item : expected) {

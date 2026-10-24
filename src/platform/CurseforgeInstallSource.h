@@ -21,6 +21,7 @@ class CurseforgeInstallSource final : public QObject {
         return bool(m_callback);
     }
     void prepare(const QVariantMap &, const QVariantList &, const QVector<ContentInstallRequest> &, Callback);
+    void resolveDependency(const QVariantMap &, const QVariantList &, ContentInstallRequest, Callback);
     void cancel();
 
   private:

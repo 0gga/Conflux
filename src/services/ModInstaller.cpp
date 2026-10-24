@@ -188,14 +188,11 @@ void ModInstaller::startBatch(const QString &path, const QVector<ContentInstallR
     resolveNext();
 }
 bool ModInstaller::addResolved(const Release &release) {
+    if (!release.projectId.isEmpty() && m_disabledReferences.contains(release.projectId) &&
+        !m_rootIdentities.contains(release.projectId))
+        return true;
     if (!releaseStageAllowed(release.channel, m_allowedChannels)) {
         fail("A required version is excluded by the modpack's release stages. No changes were made.");
-        return false;
-    }
-    if (m_disabledReferences.contains(release.projectId) && !m_rootIdentities.contains(release.projectId)) {
-        fail("A required dependency is disabled: " +
-             m_disabledReferences.value(release.projectId).value("projectTitle").toString(release.projectId) +
-             ". Enable it before retrying.");
         return false;
     }
     if (release.projectId.isEmpty() || release.id.isEmpty() || !release.gameVersions.contains(m_game) ||
@@ -244,16 +241,6 @@ void ModInstaller::resolveNext() {
                     m_disabledReferences.contains(release.projectId))
                     continue;
                 const auto dependency = value.toObject();
-                if (dependency.value("dependency_type") == "required") {
-                    for (const auto &other : m_resolved)
-                        if (m_disabledReferences.contains(other.projectId) &&
-                            (dependency.value("project_id").toString() == other.projectId ||
-                             dependency.value("version_id").toString() == other.id)) {
-                            fail("A required dependency is disabled: " + other.projectId +
-                                 ". Enable it before installing these updates.");
-                            return;
-                        }
-                }
                 if (dependency.value("dependency_type").toString() != "incompatible")
                     continue;
                 for (const auto &other : m_resolved) {
@@ -319,6 +306,21 @@ void ModInstaller::resolveNext() {
             m_references.append(reference);
         }
         downloadNext();
+        return;
+    }
+    // Disabled dependencies are retained exactly as they are, including their selected version.
+    while (!m_tasks.isEmpty()) {
+        const auto &pending = m_tasks.head();
+        bool retained = !pending.projectId.isEmpty() && m_disabledReferences.contains(pending.projectId);
+        if (!pending.versionId.isEmpty())
+            for (const auto &reference : m_disabledReferences)
+                retained |= reference.value("id").toString() == pending.versionId;
+        if (!retained)
+            break;
+        m_tasks.dequeue();
+    }
+    if (m_tasks.isEmpty()) {
+        resolveNext();
         return;
     }
     auto task = m_tasks.dequeue();
@@ -391,6 +393,10 @@ void ModInstaller::resolveNext() {
         }
         if (!addResolved(release))
             return;
+        if (!m_resolved.contains(release.projectId)) {
+            resolveNext();
+            return;
+        }
         const auto id = release.projectId;
         get(m_api.resolved(QUrl("project/" + id)), [this, id](const QJsonDocument &metadata) {
             m_titles.insert(id, metadata.object().value("title").toString(id));

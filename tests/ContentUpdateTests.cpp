@@ -408,13 +408,91 @@ class ContentUpdateTests : public QObject {
         h.content.updateAll();
         QTRY_VERIFY(!h.content.busy());
         QCOMPARE(h.installer->calls.size(), 3);
-        QCOMPARE(h.content.operations()->failedCount(), 1);
+        QCOMPARE(h.content.operations()->failedCount(), 0);
         for (const auto &id : {"A", "B", "C"})
             QCOMPARE(byId(h.files->get(h.temp.path()), id).value("version").toString(), QString("2.0"));
         const auto count = h.installer->calls.size();
         h.content.retryOperation(taskId(h.content, "A"));
         QCOMPARE(h.installer->calls.size(),
-                 count); // A committed; its failed verification is not safe to retry.
+                 count); // A committed; a verification retry never repeats its write.
+    }
+    void persistentVerificationFailureKeepsTheCommittedTaskSuccessful_data() {
+        QTest::addColumn<bool>("throws");
+        QTest::newRow("returned-error") << false;
+        QTest::newRow("exception") << true;
+    }
+    void persistentVerificationFailureKeepsTheCommittedTaskSuccessful() {
+        QFETCH(bool, throws);
+        Harness h;
+        h.set({row("A"), row("B")});
+        QTRY_VERIFY(!h.content.busy());
+        const auto metadataReads = h.catalogue->identifyCount;
+        QSignalSpy completed(&h.content, &ContentActions::installationFinished);
+        QSignalSpy errors(&h.content, &ContentActions::operationFailed);
+        QSignalSpy resets(h.content.model(), &QAbstractItemModel::modelReset);
+        h.installer->afterCommit = [&](const QString &) {
+            h.files->throwReads = throws;
+            h.files->readFailures = -1;
+        };
+        h.content.update(row("A").value("relativePath").toString());
+        QTRY_VERIFY(!h.content.busy());
+        QCOMPARE(h.installer->calls.size(), 1);
+        QCOMPARE(byId(h.content.inventory(), "A").value("version").toString(), "2.0");
+        QCOMPARE(byId(h.files->get(h.temp.path()), "A").value("version").toString(), "2.0");
+        QCOMPARE(h.catalogue->identifyCount, metadataReads); // Unverified snapshots never enter the index.
+        QCOMPARE(errors.size(), 1);
+        QVERIFY(errors.first().first().toString().contains("Changes were saved"));
+        QCOMPARE(completed.size(), 1);
+        QVERIFY(completed.first().at(3).toString().isEmpty());
+        QCOMPARE(byId(completed.first().at(2).toList(), "A").value("version").toString(), "2.0");
+        quint64 rootId = 0, diagnosticId = 0;
+        for (const auto &value : h.content.operations()->entries()) {
+            const auto task = value.toMap();
+            if (task.value("title") == "A") {
+                rootId = task.value("id").toULongLong();
+                QCOMPARE(task.value("state").toString(), "done");
+            } else {
+                diagnosticId = task.value("id").toULongLong();
+                QCOMPARE(task.value("action").toString(), "Reading changes");
+                QCOMPARE(task.value("state").toString(), "failed");
+                QVERIFY(!task.value("retryable").toBool());
+            }
+        }
+        QVERIFY(rootId && diagnosticId);
+        h.content.retryOperation(rootId);
+        h.content.retryOperation(diagnosticId);
+        QCOMPARE(h.installer->calls.size(), 1);
+        // A new command must not clear the failed-read barrier when no command is pending.
+        h.content.update(row("B").value("relativePath").toString());
+        QTRY_VERIFY(!h.content.busy());
+        QCOMPARE(h.installer->calls.size(), 1);
+        QCOMPARE(byId(h.files->get(h.temp.path()), "B").value("version").toString(), "1.0");
+        const auto blockedId = taskId(h.content, "B");
+        QVERIFY(blockedId);
+        h.files->readFailures = 0;
+        h.installer->afterCommit = {};
+        h.content.retryOperation(blockedId);
+        QTRY_VERIFY(!h.content.busy());
+        QCOMPARE(h.installer->calls.size(), 2);
+        QCOMPARE(byId(h.installer->inputs.last().rows, "A").value("version").toString(), "2.0");
+        QCOMPARE(byId(h.files->get(h.temp.path()), "B").value("version").toString(), "2.0");
+        QCOMPARE(resets.size(), 0);
+    }
+    void recoveredReadBeforeNextQueuedItemNeverRepeatsTheCommittedWrite() {
+        Harness h;
+        h.set({row("A"), row("B"), row("C")});
+        QTRY_VERIFY(!h.content.busy());
+        h.installer->afterCommit = [&](const QString &id) {
+            if (id == "A")
+                h.files->readFailures = 2; // Both post-write attempts fail; B's pre-write read succeeds.
+        };
+        h.content.updateAll();
+        QTRY_VERIFY(!h.content.busy());
+        QCOMPARE(h.installer->calls.size(), 3);
+        QCOMPARE(h.content.operations()->failedCount(), 1); // Independent read diagnostic only.
+        QCOMPARE(byId(h.installer->inputs.at(1).rows, "A").value("version").toString(), "2.0");
+        for (const auto &id : {"A", "B", "C"})
+            QCOMPARE(byId(h.files->get(h.temp.path()), id).value("version").toString(), "2.0");
     }
     void changingInstancesKeepsCommandsAndResultsWithTheirOriginalPack() {
         Harness h;

@@ -51,6 +51,7 @@ class Files final : public IContentFileStore {
     QHash<QString, QVariantList> contents;
     mutable std::atomic<int> reads{0};
     mutable std::atomic<int> readFailures{0};
+    mutable std::atomic<bool> throwReads{false};
     void set(const QString &path, QVariantList rows) {
         QMutexLocker lock(&mutex);
         contents[path] = std::move(rows);
@@ -82,8 +83,14 @@ class Files final : public IContentFileStore {
     }
     ContentFileState reload(const QVariantMap &pack, const QVariantList &, bool = true) const override {
         ++reads;
-        if (readFailures.exchange(0) > 0)
-            return {pack, {}, "Fixture inventory unavailable"};
+        auto failures = readFailures.load();
+        while (failures != 0) {
+            if (failures < 0 || readFailures.compare_exchange_weak(failures, failures - 1)) {
+                if (throwReads)
+                    throw std::runtime_error("Fixture inventory unavailable");
+                return {pack, {}, "Fixture inventory unavailable"};
+            }
+        }
         return {pack, get(pack.value("path").toString()), {}};
     }
     ContentWriteResult setEnabled(const QVariantMap &, const QVariantMap &, bool) const override {

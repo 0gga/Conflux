@@ -528,7 +528,8 @@ bool ContentActions::enqueue(ContentOperation operation) {
     }
     if (operation.packPath == m_pack.value("path").toString()) {
         if (!hasPending(operation.packPath))
-            storeState(operation.packPath, {m_pack, reconcileContentRows(m_rows, m_rows), {}});
+            storeState(operation.packPath, {m_pack, reconcileContentRows(m_rows, m_rows),
+                                            m_states.value(operation.packPath).error});
         ++m_generation;
         m_busy = false;
     }
@@ -622,7 +623,10 @@ void ContentActions::startOperation(ContentOperation operation, ContentOperation
     const auto files = m_files;
     watcher->setFuture(QtConcurrent::run([files, before] {
         try {
-            return files->reload(before.pack, before.rows, true);
+            auto current = files->reload(before.pack, before.rows, true);
+            if (current.error.isEmpty())
+                current.rows = reconcileContentRows(current.rows, before.rows);
+            return current;
         } catch (...) {
             return ContentFileState{before.pack, before.rows, "Could not recover the content inventory."};
         }
@@ -633,12 +637,12 @@ void ContentActions::completeOperation(ContentOperation operation, ContentWriteR
     const auto before = m_states.value(operation.packPath);
     if (current.pack.isEmpty())
         current.pack = before.pack;
-    if (!current.error.isEmpty()) {
-        if (!result.error.isEmpty())
+    const auto verificationError = result.ok ? current.error : QString{};
+    if (!current.error.isEmpty() && !result.ok) {
+        if (!result.error.isEmpty() && result.error != current.error)
             result.error += " ";
-        result.error += current.error;
-        result.changed = result.changed || result.ok;
-        result.ok = false;
+        if (result.error != current.error)
+            result.error += current.error;
         current.rows = before.rows;
     }
     current.rows =
@@ -686,6 +690,16 @@ void ContentActions::completeOperation(ContentOperation operation, ContentWriteR
         m_failedOperations[operation.id] = operation;
     m_operations.finish(operation.id, result.ok || cancelled, cancelled ? QString{} : result.error,
                         !result.changed);
+    if (!verificationError.isEmpty()) {
+        const auto message = "Changes were saved, but the content list could not be refreshed. " +
+                             verificationError + " Refresh before changing more content.";
+        const auto verificationId = ++m_operationId;
+        m_operations.queued(verificationId, current.pack, "Content list", "Reading changes");
+        m_operations.finish(verificationId, false, message, false);
+        m_activity = "error";
+        m_notice = message;
+        emit operationFailed(message);
+    }
     if (!result.warnings.isEmpty()) {
         const auto message = result.warnings.join('\n');
         const auto warningId = ++m_operationId;
@@ -697,7 +711,7 @@ void ContentActions::completeOperation(ContentOperation operation, ContentWriteR
     m_activeOperationId = 0;
     ++m_lockRevision;
     publishProjection();
-    if ((result.ok || result.changed) &&
+    if (current.error.isEmpty() && (result.ok || result.changed) &&
         (operation.kind == ContentOperation::Install || operation.kind == ContentOperation::Import)) {
         // Cache verified installation results even when the user leaves this instance.
         // This read-only work is independent of the mutation queue's completion.

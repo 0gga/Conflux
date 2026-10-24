@@ -44,8 +44,12 @@ void ContentOperationExecutor::execute(ContentOperation operation, ContentFileSt
             return;
         *started = true;
         auto predicted = result.ok ? projectContentOperations(before.rows, {operation}) : before.rows;
-        if (result.ok)
-            predicted += result.installedPredictions;
+        if (result.ok && !result.installedPredictions.isEmpty()) {
+            ContentOperation installed;
+            installed.kind = ContentOperation::Install;
+            installed.predictions = result.installedPredictions;
+            predicted = projectContentOperations(std::move(predicted), {installed});
+        }
         const bool inspectInventory = !result.ok || (operation.kind != ContentOperation::Enable &&
                                                      operation.kind != ContentOperation::Remove &&
                                                      operation.kind != ContentOperation::Lock);
@@ -71,19 +75,31 @@ void ContentOperationExecutor::execute(ContentOperation operation, ContentFileSt
                              callback(result, std::move(current));
                          });
         const auto installed = result.installedPredictions;
-        watcher->setFuture(QtConcurrent::run([files, before, predicted, inspectInventory, installed] {
-            try {
-                auto current = files->reload(before.pack, predicted, inspectInventory);
-                if (current.error.isEmpty() && !installed.isEmpty())
-                    current.rows = reconcileContentRows(current.rows, {}, installed);
-                return current;
-            } catch (const std::exception &e) {
-                return ContentFileState{before.pack, before.rows,
-                                        QString("Could not verify content: ") + QString::fromUtf8(e.what())};
-            } catch (...) {
-                return ContentFileState{before.pack, before.rows,
-                                        "Could not verify content after this operation."};
+        watcher->setFuture(QtConcurrent::run([files, before, predicted, inspectInventory, installed, result,
+                                              operation] {
+            ContentFileState current;
+            // Retry a transient read once on this worker. Never replay the committed write.
+            const int attempts = result.ok ? 2 : 1;
+            for (int attempt = 0; attempt < attempts; ++attempt) {
+                try {
+                    current = files->reload(before.pack, predicted, inspectInventory || attempt > 0);
+                } catch (const std::exception &e) {
+                    current = {
+                        before.pack, {}, QString("Could not verify content: ") + QString::fromUtf8(e.what())};
+                } catch (...) {
+                    current = {before.pack, {}, "Could not verify content after this operation."};
+                }
+                if (current.error.isEmpty()) {
+                    if (!installed.isEmpty())
+                        current.rows = reconcileContentRows(current.rows, {}, installed);
+                    return current;
+                }
             }
+            // These rows describe an acknowledged write, not a verified inventory. The error
+            // must survive publication so the next command reads the filesystem before writing.
+            current.pack = before.pack;
+            current.rows = result.ok && operation.kind != ContentOperation::Lock ? predicted : before.rows;
+            return current;
         }));
     };
     if (operation.kind == ContentOperation::Install) {

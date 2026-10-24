@@ -506,6 +506,169 @@ class ContentActionsTests : public QObject {
         QVERIFY(content.notice().contains("Fixture read failure"));
         QCOMPARE(content.operations()->failedCount(), 1);
     }
+    void acknowledgedWritesRetryOnlyTheirInventoryRead_data() {
+        QTest::addColumn<int>("kind");
+        QTest::addColumn<int>("failures");
+        QTest::addColumn<bool>("throws");
+        for (const auto kind : {ContentOperation::Install, ContentOperation::Enable, ContentOperation::Remove,
+                                ContentOperation::Lock, ContentOperation::Import, ContentOperation::Restore})
+            for (const int failures : {0, 1, 2})
+                for (const bool throws : {false, true})
+                    QTest::newRow(qPrintable(
+                        QString("kind-%1-failures-%2-throws-%3").arg(int(kind)).arg(failures).arg(throws)))
+                        << int(kind) << failures << throws;
+    }
+    void acknowledgedWritesRetryOnlyTheirInventoryRead() {
+        QFETCH(int, kind);
+        QFETCH(int, failures);
+        QFETCH(bool, throws);
+        struct Files final : IContentFileStore {
+            mutable std::atomic<int> reads{0}, writes{0};
+            int failures = 0;
+            bool throws = false;
+            QVariantList snapshot(const QVariantMap &, const QVariantList &rows) const override {
+                return rows;
+            }
+            ContentFileState reload(const QVariantMap &pack, const QVariantList &rows, bool) const override {
+                if (++reads <= failures) {
+                    if (throws)
+                        throw std::runtime_error("Fixture verification exception");
+                    return {pack, {}, "Fixture verification error"};
+                }
+                return {pack, rows, {}};
+            }
+            ContentWriteResult written() const {
+                ++writes;
+                return {true, {}};
+            }
+            ContentWriteResult setEnabled(const QVariantMap &, const QVariantMap &, bool) const override {
+                return written();
+            }
+            ContentWriteResult remove(const QVariantMap &, const QVariantList &) const override {
+                return written();
+            }
+            ContentWriteResult importFiles(const QVariantMap &, const QList<QUrl> &,
+                                           const QString &) const override {
+                return written();
+            }
+            ContentWriteResult restoreLocked(const QVariantMap &, const QVariantMap &) const override {
+                return written();
+            }
+        };
+        struct Locks final : ILauncherContentLocks {
+            mutable std::atomic<int> writes{0};
+            ContentWriteResult setLocked(const QVariantMap &, const QVariantList &, bool) const override {
+                ++writes;
+                return {true, {}};
+            }
+        };
+        auto files = std::make_shared<Files>();
+        files->failures = failures;
+        files->throws = throws;
+        auto locks = std::make_shared<Locks>();
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        ContentOperationExecutor executor(files, installer);
+        executor.setLauncherLocks(locks);
+        const auto original = row("Root", "Author");
+        const ContentFileState before{{{"path", "fixture-only-instance"}}, {original}, {}};
+        ContentOperation operation;
+        operation.kind = static_cast<ContentOperation::Kind>(kind);
+        operation.enabled = false;
+        operation.targets = {contentRowKey(original)};
+        operation.predictions = {original};
+        bool completed = false;
+        executor.execute(operation, before, [&](ContentWriteResult write, ContentFileState current) {
+            QVERIFY(write.ok);
+            QVERIFY(write.error.isEmpty());
+            QCOMPARE(current.error.isEmpty(), failures < 2);
+            QCOMPARE(current.pack, before.pack);
+            QCOMPARE(current.rows.size(), 1 - int(operation.kind == ContentOperation::Remove));
+            completed = true;
+        });
+        const bool installed = operation.kind == ContentOperation::Install;
+        if (installed) {
+            QVERIFY(bool(installer->completion));
+            auto finish = std::move(installer->completion);
+            finish({true, {}});
+        }
+        QTRY_VERIFY(completed);
+        QCOMPARE(files->reads.load(), failures == 0 ? 1 : 2);
+        QCOMPARE(files->writes.load(), int(!installed && operation.kind != ContentOperation::Lock));
+        QCOMPARE(locks->writes.load(), int(operation.kind == ContentOperation::Lock));
+    }
+    void sourceUnlockReadFailureKeepsAcknowledgmentAndClearsLocalShadow() {
+        struct Locks final : ILauncherContentLocks {
+            mutable std::atomic<bool> locked{true}, failRead{false};
+            mutable std::atomic<int> writes{0};
+            ContentWriteResult setLocked(const QVariantMap &, const QVariantList &,
+                                         bool value) const override {
+                locked = value;
+                failRead = true;
+                ++writes;
+                return {true, {}};
+            }
+        };
+        struct Files final : IContentFileStore {
+            std::shared_ptr<Locks> locks;
+            QVariantList snapshot(const QVariantMap &, const QVariantList &rows) const override {
+                return rows;
+            }
+            ContentFileState reload(const QVariantMap &pack, const QVariantList &rows, bool) const override {
+                if (locks->failRead)
+                    return {pack, {}, "Fixture source inventory unavailable"};
+                auto current = pack;
+                auto source = pack.value("sourceContent").toList().first().toMap();
+                source["launcherLocked"] = locks->locked.load();
+                current["sourceContent"] = QVariantList{source};
+                return {current, rows, {}};
+            }
+            ContentWriteResult setEnabled(const QVariantMap &, const QVariantMap &, bool) const override {
+                return {};
+            }
+            ContentWriteResult remove(const QVariantMap &, const QVariantList &) const override {
+                return {};
+            }
+            ContentWriteResult importFiles(const QVariantMap &, const QList<QUrl> &,
+                                           const QString &) const override {
+                return {};
+            }
+        };
+        QTemporaryDir temp;
+        auto locks = std::make_shared<Locks>();
+        auto files = std::make_shared<Files>();
+        files->locks = locks;
+        auto preferences = std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini");
+        preferences->setLocked(temp.path(), "modrinth:Root", true);
+        preferences->setLocked(temp.path(), "path:mods/Root.jar", true);
+        auto original = row("Root", "Author");
+        const QVariantMap source{{"provider", "modrinth"},
+                                 {"projectId", "Root"},
+                                 {"sourceIds", original.value("sourceIds")},
+                                 {"relativePath", "mods/Root.jar"},
+                                 {"launcherLocked", true}};
+        ContentActions content(files, std::make_shared<ContentCatalogueFixture>(),
+                               std::make_shared<ContentInstallerFixture>(), preferences);
+        content.setLauncherLocks(locks);
+        content.setContext(
+            {{"path", temp.path()}, {"provider", "modrinth"}, {"sourceContent", QVariantList{source}}},
+            {original});
+        QTRY_VERIFY(!content.busy());
+        QVERIFY(content.inventory().first().toMap().value("locked").toBool());
+        content.setLocked("mods/Root.jar", false);
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(locks->writes.load(), 1);
+        QVERIFY(!locks->locked);
+        QVERIFY(!preferences->locked(temp.path(), "modrinth:Root"));
+        QVERIFY(!preferences->locked(temp.path(), "path:mods/Root.jar"));
+        QCOMPARE(content.operations()->failedCount(), 1); // The source write itself succeeded.
+        QVERIFY(content.notice().contains("Changes were saved"));
+        locks->failRead = false;
+        content.refresh(false);
+        QTRY_VERIFY(!content.busy());
+        QVERIFY(!content.inventory().first().toMap().value("locked").toBool());
+        QVERIFY(!content.projectLocked(original));
+        QCOMPARE(locks->writes.load(), 1);
+    }
     void verifiedDependencyMetadataSurvivesRawExternalInventoryReload() {
         struct RawFiles final : IContentFileStore {
             QVariantList rows;

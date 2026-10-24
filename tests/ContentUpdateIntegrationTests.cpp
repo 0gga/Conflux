@@ -48,17 +48,23 @@ class ContentUpdateIntegrationTests : public QObject {
         QTest::addColumn<QString>("category");
         QTest::addColumn<int>("failureAt");
         QTest::addColumn<bool>("managed");
+        QTest::addColumn<bool>("verificationFailure");
         for (const auto &type : {"mods", "resourcepacks", "shaderpacks", "datapacks", "mixed"})
             for (int index = 0; index < 3; ++index)
                 for (bool managed : {false, true})
-                    QTest::newRow(
-                        qPrintable(QString("%1-fail%2-managed%3").arg(type).arg(index).arg(managed)))
-                        << QString(type) << index << managed;
+                    for (bool verificationFailure : {false, true})
+                        QTest::newRow(qPrintable(QString("%1-fail%2-managed%3-readFailure%4")
+                                                     .arg(type)
+                                                     .arg(index)
+                                                     .arg(managed)
+                                                     .arg(verificationFailure)))
+                            << QString(type) << index << managed << verificationFailure;
     }
     void realTransactionsKeepPartialSuccess() {
         QFETCH(QString, category);
         QFETCH(int, failureAt);
         QFETCH(bool, managed);
+        QFETCH(bool, verificationFailure);
         QTemporaryDir temp;
         QVariantMap pack{{"path", temp.path() + "/ModrinthApp/profiles/Fixture"},
                          {"minecraft", "1.21.1"},
@@ -202,7 +208,59 @@ class ContentUpdateIntegrationTests : public QObject {
         auto locks = std::make_shared<ContentLockRegistry>();
         auto files = std::make_shared<NativeContentStore>(nullptr, temp.path() + "/backups", locks);
         auto installer = std::make_shared<ContentInstaller>(files, nullptr, true);
-        ContentActions content(files, std::make_shared<ContentCatalogueFixture>(), installer,
+        struct ReadBoundary final : IContentFileStore {
+            std::shared_ptr<NativeContentStore> files;
+            mutable std::atomic<int> failures{0};
+            QVariantList snapshot(const QVariantMap &pack, const QVariantList &rows) const override {
+                return files->snapshot(pack, rows);
+            }
+            ContentFileState reload(const QVariantMap &pack, const QVariantList &rows,
+                                    bool inspect) const override {
+                auto remaining = failures.load();
+                while (remaining > 0)
+                    if (failures.compare_exchange_weak(remaining, remaining - 1))
+                        return {pack, {}, "Fixture post-commit inventory unavailable"};
+                return files->reload(pack, rows, inspect);
+            }
+            ContentWriteResult setEnabled(const QVariantMap &pack, const QVariantMap &row,
+                                          bool enabled) const override {
+                return files->setEnabled(pack, row, enabled);
+            }
+            ContentWriteResult remove(const QVariantMap &pack, const QVariantList &rows) const override {
+                return files->remove(pack, rows);
+            }
+            ContentWriteResult importFiles(const QVariantMap &pack, const QList<QUrl> &urls,
+                                           const QString &category) const override {
+                return files->importFiles(pack, urls, category);
+            }
+        };
+        struct WriteBoundary final : IContentInstaller {
+            std::shared_ptr<ContentInstaller> installer;
+            std::shared_ptr<ReadBoundary> reads;
+            bool armFailure = false;
+            void install(const QVariantMap &pack, const QVariantList &rows,
+                         const QVector<ContentInstallRequest> &requests, Callback callback) override {
+                installer->install(pack, rows, requests,
+                                   [this, callback = std::move(callback)](ContentWriteResult result) {
+                                       if (result.ok && std::exchange(armFailure, false))
+                                           reads->failures = 2;
+                                       callback(std::move(result));
+                                   });
+            }
+            void cancel() override {
+                installer->cancel();
+            }
+            bool cancellable() const override {
+                return installer->cancellable();
+            }
+        };
+        auto reads = std::make_shared<ReadBoundary>();
+        reads->files = files;
+        auto writes = std::make_shared<WriteBoundary>();
+        writes->installer = installer;
+        writes->reads = reads;
+        writes->armFailure = verificationFailure;
+        ContentActions content(reads, std::make_shared<ContentCatalogueFixture>(), writes,
                                std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
         content.setLockRegistry(locks);
         content.setContext(pack, rows);
@@ -212,7 +270,21 @@ class ContentUpdateIntegrationTests : public QObject {
         QVERIFY2(downloads == 3,
                  qPrintable(QJsonDocument(QJsonArray::fromVariantList(content.operations()->entries()))
                                 .toJson(QJsonDocument::Compact)));
-        QCOMPARE(content.operations()->failedCount(), 1);
+        QCOMPARE(content.operations()->failedCount(), 1 + int(verificationFailure));
+        if (verificationFailure) {
+            int diagnostics = 0, committed = 0;
+            for (const auto &value : content.operations()->entries()) {
+                const auto task = value.toMap();
+                if (task.value("action") == "Reading changes") {
+                    ++diagnostics;
+                    QVERIFY(task.value("message").toString().contains("Changes were saved"));
+                    QVERIFY(!task.value("retryable").toBool());
+                } else if (task.value("state") == "done")
+                    ++committed;
+            }
+            QCOMPARE(diagnostics, 1);
+            QCOMPARE(committed, 2);
+        }
         for (int i = 0; i < 3; ++i) {
             if (i == failureAt) {
                 QCOMPARE(read(root + '/' + paths[i]), originals[paths[i]]);
@@ -240,7 +312,7 @@ class ContentUpdateIntegrationTests : public QObject {
                  qPrintable(QJsonDocument(QJsonArray::fromVariantList(content.operations()->entries()))
                                 .toJson(QJsonDocument::Compact)));
 
-        QCOMPARE(content.operations()->failedCount(), 0);
+        QCOMPARE(content.operations()->failedCount(), int(verificationFailure));
         QVERIFY(!QFileInfo::exists(root + '/' + paths[failureAt]));
         QCOMPARE(
             read(root + '/' + newPaths[failureAt]),

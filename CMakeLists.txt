@@ -28,6 +28,7 @@ qt_add_library(pack_foundation STATIC
     src/platform/ProjectAuthors.h src/platform/ProjectAuthors.cpp
     src/platform/ReviewedProjectIdentities.h src/platform/ReviewedProjectIdentities.cpp
     src/services/CatalogueClient.h src/services/CatalogueClient.cpp
+    src/services/JsonResponse.h src/services/JsonResponse.cpp
     src/services/GalleryImages.h src/services/GalleryImages.cpp
     src/services/InstallationDiscovery.h src/services/InstallationDiscovery.cpp
     src/services/ModInstaller.h src/services/ModInstaller.cpp
@@ -282,6 +283,12 @@ if(BUILD_TESTING)
     qt_add_executable(content-update-tests tests/ContentUpdateTests.cpp)
     target_link_libraries(content-update-tests PRIVATE conflux_desktop Qt6::Test)
     add_test(NAME content-updates COMMAND content-update-tests)
+    qt_add_executable(content-catalogue-update-tests tests/ContentCatalogueUpdateTests.cpp)
+    target_link_libraries(content-catalogue-update-tests PRIVATE conflux_desktop Qt6::Test)
+    add_test(NAME content-catalogue-updates COMMAND content-catalogue-update-tests -o "${CMAKE_CURRENT_BINARY_DIR}/content-catalogue-update-results.txt,txt")
+    qt_add_executable(json-response-tests tests/JsonResponseTests.cpp)
+    target_link_libraries(json-response-tests PRIVATE pack_foundation Qt6::Test)
+    add_test(NAME json-responses COMMAND json-response-tests -o "${CMAKE_CURRENT_BINARY_DIR}/json-response-results.txt,txt")
     qt_add_executable(content-update-integration-tests tests/ContentUpdateIntegrationTests.cpp)
     target_link_libraries(content-update-integration-tests PRIVATE conflux_desktop miniz Qt6::Test)
     add_test(NAME content-update-integration COMMAND content-update-integration-tests)

@@ -1,4 +1,5 @@
 #include "ContentCatalogue.h"
+#include "JsonResponse.h"
 #include "domain/ContentCompatibility.h"
 #include "domain/ContentTypes.h"
 #include "domain/LicensePolicy.h"
@@ -30,25 +31,17 @@ void ContentCatalogue::request(const QString &path, const QJsonObject *body, Jso
     request.setHeader(QNetworkRequest::UserAgentHeader,
                       "0gga/Conflux/0.1.0 (https://github.com/0gga/Conflux)");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
     request.setTransferTimeout(20000);
     auto *reply = body ? m_network.post(request, QJsonDocument(*body).toJson(QJsonDocument::Compact))
                        : m_network.get(request);
-    connect(reply, &QNetworkReply::readyRead, this, [reply] {
-        if (reply->bytesAvailable() > 32 * 1024 * 1024)
-            reply->abort();
-    });
-    connect(reply, &QNetworkReply::finished, this, [reply, callback = std::move(callback)] {
-        QJsonParseError parse;
-        const auto document = QJsonDocument::fromJson(reply->readAll(), &parse);
-        QString error;
-        if (reply->error() != QNetworkReply::NoError)
-            error = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 429
-                        ? "Modrinth rate limit reached. Retry Refresh later."
-                        : reply->errorString();
-        else if (parse.error != QJsonParseError::NoError)
+    readJsonResponse(reply, this, {}, [callback = std::move(callback)](JsonResponse response) {
+        auto error = jsonResponseError(response);
+        if (response.status == 429)
+            error = "Modrinth rate limit reached. Retry Refresh later.";
+        else if (response.failure == JsonResponseFailure::InvalidJson)
             error = "Modrinth returned invalid JSON.";
-        callback(document, error);
-        reply->deleteLater();
+        callback(std::move(response.document), error);
     });
 }
 void ContentCatalogue::refresh(const QVariantList &input, const QString &game, const QString &loader,
@@ -84,6 +77,7 @@ void ContentCatalogue::checkUpdates(const QVariantList &input, const QString &ga
         QStringList loaders, channels;
         QJsonArray hashes;
         QSet<QString> seen;
+        QHash<QString, QList<int>> positions;
     };
     struct Batch {
         QVariantList rows;
@@ -94,7 +88,8 @@ void ContentCatalogue::checkUpdates(const QVariantList &input, const QString &ga
     batch->rows = input;
     QMap<QString, Group> groups;
     const auto allowedChannels = effectiveReleaseStages(selection);
-    for (auto &value : batch->rows) {
+    for (int position = 0; position < batch->rows.size(); ++position) {
+        auto &value = batch->rows[position];
         auto row = value.toMap();
         row["updateAvailable"] = false;
         row.remove("updateRelease");
@@ -127,6 +122,7 @@ void ContentCatalogue::checkUpdates(const QVariantList &input, const QString &ga
         group.category = category;
         group.loaders = loaders;
         group.channels = allowedChannels;
+        group.positions[hash] << position;
         if (!group.seen.contains(hash)) {
             group.seen.insert(hash);
             group.hashes << hash;
@@ -159,24 +155,26 @@ void ContentCatalogue::checkUpdates(const QVariantList &input, const QString &ga
                         if (!error.isEmpty())
                             batch->errors << "Update check: " + error;
                         const auto values = document.object();
-                        for (auto &value : batch->rows) {
-                            auto row = value.toMap();
-                            const auto hash = row.value("sha1").toString();
-                            if (row.value("category") != group.category || !hashes.contains(hash))
-                                continue;
-                            const auto installed = releaseFromVariant(row.value("installedRelease").toMap());
+                        for (const auto &value : hashes) {
+                            const auto hash = value.toString();
                             const auto candidate = modrinthRelease(values.value(hash).toObject());
-                            if (candidate.projectId == installed.projectId &&
-                                group.channels.contains(candidate.channel) &&
-                                candidate.gameVersions.contains(game) &&
-                                sharesLoader(candidate.loaders, group.loaders) &&
-                                candidate.filename.endsWith(group.category == "mods" ? ".jar" : ".zip",
-                                                            Qt::CaseInsensitive) &&
-                                !candidate.url.isEmpty() && !candidate.sha1.isEmpty() &&
-                                isNewerRelease(installed, candidate)) {
-                                row["updateAvailable"] = true;
-                                row["updateRelease"] = candidate.toVariant();
-                                value = row;
+                            if (!group.channels.contains(candidate.channel) ||
+                                !candidate.gameVersions.contains(game) ||
+                                !sharesLoader(candidate.loaders, group.loaders) ||
+                                !candidate.filename.endsWith(group.category == "mods" ? ".jar" : ".zip",
+                                                             Qt::CaseInsensitive) ||
+                                candidate.url.isEmpty() || candidate.sha1.isEmpty())
+                                continue;
+                            for (const int position : group.positions.value(hash)) {
+                                auto row = batch->rows[position].toMap();
+                                const auto installed =
+                                    releaseFromVariant(row.value("installedRelease").toMap());
+                                if (candidate.projectId == installed.projectId &&
+                                    isNewerRelease(installed, candidate)) {
+                                    row["updateAvailable"] = true;
+                                    row["updateRelease"] = candidate.toVariant();
+                                    batch->rows[position] = row;
+                                }
                             }
                         }
                         if (--batch->pending == 0)

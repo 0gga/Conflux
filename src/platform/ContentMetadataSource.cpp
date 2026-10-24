@@ -5,6 +5,7 @@
 #include "domain/Catalogue.h"
 #include "domain/ContentTypes.h"
 #include "domain/LicensePolicy.h"
+#include "services/JsonResponse.h"
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QFutureWatcher>
@@ -169,39 +170,20 @@ void ContentMetadataSource::json(const QString &provider, const QString &path, c
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     auto *reply = body.isEmpty() ? m_network.get(request) : m_network.post(request, body);
     const int generation = m_authGeneration;
-    connect(reply, &QNetworkReply::readyRead, this, [reply] {
-        if (reply->bytesAvailable() > 16 * 1024 * 1024)
-            reply->abort();
-    });
-    connect(reply, &QNetworkReply::finished, this, [this, reply, key, provider, cf, generation] {
-        reply->deleteLater();
-        QString error;
-        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (cf && generation != m_authGeneration)
-            error = "The CurseForge connection changed during identification.";
-        else if (reply->error() != QNetworkReply::NoError || status != 200)
-            error = provider + " metadata request failed (HTTP " + QString::number(status) + ").";
-        if (!error.isEmpty()) {
-            deliver(key, {}, error, cf, generation);
-            return;
-        }
-        const auto bytes = reply->readAll();
-        auto *watcher = new QFutureWatcher<QPair<QJsonDocument, QString>>(this);
-        connect(watcher, &QFutureWatcher<QPair<QJsonDocument, QString>>::finished, this,
-                [this, watcher, key, cf, generation] {
-                    auto parsed = watcher->result();
-                    watcher->deleteLater();
-                    deliver(key, std::move(parsed.first), parsed.second, cf, generation);
-                });
-        watcher->setFuture(QtConcurrent::run([bytes, provider] {
-            QJsonParseError parse;
-            auto document = QJsonDocument::fromJson(bytes, &parse);
-            const auto error = parse.error == QJsonParseError::NoError && !document.isNull()
-                                   ? QString{}
-                                   : provider + " returned invalid metadata.";
-            return qMakePair(std::move(document), error);
-        }));
-    });
+    readJsonResponse(reply, this, {.maximumBytes = 16 * 1024 * 1024, .workerThreshold = 0},
+                     [this, key, provider, cf, generation](JsonResponse response) {
+                         QString error;
+                         if (cf && generation != m_authGeneration)
+                             error = "The CurseForge connection changed during identification.";
+                         else if (response.failure == JsonResponseFailure::InvalidJson)
+                             error = provider + " returned invalid metadata.";
+                         else if (response.failure == JsonResponseFailure::TooLarge)
+                             error = provider + " metadata exceeded the 16 MiB size limit.";
+                         else if (response.failure != JsonResponseFailure::None)
+                             error = provider + " metadata request failed (HTTP " +
+                                     QString::number(response.status) + ").";
+                         deliver(key, std::move(response.document), error, cf, generation);
+                     });
 }
 void ContentMetadataSource::deliver(const QString &key, QJsonDocument document, QString error, bool cf,
                                     int generation) {

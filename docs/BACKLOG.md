@@ -106,6 +106,8 @@ These are ideas, not delivered features or additional owner requirements.
 
 | Priority | Improvement | Acceptance criteria | State |
 | --- | --- | --- | --- |
+| P1 | Shared bounded provider JSON reads | Reuse one response reader, parse large payloads on workers, enforce size limits, allow callbacks to dispose owners, preserve credentials/cancellation/cache boundaries and measure indexed large-pack update result processing. | Delivered; 40 suites and packaged smoke pass; 5000-file check 2229 ms to 260 ms |
+| P2 | Bound QML build import scans | Measure configure-time scanners that currently use the whole repository as their root; exclude generated deployment/cache trees through supported Qt configuration while preserving QML imports and packaged smoke. | Backlogged |
 | P1 | Persistent installed-content metadata index | Resolve exact project/author/tag metadata once on first load or installation, persist across sessions in SQLite, identify changed files by hash, publish metadata before update checks and keep failed lookups retryable. Include CurseForge-only known identities. | Delivered; 35 suites and packaged smoke pass |
 | P1 | Unresolved existing-copy installation | Replace renamed/unresolved copies by verified file hash or archive runtime ID; reconcile duplicates, preserve disabled state and recognize already-present release hashes without another install. Verify NeoForge/Fabric and managed provider pins. | Delivered; 36 suites and packaged smoke pass |
 | P1 | Loaded instance filter budgets | Reuse prepared search/filter/sort/author state; remove repeated model key scans, preserve persistent/duplicate identities and verify real rendered filtering without new catalogue reads. | Delivered; 33 suites and packaged smoke pass |

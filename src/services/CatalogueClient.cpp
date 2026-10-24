@@ -1,16 +1,15 @@
 #include "CatalogueClient.h"
+#include "JsonResponse.h"
 #include "domain/ContentCompatibility.h"
 #include "domain/ReleaseStages.h"
 #include "platform/ProjectAuthors.h"
 #include "platform/ReviewedAuthorIdentities.h"
-#include <QFutureWatcher>
 #include <QJsonArray>
 #include <QNetworkReply>
 #include <QPointer>
 #include <QRegularExpression>
 #include <QTimer>
 #include <QUrlQuery>
-#include <QtConcurrent>
 #include <algorithm>
 #include <limits>
 #include <memory>
@@ -220,53 +219,11 @@ void CatalogueClient::request(const QUrl &url, bool cf, JsonCallback callback, b
     if (!body.isEmpty())
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     auto *reply = body.isEmpty() ? m_network.get(request) : m_network.post(request, body);
-    connect(reply, &QNetworkReply::readyRead, this, [reply] {
-        if (reply->bytesAvailable() > 32 * 1024 * 1024) {
-            reply->setProperty("responseTooLarge", true);
-            reply->abort();
-        }
-    });
-    connect(reply, &QNetworkReply::finished, this, [this, reply, allowMissing, deliver] {
-        const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (allowMissing && status == 404) {
-            reply->deleteLater();
-            deliver({}, {}, 0);
-            return;
-        }
-        auto error = reply->error() == QNetworkReply::NoError ? QString{} : reply->errorString();
-        if (reply->property("responseTooLarge").toBool())
-            error = "The provider response exceeded the 32 MiB safety limit.";
-        if (error.isEmpty() && status != 200)
-            error = "Provider request failed (HTTP " + QString::number(status) + ").";
-        if (status == 429)
-            error = "Rate limit reached. Wait a moment before searching again.";
-        if (!error.isEmpty()) {
-            reply->deleteLater();
-            deliver({}, error, 0);
-            return;
-        }
-        const auto bytes = reply->readAll();
-        // A consumer may destroy this client (and its replies) during delivery.
-        reply->deleteLater();
-        auto parse = [bytes, error]() mutable {
-            QJsonParseError parseError;
-            const auto document = QJsonDocument::fromJson(bytes, &parseError);
-            if (error.isEmpty() && parseError.error != QJsonParseError::NoError)
-                error = "The provider returned invalid JSON.";
-            return std::pair{document, error};
-        };
-        if (bytes.size() >= 64 * 1024) {
-            auto *watcher = new QFutureWatcher<std::pair<QJsonDocument, QString>>(this);
-            connect(watcher, &QFutureWatcherBase::finished, this, [watcher, deliver, size = bytes.size()] {
-                const auto result = watcher->result();
-                watcher->deleteLater();
-                deliver(result.first, result.second, int(size));
-            });
-            watcher->setFuture(QtConcurrent::run(std::move(parse)));
-        } else {
-            const auto result = parse();
-            deliver(result.first, result.second, int(bytes.size()));
-        }
+    readJsonResponse(reply, this, {.allowMissing = allowMissing}, [deliver](JsonResponse response) {
+        const auto error = response.failure == JsonResponseFailure::TooLarge
+                               ? QString("The provider response exceeded the 32 MiB safety limit.")
+                               : jsonResponseError(response);
+        deliver(std::move(response.document), error, int(response.bytes));
     });
 }
 void CatalogueClient::linkCurseforgeFiles(CataloguePage page, QMap<QString, QStringList> hashes,

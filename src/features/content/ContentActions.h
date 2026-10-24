@@ -6,6 +6,7 @@
 #include "ContentOperationReservations.h"
 #include "ContentOperationState.h"
 #include "ContentPorts.h"
+#include "ContentViewIndex.h"
 #include "SourceLockIndex.h"
 #include "features/preferences/ContentVisibility.h"
 #include "features/preferences/PackReleasePolicy.h"
@@ -134,8 +135,10 @@ class ContentActions final : public QObject {
     }
     void setVisibility(std::shared_ptr<IContentVisibility> visibility) {
         m_visibility = std::move(visibility);
+        ++m_visibilityRevision;
     }
     void visibilityChanged() {
+        ++m_visibilityRevision;
         emit changed();
     }
     Q_INVOKABLE void hide(const QString &path, bool hidden = true);
@@ -192,6 +195,7 @@ class ContentActions final : public QObject {
     void seedState(const QString &, ContentFileState);
     void saveLockPreferences(const QString &, const QVariantList &, bool);
     void changeLocks(const QVariantMap &, const QVariantList &, bool, bool sourceOnly = false);
+    void prepareView() const;
     QVariantList filteredRows() const;
     void syncVisibleRows();
     bool hasPending(const QString &) const;
@@ -224,6 +228,8 @@ class ContentActions final : public QObject {
     QList<ContentOperation> m_pendingOperations;
     ContentOperationReservations m_reservations;
     QVariantList m_visibleRows;
+    mutable ContentViewIndex m_view;
+    quint64 m_visibilityRevision = 0;
     quint64 m_operationId = 0;
     bool m_anyChanged = false, m_checkUpdatesPending = false;
     QVariantMap m_pack, m_filters, m_versionTarget;

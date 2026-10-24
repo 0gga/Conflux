@@ -170,3 +170,8 @@ Initial content installation attempts declared required dependencies recursively
 
 
 Only required dependencies install automatically. Offer optional dependencies in a focused in-app overlay with individually selectable Install actions similar to Discover. Users can disable this optional-dependency prompt in Settings. Optional lookup or installation failures must leave the selected content and successful required dependencies installed. The owner explicitly clarified this on24 October2026.
+
+
+## Persistent installed content index
+
+Filtering already-loaded instance content must remain immediate and must not trigger filesystem or provider resolution. Resolve verified project/content pages, authors and tags once on first load or installation, whichever occurs first, then cache successful results across application sessions. Use a local database index keyed by actual file hashes and verified provider identities, not display names. Changed content refreshes affected metadata; explicit Refresh checks whether installed content has updates. Failed lookups stay retryable. On24 October2026 the owner also requested completion of outstanding miscellaneous work, including the deferred bulk-target index and optional dependency prompt.

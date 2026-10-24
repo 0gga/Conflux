@@ -87,6 +87,7 @@ target_sources(conflux_desktop PRIVATE
     src/features/content/ContentOperationQueue.h src/features/content/ContentOperationQueue.cpp
     src/features/content/ContentOperationExecutor.h src/features/content/ContentOperationExecutor.cpp
     src/features/content/ContentListModel.h src/features/content/ContentListModel.cpp
+    src/features/content/ContentViewIndex.h src/features/content/ContentViewIndex.cpp
     src/features/content/ContentOperationState.h src/features/content/ContentOperationState.cpp
     src/features/content/ContentOperationReservations.h src/features/content/ContentOperationReservations.cpp
     src/features/content/ContentLockIntent.h src/features/content/ContentLockIntent.cpp
@@ -178,6 +179,9 @@ if(BUILD_TESTING)
     target_compile_definitions(release-policy-tests PRIVATE CONFLUX_QML_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")
     add_test(NAME release-policy COMMAND release-policy-tests)
     set_tests_properties(release-policy PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    qt_add_executable(content-filtering-tests tests/ContentFilteringTests.cpp)
+    target_link_libraries(content-filtering-tests PRIVATE conflux_desktop Qt6::Test)
+    add_test(NAME content-filtering COMMAND content-filtering-tests -o "${CMAKE_CURRENT_BINARY_DIR}/content-filtering-results.txt,txt")
     qt_add_executable(content-dependency-tests tests/ContentDependencyTests.cpp)
     target_link_libraries(content-dependency-tests PRIVATE conflux_desktop miniz Qt6::Test)
     add_test(NAME content-dependencies COMMAND content-dependency-tests -o "${CMAKE_CURRENT_BINARY_DIR}/content-dependency-results.txt,txt")

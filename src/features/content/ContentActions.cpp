@@ -276,14 +276,8 @@ QVariantMap ContentActions::find(const QString &path) const {
     return {};
 }
 QStringList ContentActions::authors() const {
-    QStringList names;
-    for (const auto &value : m_rows) {
-        const auto name = value.toMap().value("author").toString();
-        if (!name.isEmpty() && !names.contains(name))
-            names << name;
-    }
-    names.sort(Qt::CaseInsensitive);
-    return names;
+    prepareView();
+    return m_view.authors();
 }
 QVariantList ContentActions::versionGroups() const {
     QVector<Release> releases;
@@ -291,53 +285,15 @@ QVariantList ContentActions::versionGroups() const {
         releases << releaseFromVariant(value.toMap());
     return groupReleaseVariants(releases);
 }
-QVariantList ContentActions::filteredRows() const {
-    QVariantList result;
-    const TextQuery search(m_query);
-    for (const auto &value : m_rows) {
-        auto row = value.toMap();
-        row["hidden"] = m_visibility && m_visibility->hidden(row, m_pack.value("path").toString());
-        if (row.value("hidden").toBool() != m_filters.value("hidden").toBool())
-            continue;
-        if (m_category != "all" && row.value("category") != m_category)
-            continue;
-        if (!search.matches(row.value("title").toString() + ' ' + row.value("fileName").toString() + ' ' +
-                            row.value("author").toString() + ' ' + row.value("version").toString()))
-            continue;
-        if (!m_filters.value("author").toString().isEmpty() &&
-            row.value("author") != m_filters.value("author"))
-            continue;
-        if (!m_filters.value("environment").toString().isEmpty() &&
-            row.value("environment", "unknown") != m_filters.value("environment"))
-            continue;
-        const auto state = m_filters.value("state").toString();
-        if ((state == "enabled" && !row.value("enabled").toBool()) ||
-            (state == "disabled" && row.value("enabled").toBool()))
-            continue;
-        if (m_filters.value("updates").toBool() && !row.value("updateAvailable").toBool())
-            continue;
-        if (m_filters.value("locked").toBool() && !row.value("locked").toBool())
-            continue;
-        if (m_filters.value("recent").toBool() &&
-            row.value("updatedAt").toLongLong() <
-                QDateTime::currentMSecsSinceEpoch() - 7LL * 24 * 60 * 60 * 1000)
-            continue;
-        if (m_filters.value("openSource").toBool() && !row.value("openSource").toBool())
-            continue;
-        if (m_filters.value("external").toBool() && !row.value("external").toBool())
-            continue;
-        result << row;
-    }
-    std::stable_sort(result.begin(), result.end(), [this](const QVariant &a, const QVariant &b) {
-        const auto left = a.toMap(), right = b.toMap();
-        if (m_sort == "updates" && left.value("updateAvailable") != right.value("updateAvailable"))
-            return left.value("updateAvailable").toBool();
-        const auto key = m_sort == "author" ? "author" : m_sort == "filename" ? "fileName" : "title";
-        const int order =
-            QString::compare(left.value(key).toString(), right.value(key).toString(), Qt::CaseInsensitive);
-        return m_sort == "name-desc" ? order > 0 : order < 0;
+void ContentActions::prepareView() const {
+    const auto path = m_pack.value("path").toString();
+    m_view.remember(m_rows, path, m_visibilityRevision, [this, path](const QVariantMap &row) {
+        return m_visibility && m_visibility->hidden(row, path);
     });
-    return result;
+}
+QVariantList ContentActions::filteredRows() const {
+    prepareView();
+    return m_view.filter(m_query, m_category, m_sort, m_filters);
 }
 void ContentActions::setQuery(const QString &value) {
     if (value != m_query) {
@@ -363,6 +319,7 @@ void ContentActions::hide(const QString &path, bool hidden) {
     const auto row = find(path);
     if (m_visibility && !row.isEmpty())
         m_visibility->setHidden(row, hidden, m_pack.value("path").toString());
+    ++m_visibilityRevision;
     if (hidden)
         m_selected.removeAll(path);
     emit changed();

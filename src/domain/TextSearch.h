@@ -50,6 +50,28 @@ class TextQuery final {
         }
         return !word.isEmpty() && match(normalizedSearch(word)) ? 3 : -1;
     }
+    bool matchesPrepared(const QString &normalized, const QStringList &words) const {
+        if (m_needle.isEmpty() || normalized.contains(m_needle))
+            return true;
+        if (m_needle.size() < 4)
+            return false;
+        const auto match = [this](const QString &candidate) {
+            if (candidate.size() < m_needle.size() ||
+                candidate.size() > m_needle.size() + qMax(2, m_needle.size() / 4))
+                return false;
+            int i = 0;
+            for (const auto ch : candidate)
+                if (ch == m_needle[i] && ++i == m_needle.size())
+                    return true;
+            return false;
+        };
+        if (match(normalized))
+            return true;
+        for (const auto &word : words)
+            if (match(word))
+                return true;
+        return false;
+    }
     bool matches(const QString &text) const {
         return rank(text) >= 0;
     }

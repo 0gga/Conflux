@@ -106,6 +106,8 @@ These are ideas, not delivered features or additional owner requirements.
 
 | Priority | Improvement | Acceptance criteria | State |
 | --- | --- | --- | --- |
+| P1 | Persistent installed-content metadata index | Resolve exact project/author/tag metadata once on first load or installation, persist across sessions in SQLite, identify changed files by hash, publish metadata before update checks and keep failed lookups retryable. Include CurseForge-only known identities. | In progress; owner requested24 Oct2026 |
+| P1 | Loaded instance filter budgets | Reuse prepared search/filter/sort/author state; remove repeated model key scans, preserve persistent/duplicate identities and verify real rendered filtering without new catalogue reads. | Delivered; 33 suites and packaged smoke pass |
 | P1 | Post-commit inventory recovery | Keep a verified committed install successful if a later inventory read fails; show separate verification diagnostics, preserve known state and block unsafe follow-up writes until a fresh read succeeds. | Backlogged |
 | P1 | Optional dependency overlay | After initial installation, offer declared optional dependencies in a focused overlay with per-item Install actions and a Settings toggle. Required dependencies remain automatic; optional failures never undo installed content. | Backlogged; owner requested24 Oct2026 |
 | P1 | Independent initial dependency attempts | Commit selected content first; attempt each declared required dependency independently, retain disabled/locked files and report dependency failures separately. Verify both providers, cancellation, hash/write failures, cycles and bounded responsiveness. | Delivered; 32 suites and packaged smoke pass |

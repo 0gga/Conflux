@@ -1008,6 +1008,55 @@ ContentListView {
         QCOMPARE(screenshot.pixelColor(qRound(card->width()) - 2, 20),
                  card->property("color").value<QColor>());
     }
+    void loadedInstanceFiltersRenderPromptlyWithoutRestartingCatalogueReads() {
+        QTemporaryDir temp;
+        auto catalogue = std::make_shared<ContentCatalogueFixture>();
+        ContentActions model(std::make_shared<ContentFileFixture>(), catalogue,
+                             std::make_shared<ContentInstallerFixture>(),
+                             std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        QVariantList rows;
+        for (int i = 0; i < 310; ++i)
+            rows << QVariantMap{{"title", QString("Example %1").arg(i)},
+                                {"relativePath", QString("mods/example%1.jar").arg(i)},
+                                {"fileName", "example.jar"},
+                                {"category", i % 2 ? "mods" : "resourcepacks"},
+                                {"sha1", "hash" + QString::number(i)},
+                                {"enabled", true},
+                                {"version", "1.21.1"},
+                                {"author", QString("Author %1").arg(i % 73)}};
+        model.setContext({{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "fabric"}}, rows);
+        QTRY_VERIFY(!model.busy());
+        QQmlEngine engine;
+        QQuickWindow window;
+        window.resize(1100, 650);
+        QSignalSpy warnings(&engine, &QQmlEngine::warnings);
+        QQmlComponent component(
+            &engine, QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/pack/ContentPanel.qml"));
+        std::unique_ptr<QQuickItem> panel(qobject_cast<QQuickItem *>(
+            component.createWithInitialProperties({{"controller", QVariant::fromValue(&model)}})));
+        QVERIFY2(panel, qPrintable(component.errorString()));
+        panel->setParentItem(window.contentItem());
+        panel->setSize(window.size());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        const auto reads = catalogue->refreshCount;
+        QElapsedTimer elapsed;
+        elapsed.start();
+        for (int i = 0; i < 12; ++i) {
+            model.setCategory(i % 2 ? "all" : "mods");
+            model.setQuery(i % 2 ? "1211" : "Exmple");
+            QCoreApplication::processEvents();
+        }
+        const auto milliseconds = elapsed.elapsed();
+        QSignalSpy rendered(&window, &QQuickWindow::frameSwapped);
+        window.update();
+        QVERIFY(rendered.wait(1000));
+        qInfo() << "310 installed rows / 24 rendered filter transitions ms" << milliseconds;
+        QCOMPARE(catalogue->refreshCount, reads);
+        QCOMPARE(warnings.size(), 0);
+        QVERIFY(findItem(panel.get(), "contentRow"));
+        QVERIFY(milliseconds < 450);
+    }
     void tableHoverFillsRowsAndClipsOnceAtTheOuterFrame() {
         QTemporaryDir temp;
         ContentActions model(std::make_shared<ContentFileFixture>(),

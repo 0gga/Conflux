@@ -169,7 +169,7 @@ class ContentActions final : public QObject {
     Q_INVOKABLE void openVersions(const QString &);
     Q_INVOKABLE void installVersion(int index);
     Q_INVOKABLE bool releaseAllowed(const QVariantMap &) const;
-    Q_INVOKABLE void installRelease(const QVariantMap &release, const QVariantMap &project);
+    Q_INVOKABLE bool installRelease(const QVariantMap &release, const QVariantMap &project);
     Q_INVOKABLE void importFiles(const QList<QUrl> &, const QString &);
     Q_INVOKABLE void copyLink(const QString &);
     Q_INVOKABLE void cancel();
@@ -186,6 +186,7 @@ class ContentActions final : public QObject {
     void operationFailed(QString message);
     void contentChanged();
     void copyRequested(QString text);
+    void installationFinished(QString packPath, QVariantList releases, QVariantList files, QString error);
 
   private:
     void queueUpdates(const QVariantList &);
@@ -207,7 +208,7 @@ class ContentActions final : public QObject {
                            ContentOperationQueue::Completion);
     void publishProjection();
     void syncLocks(const QString &);
-    void install(const QVector<ContentInstallRequest> &, const QVariantMap &project = {});
+    bool install(const QVector<ContentInstallRequest> &, const QVariantMap &project = {});
     QVariantList withPreferences(const QVariantMap &, QVariantList) const;
     std::shared_ptr<IContentVisibility> m_visibility;
     std::shared_ptr<const IContentFileStore> m_files;

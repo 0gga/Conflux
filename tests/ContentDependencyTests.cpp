@@ -116,6 +116,85 @@ QByteArray read(const QString &path) {
 class ContentDependencyTests final : public QObject {
     Q_OBJECT
   private slots:
+    void optionalDeclarationsAreOfferedAfterAutomaticRequiredWork_data() {
+        QTest::addColumn<QString>("provider");
+        QTest::newRow("modrinth") << QString("modrinth");
+        QTest::newRow("curseforge") << QString("curseforge");
+    }
+    void optionalDeclarationsAreOfferedAfterAutomaticRequiredWork() {
+        QFETCH(QString, provider);
+        auto files = std::make_shared<Files>();
+        auto leaf = std::make_shared<Leaf>(files);
+        auto source = std::make_shared<Source>();
+        auto make = [&](const QString &id) {
+            auto value = selected(id);
+            value.release.provider = provider;
+            value.sourceIds = {{provider, id}};
+            return value;
+        };
+        auto root = make("11"), dependency = make("22");
+        const auto optional = [&](const QString &id) {
+            return provider == "modrinth" ? QJsonObject{{"dependency_type", "optional"}, {"project_id", id}}
+                                          : QJsonObject{{"relationType", 2}, {"modId", id.toInt()}};
+        };
+        root.release.dependencyRefs = {
+            provider == "modrinth" ? QJsonObject{{"dependency_type", "required"}, {"project_id", "22"}}
+                                   : QJsonObject{{"relationType", 3}, {"modId", 22}},
+            optional("33"), optional("33"),
+            provider == "modrinth" ? QJsonObject{{"dependency_type", "embedded"}, {"project_id", "55"}}
+                                   : QJsonObject{{"relationType", 1}, {"modId", 55}}};
+        dependency.release.dependencyRefs = {optional("44")};
+        source->values["22"] = dependency;
+        ContentDependencyInstaller installer(leaf, source, files);
+        QSignalSpy offered(&installer, &ContentDependencyInstaller::optionalDependencies);
+        bool done = false;
+        bool offeredAfterCompletion = false;
+        connect(&installer, &ContentDependencyInstaller::optionalDependencies, &installer,
+                [&] { offeredAfterCompletion = done; });
+        installer.install(pack(), {}, {root}, [&](auto result) {
+            QVERIFY(result.ok);
+            done = true;
+        });
+        QTRY_COMPARE(offered.size(), 1);
+        QVERIFY(offeredAfterCompletion);
+        QCOMPARE(leaf->calls, QStringList({"11", "22"}));
+        QCOMPARE(source->calls, QStringList{"22"});
+        QCOMPARE(offered.first().at(0).toMap(), pack());
+        QCOMPARE(offered.first().at(1).toList().size(), 2);
+        const auto refs = offered.first().at(2).toList();
+        QCOMPARE(refs.size(), 2);
+        QCOMPARE(refs.first().toMap().value("projectId").toString(), "33");
+        QCOMPARE(refs.last().toMap().value("projectId").toString(), "44");
+        QCOMPARE(refs.first().toMap().value("provider").toString(), provider);
+    }
+    void failedRootsAndShallowUpdatesDoNotOfferOptionalContent() {
+        auto files = std::make_shared<Files>();
+        auto leaf = std::make_shared<Leaf>(files);
+        auto source = std::make_shared<Source>();
+        ContentDependencyInstaller installer(leaf, source, files);
+        QSignalSpy offered(&installer, &ContentDependencyInstaller::optionalDependencies);
+        auto root = selected("root");
+        root.release.dependencyRefs = {
+            QJsonObject{{"dependency_type", "optional"}, {"project_id", "optional"}}};
+        leaf->failures["root"] = "Download unavailable";
+        bool done = false;
+        installer.install(pack(), {}, {root}, [&](auto result) {
+            QVERIFY(!result.ok);
+            done = true;
+        });
+        QTRY_VERIFY(done);
+        QCOMPARE(offered.size(), 0);
+        leaf->failures.clear();
+        root.resolveDependencies = false;
+        done = false;
+        installer.install(pack(), {}, {root}, [&](auto result) {
+            QVERIFY(result.ok);
+            done = true;
+        });
+        QTRY_VERIFY(done);
+        QCOMPARE(offered.size(), 0);
+        QVERIFY(source->calls.isEmpty());
+    }
     void independentFailuresKeepRootAndContinueOtherDependencies_data() {
         QTest::addColumn<QString>("failure");
         for (const auto &failure : {"lookup", "write", "throw", "identity", "reload", "none"})

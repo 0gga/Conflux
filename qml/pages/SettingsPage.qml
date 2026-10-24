@@ -10,6 +10,7 @@ Item {
     required property var warnings
     required property var catalogue
     required property var browsePreferences
+    property var installationPreferences: null
     property string tab: "appearance"
     signal tabRequested(string key)
     readonly property bool compact: width < 650
@@ -17,10 +18,13 @@ Item {
         anchors.fill: parent; anchors.margins: 24; spacing: 16
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 24
-            ColumnLayout {
-                Layout.preferredWidth: root.compact ? 48 : 160; Layout.minimumWidth: Layout.preferredWidth; Layout.maximumWidth: Layout.preferredWidth; Layout.fillWidth: false; Layout.fillHeight: true; spacing: 6
+            BoundedScrollView {
+                id: categoryScroll
+                Layout.preferredWidth: root.compact ? 48 : 160; Layout.minimumWidth: Layout.preferredWidth; Layout.maximumWidth: Layout.preferredWidth; Layout.fillWidth: false; Layout.fillHeight: true; clip: true
+                ColumnLayout {
+                width: categoryScroll.availableWidth; spacing: 6
                 Repeater {
-                    model: [{category:"GENERAL",key:"appearance",label:"Appearance",icon:"settings"},{category:"MODPACKS",key:"warnings",label:"Warnings",icon:"warning"},{category:"",key:"browse",label:"Browsing",icon:"compass"},{category:"SERVICES",key:"connections",label:"Connections",icon:"compass"}]
+                    model: [{category:"GENERAL",key:"appearance",label:"Appearance",icon:"settings"},{category:"MODPACKS",key:"warnings",label:"Warnings",icon:"warning"},{category:"",key:"browse",label:"Browsing",icon:"compass"},{category:"",key:"installation",label:"Installation",icon:"download"},{category:"SERVICES",key:"connections",label:"Connections",icon:"compass"}]
                     delegate: ColumnLayout {
                         required property var modelData
                         Layout.fillWidth: true; spacing: 8
@@ -28,7 +32,7 @@ Item {
                         NavigationButton { Layout.fillWidth: true; text: root.compact ? "" : parent.modelData.label; hint: parent.modelData.label; iconName: parent.modelData.icon; selected: root.tab === parent.modelData.key; onClicked: root.tabRequested(parent.modelData.key) }
                     }
                 }
-                Item { Layout.fillHeight: true }
+                }
             }
             StackLayout {
                 Layout.minimumWidth: 0; Layout.fillWidth: true; Layout.fillHeight: true
@@ -39,6 +43,7 @@ Item {
                     ColumnLayout {
                         width: scroll.availableWidth; spacing: 16
                         BrowseSettings { visible: root.tab === "browse"; Layout.fillWidth: true; preferences: root.browsePreferences; catalogue: root.catalogue }
+                        Loader { active: root.installationPreferences !== null && root.tab === "installation"; visible: active; Layout.fillWidth: true; sourceComponent: InstallationSettings { preferences: root.installationPreferences } }
                         WarningSettings { visible: root.tab === "warnings"; Layout.fillWidth: true; preferences: root.warnings }
                         ConnectionSettings { visible: root.tab === "connections"; Layout.fillWidth: true; app: root.app }
                     }

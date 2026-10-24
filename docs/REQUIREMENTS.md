@@ -171,6 +171,8 @@ Initial content installation attempts declared required dependencies recursively
 
 Only required dependencies install automatically. Offer optional dependencies in a focused in-app overlay with individually selectable Install actions similar to Discover. Users can disable this optional-dependency prompt in Settings. Optional lookup or installation failures must leave the selected content and successful required dependencies installed. The owner explicitly clarified this on24 October2026.
 
+The optional prompt defaults on and remains separate from automatic required installation. It retains the original destination instance, uses current per-instance release stages, recognizes already-present files across platforms, and never downloads optional content merely by opening the prompt. Dismissing it cancels reads only; accepted per-item file operations remain owned by the normal queue.
+
 
 ## Persistent installed content index
 

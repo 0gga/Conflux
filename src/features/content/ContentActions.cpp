@@ -723,7 +723,14 @@ void ContentActions::completeOperation(ContentOperation operation, ContentWriteR
                 }
             });
     }
+    QVariantList completedReleases;
+    if (operation.kind == ContentOperation::Install)
+        for (const auto &request : operation.requests)
+            completedReleases << request.release.toVariant();
+    const QPointer<ContentActions> guard(this);
     done();
+    if (guard && !completedReleases.isEmpty())
+        emit guard->installationFinished(operation.packPath, completedReleases, current.rows, result.error);
 }
 void ContentActions::setEnabled(const QString &path, bool value) {
     const auto row = find(path);
@@ -782,22 +789,22 @@ void ContentActions::importFiles(const QList<QUrl> &urls, const QString &categor
     }
     enqueue(operation);
 }
-void ContentActions::install(const QVector<ContentInstallRequest> &requests, const QVariantMap &project) {
+bool ContentActions::install(const QVector<ContentInstallRequest> &requests, const QVariantMap &project) {
     if (requests.isEmpty())
-        return;
+        return false;
     for (const auto &request : requests) {
         const auto path = project.value("targetPack", m_pack).toMap().value("path").toString();
         if (!releaseStageAllowed(request.release.channel,
                                  m_releasePolicy ? m_releasePolicy->channels(path) : QStringList{})) {
             reject("This version is excluded by the modpack's release stages.", request.title);
-            return;
+            return false;
         }
         auto candidate = request.release.toVariant();
         candidate["sourceIds"] = request.sourceIds.toVariantMap();
         candidate["targetPack"] = project.value("targetPack", m_pack);
         if (projectLocked(candidate)) {
             reject("This content is locked. Unlock it before installing another version.", request.title);
-            return;
+            return false;
         }
     }
     ContentOperation operation;
@@ -841,8 +848,8 @@ void ContentActions::install(const QVector<ContentInstallRequest> &requests, con
         operation.predictions << contentInstallPrediction(request, target, row);
     }
     if (operation.predictions.size() != requests.size())
-        return;
-    enqueue(operation);
+        return false;
+    return enqueue(operation);
 }
 QVariantList ContentActions::selection() const {
     QVariantList rows;

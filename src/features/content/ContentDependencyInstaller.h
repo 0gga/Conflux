@@ -28,6 +28,7 @@ class ContentDependencyInstaller final : public QObject, public IContentInstalle
     bool cancellable() const override;
   signals:
     void progress(QString);
+    void optionalDependencies(QVariantMap pack, QVariantList files, QVariantList references);
 
   private:
     struct PendingDependency {
@@ -39,6 +40,8 @@ class ContentDependencyInstaller final : public QObject, public IContentInstalle
     std::shared_ptr<const IContentFileStore> m_files;
     QVariantMap m_pack;
     QVariantList m_rows, m_predictions;
+    QVariantList m_optional;
+    QSet<QString> m_optionalSeen;
     QQueue<ContentInstallRequest> m_roots;
     QQueue<PendingDependency> m_dependencies;
     QSet<QString> m_seen;

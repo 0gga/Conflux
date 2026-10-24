@@ -68,6 +68,9 @@ qt_add_library(conflux_desktop STATIC
     src/features/config/ConfigEditor.h src/features/config/ConfigEditor.cpp)
 target_sources(conflux_desktop PRIVATE
     src/features/content/ContentDependencyInstaller.h src/features/content/ContentDependencyInstaller.cpp
+    src/features/content/OptionalDependencies.h src/features/content/OptionalDependencies.cpp
+    src/features/preferences/InstallationPreferences.h src/features/preferences/InstallationPreferences.cpp
+    src/platform/OptionalDependencySource.h src/platform/OptionalDependencySource.cpp
     src/platform/ContentDependencySource.h src/platform/ContentDependencySource.cpp
     src/features/content/ContentPorts.h
     src/features/content/ContentIndex.h
@@ -159,6 +162,7 @@ qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     qml/components/ContentListView.qml qml/components/ContentGridView.qml qml/components/ContentScrollBar.qml qml/components/ScrollViewportCorners.qml qml/components/ContentStatistic.qml
     qml/showcase/DescriptionView.qml qml/showcase/GalleryView.qml qml/showcase/GalleryViewer.qml
     qml/components/FocusPopup.qml qml/components/FocusDialog.qml
+    qml/components/OptionalDependenciesDialog.qml qml/settings/InstallationSettings.qml
     qml/components/OperationHud.qml qml/components/RoundedToolTip.qml qml/components/PopupButton.qml qml/components/ChoiceFilter.qml qml/components/FilterChip.qml
     qml/explore/ActiveBrowseFilters.qml
     qml/components/ContentIcon.qml
@@ -199,6 +203,14 @@ if(BUILD_TESTING)
     qt_add_executable(content-dependency-tests tests/ContentDependencyTests.cpp)
     target_link_libraries(content-dependency-tests PRIVATE conflux_desktop miniz Qt6::Test)
     add_test(NAME content-dependencies COMMAND content-dependency-tests -o "${CMAKE_CURRENT_BINARY_DIR}/content-dependency-results.txt,txt")
+    qt_add_executable(optional-dependency-tests tests/OptionalDependencyTests.cpp)
+    target_link_libraries(optional-dependency-tests PRIVATE conflux_desktop miniz Qt6::Test)
+    add_test(NAME optional-dependencies COMMAND optional-dependency-tests -o "${CMAKE_CURRENT_BINARY_DIR}/optional-dependency-results.txt,txt")
+    qt_add_executable(optional-dependency-interaction-tests tests/OptionalDependencyInteractionTests.cpp)
+    target_link_libraries(optional-dependency-interaction-tests PRIVATE conflux_desktop conflux_styleplugin Qt6::Quick Qt6::QuickControls2 Qt6::Test)
+    target_compile_definitions(optional-dependency-interaction-tests PRIVATE CONFLUX_QML_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml" CONFLUX_TEST_ARTIFACT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts")
+    add_test(NAME optional-dependency-interaction COMMAND optional-dependency-interaction-tests -o "${CMAKE_CURRENT_BINARY_DIR}/optional-dependency-interaction-results.txt,txt")
+    set_tests_properties(optional-dependency-interaction PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     qt_add_executable(catalogue-dependency-tests tests/CatalogueLoadingTests.cpp)
     target_link_libraries(catalogue-dependency-tests PRIVATE pack_foundation miniz Qt6::Test)
     add_test(NAME catalogue-dependencies COMMAND catalogue-dependency-tests -o "${CMAKE_CURRENT_BINARY_DIR}/catalogue-dependency-results.txt,txt")

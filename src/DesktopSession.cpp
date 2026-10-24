@@ -19,6 +19,7 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
     : QObject(parent), m_browseStore(std::make_shared<BrowseSettingsStore>(settingsFile)),
       m_visibility(std::make_shared<ContentVisibility>(m_browseStore)),
       m_releasePolicy(std::make_shared<PackReleasePolicy>(m_browseStore)),
+      m_installationPreferences(std::make_shared<InstallationPreferences>(m_browseStore)),
       m_reviewedIdentities(ReviewedProjectIdentities::load()),
       m_contentIndex(std::make_shared<SqliteContentIndex>(
           (settingsFile.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
@@ -33,6 +34,7 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
       m_dependencySource(std::make_shared<ContentDependencySource>()),
       m_dependencyInstaller(std::make_shared<ContentDependencyInstaller>(m_contentInstaller,
                                                                          m_dependencySource, m_contentFiles)),
+      m_optionalSource(std::make_shared<OptionalDependencySource>()),
       m_running(std::make_shared<InstanceProcessSource>(), this), m_navigation(this),
       m_input(m_navigation, this),
       m_warnings(std::make_shared<SettingsWarningPreferenceStore>(settingsFile), this),
@@ -54,6 +56,7 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
                                                   m_reviewedIdentities),
                this),
       m_browsePreferences(m_browseStore, this),
+      m_optionalDependencies(m_optionalSource, m_installationPreferences, m_releasePolicy, this),
       m_catalogue(std::make_shared<TolerantCatalogueSearch>(std::make_shared<CatalogueClient>()),
                   m_visibility, m_reviewedIdentities,
                   std::make_shared<BrowseFilterPreferences>(m_browseStore), this),
@@ -62,6 +65,13 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
     m_browse.setReleasePolicy(m_releasePolicy);
     m_content.setVisibility(m_visibility);
     m_content.setLockRegistry(m_contentLocks);
+    m_optionalDependencies.setInstaller([this](QVariantMap release, QVariantMap project) {
+        return m_content.installRelease(release, project);
+    });
+    connect(m_dependencyInstaller.get(), &ContentDependencyInstaller::optionalDependencies,
+            &m_optionalDependencies, &OptionalDependencies::offer);
+    connect(&m_content, &ContentActions::installationFinished, &m_optionalDependencies,
+            &OptionalDependencies::installationFinished);
     m_content.setLauncherLocks(std::make_shared<LauncherContentLocks>(backupRoot));
     connect(m_visibility.get(), &ContentVisibility::changed, &m_content, &ContentActions::visibilityChanged);
     connect(m_visibility.get(), &ContentVisibility::changed, &m_catalogue, &BrowseCatalogue::refresh);

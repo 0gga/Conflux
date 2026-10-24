@@ -36,6 +36,8 @@ void ContentDependencyInstaller::install(const QVariantMap &pack, const QVariant
     m_pack = pack;
     m_rows = rows;
     m_predictions.clear();
+    m_optional.clear();
+    m_optionalSeen.clear();
     m_cancelled = m_changed = false;
     m_errors.clear();
     m_warnings.clear();
@@ -140,6 +142,22 @@ void ContentDependencyInstaller::expand(const ContentInstallRequest &request) {
     };
     for (const auto &value : release.dependencyRefs) {
         const auto ref = value.toObject();
+        if ((release.provider == "modrinth" && ref.value("dependency_type") == "optional") ||
+            (release.provider == "curseforge" && ref.value("relationType").toInt() == 2)) {
+            const auto project = release.provider == "modrinth" ? ref.value("project_id").toString()
+                                 : ref.value("modId").toInteger() > 0
+                                     ? QString::number(ref.value("modId").toInteger())
+                                     : QString{};
+            const auto version =
+                release.provider == "modrinth" ? ref.value("version_id").toString() : QString{};
+            const auto key = release.provider + ':' + project + ':' + version;
+            if ((!project.isEmpty() || !version.isEmpty()) && !m_optionalSeen.contains(key) &&
+                m_optional.size() < 256) {
+                m_optionalSeen.insert(key);
+                m_optional << QVariantMap{
+                    {"provider", release.provider}, {"projectId", project}, {"versionId", version}};
+            }
+        }
         if (release.provider == "modrinth" && ref.value("dependency_type") == "required")
             add({"modrinth", ref.value("project_id").toString(), ref.value("version_id").toString()});
         else if (release.provider == "curseforge" && ref.value("relationType").toInt() == 3) {
@@ -341,6 +359,9 @@ void ContentDependencyInstaller::finish() {
     result.changed = m_changed;
     result.warnings = m_warnings;
     result.installedPredictions = std::move(m_predictions);
+    const auto optional = !m_cancelled && m_changed ? m_optional : QVariantList{};
+    const auto pack = m_pack;
+    const auto rows = m_rows;
     auto callback = std::move(m_callback);
     m_callback = {};
     m_pack.clear();
@@ -349,7 +370,12 @@ void ContentDependencyInstaller::finish() {
     m_dependencies.clear();
     m_seen.clear();
     m_selected.clear();
+    m_optional.clear();
+    m_optionalSeen.clear();
     ++m_generation;
+    const QPointer<ContentDependencyInstaller> guard(this);
     callback(std::move(result));
+    if (guard && !optional.isEmpty())
+        emit optionalDependencies(pack, rows, optional);
 }
 } // namespace studio

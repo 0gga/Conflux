@@ -593,6 +593,36 @@ class ContentActionsTests : public QObject {
         installer->completion({false, "Fixture cancelled"});
         QTRY_VERIFY(!content.busy());
     }
+    void acceptedInstallReportsItsOriginalInstanceAndExactResult_data() {
+        QTest::addColumn<bool>("succeeds");
+        QTest::newRow("success") << true;
+        QTest::newRow("failure") << false;
+    }
+    void acceptedInstallReportsItsOriginalInstanceAndExactResult() {
+        QFETCH(bool, succeeds);
+        QTemporaryDir temp;
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        ContentActions content(std::make_shared<ContentFileFixture>(),
+                               std::make_shared<ContentCatalogueFixture>(), installer,
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        const QVariantMap first{{"path", temp.path() + "/first"}}, second{{"path", temp.path() + "/second"}};
+        auto root = row("Root", "Author");
+        content.setContext(first, {root});
+        QTRY_VERIFY(!content.busy());
+        QSignalSpy completed(&content, &ContentActions::installationFinished);
+        const auto release = root.value("updateRelease").toMap();
+        QVERIFY(content.installRelease(
+            release, {{"title", "Root"}, {"type", "mod"}, {"sourceIds", root.value("sourceIds")}}));
+        QVERIFY(bool(installer->completion));
+        content.setContext(second, {row("Other", "Other author")});
+        installer->completion({succeeds, succeeds ? QString{} : QString("Fixture download failed")});
+        QTRY_COMPARE(completed.size(), 1);
+        QCOMPARE(completed.first().at(0).toString(), first.value("path").toString());
+        QCOMPARE(completed.first().at(1).toList().first().toMap().value("id"), release.value("id"));
+        QCOMPARE(completed.first().at(3).toString().isEmpty(), succeeds);
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(content.inventory().first().toMap().value("title").toString(), "Other");
+    }
     void dependencyWarningsDoNotFailTheSelectedContentTask() {
         QTemporaryDir temp;
         auto installer = std::make_shared<ContentInstallerFixture>();

@@ -175,7 +175,7 @@ ApplicationWindow {
                     onShowcaseRequested: function(path, tab) { window.session.navigation.go({page:"showcase",packPath:window.app.activePack.path,modPath:path,showcaseTab:tab || "description"}) }
                     onAuthorRequested: function(author) { window.session.navigation.go({page:"discover",packPath:window.app.activePack.path,author:author}) }
                 }
-                SettingsPage { app: window.app; catalogue: window.session.catalogue; warnings: window.session.warnings; browsePreferences: window.session.browsePreferences; tab: window.session.navigation.route.settingsTab || "appearance"; onTabRequested: function(key) { window.session.navigation.go({page:"settings",settingsTab:key}) } }
+                SettingsPage { app: window.app; catalogue: window.session.catalogue; warnings: window.session.warnings; browsePreferences: window.session.browsePreferences; installationPreferences: window.session.installationPreferences; tab: window.session.navigation.route.settingsTab || "appearance"; onTabRequested: function(key) { window.session.navigation.go({page:"settings",settingsTab:key}) } }
                 ShowcasePage { releasePolicy: window.session.releasePolicy; app: window.app; browse: window.session.browse; showcase: window.session.showcase; releaseFilters: window.session.releaseFilters; contentController: window.session.content; tab: window.session.navigation.route.showcaseTab || "description"; onTabRequested: function(key) { const route = Object.assign({},window.session.navigation.route); route.showcaseTab = key; window.session.navigation.go(route) } }
             }
         }
@@ -202,5 +202,6 @@ ApplicationWindow {
         }
     }
     CreatePackDialog { id: newPack; app: window.app; catalogue: window.session.catalogue }
+    OptionalDependenciesDialog { suggestions: window.session.optionalDependencies }
     }
 }

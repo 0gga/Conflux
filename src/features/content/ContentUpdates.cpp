@@ -95,7 +95,7 @@ bool ContentActions::releaseAllowed(const QVariantMap &release) const {
                                m_releasePolicy ? m_releasePolicy->channels(m_pack.value("path").toString())
                                                : QStringList{});
 }
-void ContentActions::installRelease(const QVariantMap &release, const QVariantMap &project) {
+bool ContentActions::installRelease(const QVariantMap &release, const QVariantMap &project) {
     auto type = project.value("type", "mod").toString();
     if (type == "datapack" && release.value("filename").toString().endsWith(".jar", Qt::CaseInsensitive))
         type = "mod";
@@ -109,7 +109,7 @@ void ContentActions::installRelease(const QVariantMap &release, const QVariantMa
         m_notice = "This project is installed in another format. Remove that copy before switching formats.";
         emit operationFailed(m_notice);
         emit changed();
-        return;
+        return false;
     }
     for (const auto &value : rows) {
         const auto row = value.toMap();
@@ -122,13 +122,13 @@ void ContentActions::installRelease(const QVariantMap &release, const QVariantMa
             m_notice = "Unlock this content or unfreeze its version before changing it.";
             emit operationFailed(m_notice);
             emit changed();
-            return;
+            return false;
         }
     }
     auto destination = project;
     destination["targetPack"] = target;
-    install({{releaseFromVariant(release), project.value("title").toString(),
-              QJsonObject::fromVariantMap(ids), type}},
-            destination);
+    return install({{releaseFromVariant(release), project.value("title").toString(),
+                     QJsonObject::fromVariantMap(ids), type}},
+                   destination);
 }
 } // namespace studio

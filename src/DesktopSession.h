@@ -3,6 +3,7 @@
 #include "features/config/ConfigLibrary.h"
 #include "features/content/ContentActions.h"
 #include "features/content/ContentIndex.h"
+#include "features/content/OptionalDependencies.h"
 #include "features/explore/BrowseCatalogue.h"
 #include "features/explore/BrowseInstalls.h"
 #include "features/launch/WorldLaunch.h"
@@ -20,6 +21,7 @@
 #include "platform/ContentDependencySource.h"
 #include "platform/ContentInstaller.h"
 #include "platform/NativeContentStore.h"
+#include "platform/OptionalDependencySource.h"
 #include "platform/PackChangeMonitor.h"
 namespace studio {
 // Composition root: wires independent feature models; it contains no parsing,
@@ -43,6 +45,8 @@ class DesktopSession final : public QObject {
     Q_PROPERTY(studio::BrowseInstalls *browse READ browse CONSTANT)
     Q_PROPERTY(studio::BrowseCatalogue *catalogue READ catalogue CONSTANT)
     Q_PROPERTY(studio::BrowsePreferences *browsePreferences READ browsePreferences CONSTANT)
+    Q_PROPERTY(studio::InstallationPreferences *installationPreferences READ installationPreferences CONSTANT)
+    Q_PROPERTY(studio::OptionalDependencies *optionalDependencies READ optionalDependencies CONSTANT)
   public:
     explicit DesktopSession(QObject *parent = nullptr, QString settingsFile = {}, QString backupRoot = {});
     RunningInstances *running() {
@@ -96,6 +100,12 @@ class DesktopSession final : public QObject {
     BrowsePreferences *browsePreferences() {
         return &m_browsePreferences;
     }
+    InstallationPreferences *installationPreferences() {
+        return m_installationPreferences.get();
+    }
+    OptionalDependencies *optionalDependencies() {
+        return &m_optionalDependencies;
+    }
     void setCurseforgeKey(const QByteArray &key) {
         m_catalogue.setKey(key);
         m_showcase.setCurseforgeKey(key);
@@ -103,6 +113,7 @@ class DesktopSession final : public QObject {
         m_browse.setCurseforgeKey(key);
         m_contentInstaller->setCurseforgeKey(key);
         m_dependencySource->setCurseforgeKey(key);
+        m_optionalSource->setCurseforgeKey(key);
     }
     void setPack(const QVariantMap &);
     void attachWindow(QObject &window) {
@@ -113,6 +124,7 @@ class DesktopSession final : public QObject {
     std::shared_ptr<IBrowseSettingsStore> m_browseStore;
     std::shared_ptr<ContentVisibility> m_visibility;
     std::shared_ptr<PackReleasePolicy> m_releasePolicy;
+    std::shared_ptr<InstallationPreferences> m_installationPreferences;
     QHash<QString, QString> m_reviewedIdentities;
     std::shared_ptr<const IContentIndex> m_contentIndex;
     std::shared_ptr<const NativePackFileStore> m_fileStore;
@@ -121,6 +133,7 @@ class DesktopSession final : public QObject {
     std::shared_ptr<ContentInstaller> m_contentInstaller;
     std::shared_ptr<ContentDependencySource> m_dependencySource;
     std::shared_ptr<ContentDependencyInstaller> m_dependencyInstaller;
+    std::shared_ptr<OptionalDependencySource> m_optionalSource;
     RunningInstances m_running;
     NavigationHistory m_navigation;
     NavigationInput m_input;
@@ -137,6 +150,7 @@ class DesktopSession final : public QObject {
     ContentActions m_content;
     BrowseInstalls m_browse;
     BrowsePreferences m_browsePreferences;
+    OptionalDependencies m_optionalDependencies;
     BrowseCatalogue m_catalogue;
     PackChangeMonitor m_changes;
     bool m_pendingScan = false;

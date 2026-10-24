@@ -6,6 +6,7 @@ namespace studio {
 class ContentOperationReservations final {
   public:
     static QStringList keys(const ContentOperation &, const QVariantList &instanceRows);
+    static QStringList keysForTargets(const ContentOperation &, const QVariantList &resolvedTargets);
     bool acquire(const ContentOperation &);
     void release(const ContentOperation &);
 

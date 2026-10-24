@@ -6,6 +6,28 @@ using namespace update_fixture;
 class ContentUpdateTests : public QObject {
     Q_OBJECT
   private slots:
+    void largeBulkAcceptanceResolvesTargetsWithinBudget() {
+        Harness h;
+        h.installer->automatic = false;
+        QVariantList rows;
+        rows.reserve(5000);
+        for (int i = 0; i < 5000; ++i)
+            rows << row("large-" + QString::number(i));
+        h.set(rows);
+        QTRY_VERIFY_WITH_TIMEOUT(!h.content.busy(), 15000);
+        QSignalSpy resets(h.content.model(), &QAbstractItemModel::modelReset);
+        QElapsedTimer elapsed;
+        elapsed.start();
+        h.content.updateAll();
+        const auto milliseconds = elapsed.elapsed();
+        QCOMPARE(h.content.operations()->activeCount(), 5000);
+        QCOMPARE(h.installer->calls.size(), 1); // Backend is held; only acceptance is measured.
+        QCOMPARE(resets.size(), 0);
+        QCOMPARE(h.content.rows().size(), 5000);
+        qInfo() << "Accept 5000 independent updates with backend held ms" << milliseconds;
+        QVERIFY2(milliseconds < 750, "Bulk acceptance repeatedly scans the whole inventory.");
+        // All work is fixture-owned and uncommitted; destruction retires this held test queue.
+    }
     void bulkUpdatesKeepTheirOriginalDestinationThroughReentrantNavigation() {
         Harness h;
         const QVariantList originalRows{row("A"), row("B"), row("C")};

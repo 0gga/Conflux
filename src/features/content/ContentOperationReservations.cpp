@@ -12,6 +12,10 @@ QString ContentOperationReservations::scope(const QString &path) {
 }
 QStringList ContentOperationReservations::keys(const ContentOperation &operation,
                                                const QVariantList &instanceRows) {
+    return keysForTargets(operation, resolveContentTargets(instanceRows, operation.targets));
+}
+QStringList ContentOperationReservations::keysForTargets(const ContentOperation &operation,
+                                                         const QVariantList &targets) {
     QSet<QString> result;
     auto add = [&](const QVariantMap &row) {
         auto path = row.value("relativePath").toString();
@@ -32,9 +36,8 @@ QStringList ContentOperationReservations::keys(const ContentOperation &operation
                 result.insert("project:" + row.value("category").toString() + ':' + it.key() + ':' +
                               it.value().toString());
     };
-    if (!operation.targets.isEmpty())
-        for (const auto &value : resolveContentTargets(instanceRows, operation.targets))
-            add(value.toMap());
+    for (const auto &value : targets)
+        add(value.toMap());
     for (const auto &value : operation.predictions)
         add(value.toMap());
     for (const auto &request : operation.requests) {

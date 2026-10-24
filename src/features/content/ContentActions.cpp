@@ -520,7 +520,8 @@ bool ContentActions::enqueue(ContentOperation operation) {
     const auto instanceRows = operation.packPath == m_pack.value("path").toString()
                                   ? m_rows
                                   : m_states.value(operation.packPath).rows;
-    operation.reservations = ContentOperationReservations::keys(operation, instanceRows);
+    operation.reservations = ContentOperationReservations::keysForTargets(
+        operation, m_reservationTargets.resolve(instanceRows, operation.targets));
     if (!m_reservations.acquire(operation)) {
         reject("This content already has an active or queued operation. Wait for it to finish.");
         return false;
@@ -532,8 +533,9 @@ bool ContentActions::enqueue(ContentOperation operation) {
         m_busy = false;
     }
     const auto state = m_states.value(operation.packPath);
+    const auto confirmedTargets = m_confirmedTargets.resolve(state.rows, operation.targets);
     if (operation.expectedHashes.isEmpty())
-        for (const auto &value : resolveContentTargets(state.rows, operation.targets)) {
+        for (const auto &value : confirmedTargets) {
             const auto row = value.toMap();
             operation.expectedHashes.insert(contentRowKey(row), row.value("sha1").toString());
         }
@@ -543,7 +545,7 @@ bool ContentActions::enqueue(ContentOperation operation) {
         for (const auto &value : operation.predictions)
             titles << value.toMap().value("title").toString();
     else
-        for (const auto &value : resolveContentTargets(state.rows, operation.targets))
+        for (const auto &value : confirmedTargets)
             titles << value.toMap().value("title").toString();
     if (titles.isEmpty() && !operation.sourceLock.isEmpty())
         titles << operation.sourceLock.value("relativePath").toString();

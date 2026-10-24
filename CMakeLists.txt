@@ -94,6 +94,7 @@ target_sources(conflux_desktop PRIVATE
     src/features/content/ContentViewIndex.h src/features/content/ContentViewIndex.cpp
     src/features/content/ContentOperationState.h src/features/content/ContentOperationState.cpp
     src/features/content/ContentOperationReservations.h src/features/content/ContentOperationReservations.cpp
+    src/features/content/ContentTargetIndex.h src/features/content/ContentTargetIndex.cpp
     src/features/content/ContentLockIntent.h src/features/content/ContentLockIntent.cpp
     src/features/content/ContentUpdateIntent.h src/features/content/ContentUpdateIntent.cpp
     src/features/content/ContentLockRegistry.h src/features/content/ContentLockRegistry.cpp
@@ -189,6 +190,9 @@ if(BUILD_TESTING)
     qt_add_executable(content-index-tests tests/ContentIndexTests.cpp)
     target_link_libraries(content-index-tests PRIVATE conflux_desktop Qt6::Test)
     add_test(NAME content-index COMMAND content-index-tests -o "${CMAKE_CURRENT_BINARY_DIR}/content-index-results.txt,txt")
+    qt_add_executable(content-target-index-tests tests/ContentTargetIndexTests.cpp)
+    target_link_libraries(content-target-index-tests PRIVATE conflux_desktop Qt6::Test)
+    add_test(NAME content-target-index COMMAND content-target-index-tests -o "${CMAKE_CURRENT_BINARY_DIR}/content-target-index-results.txt,txt")
     qt_add_executable(content-filtering-tests tests/ContentFilteringTests.cpp)
     target_link_libraries(content-filtering-tests PRIVATE conflux_desktop Qt6::Test)
     add_test(NAME content-filtering COMMAND content-filtering-tests -o "${CMAKE_CURRENT_BINARY_DIR}/content-filtering-results.txt,txt")

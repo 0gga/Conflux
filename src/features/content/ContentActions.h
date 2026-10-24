@@ -6,6 +6,7 @@
 #include "ContentOperationReservations.h"
 #include "ContentOperationState.h"
 #include "ContentPorts.h"
+#include "ContentTargetIndex.h"
 #include "ContentViewIndex.h"
 #include "SourceLockIndex.h"
 #include "features/preferences/ContentVisibility.h"
@@ -227,6 +228,7 @@ class ContentActions final : public QObject {
     SourceLockIndex m_sourceLocks;
     QList<ContentOperation> m_pendingOperations;
     ContentOperationReservations m_reservations;
+    ContentTargetIndex m_reservationTargets, m_confirmedTargets;
     QVariantList m_visibleRows;
     mutable ContentViewIndex m_view;
     quint64 m_visibilityRevision = 0;

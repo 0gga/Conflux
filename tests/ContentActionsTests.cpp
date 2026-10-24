@@ -562,6 +562,37 @@ class ContentActionsTests : public QObject {
         }
         QVERIFY(found);
     }
+    void installingAnUnresolvedExactFileReusesItsTargetAndDisabledState() {
+        QTemporaryDir temp;
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        ContentActions content(std::make_shared<ContentFileFixture>(),
+                               std::make_shared<ContentCatalogueFixture>(), installer,
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        auto existing = row("Accessorify", "pajic");
+        existing["sourceIds"] = QVariantMap{};
+        existing.remove("installedRelease");
+        existing["sha1"] = QString(40, 'a');
+        existing["enabled"] = false;
+        existing["relativePath"] = "mods/renamed.jar.disabled";
+        content.setContext({{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "fabric"}},
+                           {existing});
+        QTRY_VERIFY(!content.busy());
+        auto release = existing.value("updateRelease").toMap();
+        release["provider"] = "modrinth";
+        release["projectId"] = "resolved-project";
+        release["sha1"] = QString(40, 'A');
+        release["filename"] = "accessorify-new.jar";
+        content.installRelease(release, {{"title", "Accessorify"},
+                                         {"type", "mod"},
+                                         {"sourceIds", QVariantMap{{"modrinth", "resolved-project"}}}});
+        QVERIFY(bool(installer->completion));
+        QCOMPARE(installer->requested.first().installedPath, "mods/renamed.jar.disabled");
+        QVERIFY(!installer->requested.first().resolveDependencies);
+        QCOMPARE(content.rows().size(), 1);
+        QVERIFY(!content.rows().first().toMap().value("enabled").toBool());
+        installer->completion({false, "Fixture cancelled"});
+        QTRY_VERIFY(!content.busy());
+    }
     void dependencyWarningsDoNotFailTheSelectedContentTask() {
         QTemporaryDir temp;
         auto installer = std::make_shared<ContentInstallerFixture>();

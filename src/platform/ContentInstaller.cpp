@@ -32,6 +32,9 @@ void ContentInstaller::finish(ContentWriteResult result) {
                 const auto row = value.toMap();
                 if (!request.installedPath.isEmpty() && row.value("relativePath") == request.installedPath)
                     previous = row;
+                if (!request.release.sha1.isEmpty() &&
+                    row.value("sha1").toString().compare(request.release.sha1, Qt::CaseInsensitive) == 0)
+                    previous = row;
                 const auto ids = row.value("sourceIds").toMap();
                 for (auto it = request.sourceIds.begin(); it != request.sourceIds.end(); ++it)
                     if (!it.value().toString().isEmpty() && ids.value(it.key()) == it.value().toVariant())

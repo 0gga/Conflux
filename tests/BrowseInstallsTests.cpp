@@ -37,6 +37,74 @@ class BrowseInstallsTests : public QObject {
                  QVariantMap{{"provider", "modrinth"}, {"projectId", "project"}, {"id", "version"}}}};
     }
   private slots:
+    void resolvingAnAlreadyPresentHashLearnsInstalledStateWithoutStartingAnInstall() {
+        auto source = std::make_shared<DeferredVersionCatalogue>();
+        BrowseInstalls model(source);
+        auto file = row();
+        file["sha1"] = QString(40, 'a');
+        file.remove("sourceIds");
+        file.remove("installedRelease");
+        model.setTargetPath("a");
+        model.setContext({{"path", "a"}, {"minecraft", "1.21.1"}, {"loader", "fabric"}}, {file}, false);
+        QSignalSpy installs(&model, &BrowseInstalls::installRequested);
+        model.install(project());
+        QCOMPARE(source->pending.size(), 1);
+        Release release;
+        release.provider = "modrinth";
+        release.projectId = "project";
+        release.id = "exact-release";
+        release.sha1 = QString(40, 'A');
+        release.filename = "renamed.jar";
+        release.url = "https://example.invalid/file.jar";
+        release.gameVersions = {"1.21.1"};
+        source->pending.first()({release}, {});
+        QCOMPARE(installs.size(), 0);
+        QVERIFY(model.state(project()).value("installed").toBool());
+        QVERIFY(model.installed(release.toVariant(), "mod"));
+    }
+    void exactFileProofDoesNotRewriteAConflictingProviderIdentity() {
+        BrowseInstalls model(std::make_shared<DeferredVersionCatalogue>());
+        auto existing = row();
+        existing["sha1"] = QString(40, 'a');
+        model.setTargetPath("a");
+        model.setContext({{"path", "a"}}, {existing}, false);
+        auto other = project();
+        other["id"] = "another-project";
+        other["sourceIds"] = QVariantMap{{"modrinth", "another-project"}};
+        const QVariantMap release{
+            {"provider", "modrinth"}, {"projectId", "another-project"}, {"sha1", QString(40, 'A')}};
+        model.rememberReleases(other, {QVariantMap{{"variants", QVariantList{release}}}});
+        QVERIFY(model.state(project()).value("installed").toBool());
+        QVERIFY(model.state(other).value("installed").toBool());
+        QCOMPARE(model.inventory().first().toMap().value("sourceIds"), existing.value("sourceIds"));
+        existing["sha1"] = QString(40, 'b');
+        model.setContext({{"path", "a"}}, {existing}, false);
+        QVERIFY(!model.state(other).value("installed").toBool());
+    }
+    void resolvedHashChecksTheCurrentInventoryInsteadOfAnObsoleteLookupSnapshot() {
+        auto source = std::make_shared<DeferredVersionCatalogue>();
+        BrowseInstalls model(source);
+        auto existing = row();
+        existing["sha1"] = QString(40, 'a');
+        existing.remove("sourceIds");
+        existing.remove("installedRelease");
+        const QVariantMap pack{{"path", "a"}, {"minecraft", "1.21.1"}, {"loader", "fabric"}};
+        model.setTargetPath("a");
+        model.setContext(pack, {existing}, false);
+        model.install(project());
+        existing["sha1"] = QString(40, 'b');
+        model.setContext(pack, {existing}, false);
+        Release release;
+        release.provider = "modrinth";
+        release.projectId = "project";
+        release.sha1 = QString(40, 'a');
+        release.url = "https://example.invalid/file.jar";
+        release.gameVersions = {"1.21.1"};
+        QSignalSpy installs(&model, &BrowseInstalls::installRequested);
+        source->pending.first()({release}, {});
+        QCOMPARE(installs.size(), 1);
+        QVERIFY(!model.state(project()).value("installed").toBool());
+    }
     void cancellationReleasesHeldLookupAndDiscardsQueuedObsoleteWork() {
         auto source = std::make_shared<DeferredVersionCatalogue>();
         BrowseInstalls model(source);

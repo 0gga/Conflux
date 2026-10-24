@@ -34,6 +34,31 @@ static QVariantMap verifiedRowProjects(const QVariantMap &row) {
     }
     return ids;
 }
+static bool installedInRows(const QVariantMap &release, const QString &type, const QVariantList &rows) {
+    const auto category =
+        type == "datapack" && release.value("filename").toString().endsWith(".jar", Qt::CaseInsensitive)
+            ? QString("mods")
+            : contentCategory(type);
+    for (const auto &value : rows) {
+        const auto row = value.toMap();
+        if ((!type.isEmpty() && row.value("category") != category) ||
+            (row.value("category") == "datapacks" &&
+             !row.value("relativePath").toString().startsWith("datapacks/")))
+            continue;
+        const auto wanted = release.value("sha1").toString(), actual = row.value("sha1").toString();
+        if (!wanted.isEmpty() && !actual.isEmpty()) {
+            if (wanted.compare(actual, Qt::CaseInsensitive) == 0)
+                return true;
+            continue;
+        }
+        const auto pin = row.value("installedRelease").toMap();
+        if (!pin.value("id").toString().isEmpty() && pin.value("id") == release.value("id") &&
+            pin.value("provider") == release.value("provider") &&
+            pin.value("projectId") == release.value("projectId"))
+            return true;
+    }
+    return false;
+}
 BrowseInstalls::BrowseInstalls(std::shared_ptr<IContentCatalogue> source, QObject *parent)
     : QObject(parent), m_catalogue(std::move(source)) {}
 void BrowseInstalls::setReleasePolicy(std::shared_ptr<PackReleasePolicy> policy) {
@@ -79,6 +104,14 @@ void BrowseInstalls::setContext(const QVariantMap &pack, const QVariantList &row
                 if (!it.value().toString().isEmpty() && !m_projectRows.contains(key))
                     m_projectRows.insert(key, rowIndex);
             }
+        if (destination) {
+            const auto proof = category + QChar(0x1f) + row.value("sha1").toString().toLower();
+            for (const auto &project : m_verifiedFileProjects.value(proof)) {
+                const auto key = category + QChar(0x1f) + project;
+                if (!m_projectRows.contains(key))
+                    m_projectRows.insert(key, rowIndex);
+            }
+        }
         value = row;
         ++rowIndex;
     }
@@ -98,14 +131,17 @@ void BrowseInstalls::rememberReleases(const QVariantMap &project, const QVariant
     if (!ready() || groups.isEmpty())
         return;
     QHash<QString, QVariantMap> present;
+    QHash<QString, QSet<QString>> categories;
     for (const auto &value : m_rows) {
         const auto row = value.toMap();
         if (categoryType(row.value("category").toString()) != project.value("type", "mod").toString() &&
             !(project.value("type") == "datapack" && row.value("category") == "mods"))
             continue;
         const auto hash = row.value("sha1").toString().toLower();
-        if (!hash.isEmpty())
+        if (!hash.isEmpty()) {
             present.insert(hash, verifiedRowProjects(row));
+            categories[hash].insert(row.value("category").toString());
+        }
     }
     bool changed = false;
     for (const auto &value : groups)
@@ -121,6 +157,22 @@ void BrowseInstalls::rememberReleases(const QVariantMap &project, const QVariant
                        id = release.value("projectId").toString();
             if (!provider.isEmpty() && !id.isEmpty())
                 ids.insert(provider, id);
+            // File presence proves this project's release is installed without
+            // changing another authoritative same-provider project identity.
+            for (const auto &category : categories.value(hash)) {
+                const auto key = category + QChar(0x1f) + hash;
+                if (!m_verifiedFileProjects.contains(key) && m_verifiedFileProjects.size() >= 2048)
+                    m_verifiedFileProjects.clear();
+                auto &proven = m_verifiedFileProjects[key];
+                for (auto it = ids.cbegin(); it != ids.cend(); ++it)
+                    if (!it.value().toString().isEmpty()) {
+                        const auto projectKey = it.key() + ':' + it.value().toString();
+                        if (!proven.contains(projectKey)) {
+                            proven.insert(projectKey);
+                            changed = true;
+                        }
+                    }
+            }
             auto known = present.value(hash);
             const auto learned = m_verifiedIdentities.value(hash);
             for (auto it = learned.cbegin(); it != learned.cend(); ++it)
@@ -188,32 +240,7 @@ QVariantMap BrowseInstalls::state(const QVariantMap &project) const {
     return out;
 }
 bool BrowseInstalls::installed(const QVariantMap &release, const QString &type) const {
-    if (!ready())
-        return false;
-    for (const auto &value : m_rows) {
-        const auto row = value.toMap();
-        const auto category =
-            type == "datapack" && release.value("filename").toString().endsWith(".jar", Qt::CaseInsensitive)
-                ? QString("mods")
-                : contentCategory(type);
-        if (!type.isEmpty() && row.value("category") != category)
-            continue;
-        if (row.value("category") == "datapacks" &&
-            !row.value("relativePath").toString().startsWith("datapacks/"))
-            continue;
-        if (!release.value("sha1").toString().isEmpty() && !row.value("sha1").toString().isEmpty()) {
-            if (row.value("sha1") == release.value("sha1"))
-                return true;
-            continue;
-        }
-        const auto version = row.value("installedRelease").toMap();
-        if (!version.value("id").toString().isEmpty() &&
-            version.value("provider") == release.value("provider") &&
-            version.value("projectId") == release.value("projectId") &&
-            version.value("id") == release.value("id"))
-            return true;
-    }
-    return false;
+    return ready() && installedInRows(release, type, m_rows);
 }
 void BrowseInstalls::installVersion(const QVariantMap &release, const QVariantMap &project) {
     if (!releaseAllowed(release)) {
@@ -351,6 +378,19 @@ void BrowseInstalls::install(const QVariantMap &project) {
                              (release.provider == "curseforge" && guard->m_curseforgeEnabled)) &&
                             !release.url.isEmpty() && !release.sha1.isEmpty() &&
                             release.gameVersions.contains(pack.value("minecraft").toString())) {
+                            const auto &inventory =
+                                lookupScope(guard->m_pack.value("path").toString()) == packPath
+                                    ? guard->m_rows
+                                    : rows;
+                            if (installedInRows(release.toVariant(), project.value("type", "mod").toString(),
+                                                inventory)) {
+                                if (lookupScope(guard->m_pack.value("path").toString()) == packPath)
+                                    guard->rememberReleases(
+                                        project,
+                                        {QVariantMap{{"variants", QVariantList{release.toVariant()}}}});
+                                installed = true;
+                                break;
+                            }
                             auto target = project;
                             target["targetPack"] = pack;
                             target["targetRows"] = rows;

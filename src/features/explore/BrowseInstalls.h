@@ -83,6 +83,7 @@ class BrowseInstalls final : public QObject {
     void cancelPendingForPack(const QString &);
     int m_revision = 0;
     QHash<QString, QVariantMap> m_verifiedIdentities;
+    QHash<QString, QSet<QString>> m_verifiedFileProjects;
     ContentOperationQueue m_lookups;
     QSet<QString> m_pendingLookups;
     QString lookupKey(const QVariantMap &) const;

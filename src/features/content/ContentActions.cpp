@@ -825,6 +825,8 @@ void ContentActions::install(const QVector<ContentInstallRequest> &requests, con
                 if (!it.value().toString().isEmpty() &&
                     ids.value(it.key()).toString() == it.value().toString())
                     match = true;
+            match |= !request.release.sha1.isEmpty() && candidate.value("sha1").toString().compare(
+                                                            request.release.sha1, Qt::CaseInsensitive) == 0;
             if (match) {
                 request.resolveDependencies = false;
                 request.installedPath = candidate.value("relativePath").toString();

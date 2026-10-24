@@ -33,20 +33,27 @@ class ContentPipelineTests : public QObject {
         return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
     }
     static QByteArray archive(const QString &path, const QString &type, const QString &id, int version,
-                              int padding = 0) {
+                              int padding = 0, bool neoForge = false) {
         mz_zip_archive zip{};
         if (!mz_zip_writer_init_file(&zip, QFile::encodeName(path).constData(), 0))
             return {};
-        const auto data = type == "mods" ? QJsonDocument(QJsonObject{{"schemaVersion", 1},
-                                                                     {"id", id},
-                                                                     {"name", id},
-                                                                     {"version", QString::number(version)}})
-                                               .toJson()
-                                         : QByteArray("{\"pack\":{\"pack_format\":34,\"description\":\"") +
-                                               id.toUtf8() + QByteArray::number(version) + "\"}}";
-        const auto name = type == "mods"          ? "fabric.mod.json"
-                          : type == "shaderpacks" ? "shaders/test.fsh"
-                                                  : "pack.mcmeta";
+        const auto data = type == "mods" && neoForge
+                              ? QString("modLoader=\"javafml\"\nloaderVersion=\"[1,)\"\nlicense=\"MIT\"\n[["
+                                        "mods]]\nmodId=\"%1\"\nversion=\"%2\"\ndisplayName=\"%1\"\n")
+                                    .arg(id)
+                                    .arg(version)
+                                    .toUtf8()
+                          : type == "mods" ? QJsonDocument(QJsonObject{{"schemaVersion", 1},
+                                                                       {"id", id},
+                                                                       {"name", id},
+                                                                       {"version", QString::number(version)}})
+                                                 .toJson()
+                                           : QByteArray("{\"pack\":{\"pack_format\":34,\"description\":\"") +
+                                                 id.toUtf8() + QByteArray::number(version) + "\"}}";
+        const auto name = type == "mods" && neoForge ? "META-INF/neoforge.mods.toml"
+                          : type == "mods"           ? "fabric.mod.json"
+                          : type == "shaderpacks"    ? "shaders/test.fsh"
+                                                     : "pack.mcmeta";
         mz_zip_writer_add_mem(&zip, name, data.data(), size_t(data.size()), 0);
         if (padding) {
             QByteArray blob(padding, 'x');
@@ -265,6 +272,94 @@ class ContentPipelineTests : public QObject {
         QVERIFY2(result.ok, qPrintable(result.error));
         QCOMPARE(read(pack.value("path").toString() + '/' + relative), bytes);
         QCOMPARE(files.reload(pack, {}).rows.size(), 1);
+    }
+    void renamedOrUnresolvedModsReplaceExistingRuntimeIdentity_data() {
+        QTest::addColumn<bool>("managed");
+        QTest::addColumn<bool>("identical");
+        QTest::addColumn<bool>("enabled");
+        QTest::addColumn<int>("copies");
+        QTest::addColumn<bool>("neoForge");
+        for (bool managed : {false, true})
+            for (bool identical : {false, true})
+                for (bool enabled : {false, true})
+                    for (int copies : {1, 2})
+                        for (bool neoForge : {false, true})
+                            QTest::newRow(
+                                qPrintable(QString("managed%1-identical%2-enabled%3-copies%4-neoforge%5")
+                                               .arg(managed)
+                                               .arg(identical)
+                                               .arg(enabled)
+                                               .arg(copies)
+                                               .arg(neoForge)))
+                                << managed << identical << enabled << copies << neoForge;
+    }
+    void renamedOrUnresolvedModsReplaceExistingRuntimeIdentity() {
+        QFETCH(bool, managed);
+        QFETCH(bool, identical);
+        QFETCH(bool, enabled);
+        QFETCH(int, copies);
+        QFETCH(bool, neoForge);
+        QTemporaryDir temp, stage;
+        QVariantMap pack{{"path", temp.path() + "/instance"}, {"minecraft", "1.21.1"}, {"loader", "fabric"}};
+        if (managed) {
+            const auto created = PackRepository::create(temp.path(), "Replacement", "1.21.1",
+                                                        neoForge ? "neoforge" : "fabric");
+            QVERIFY(created.ok);
+            pack = created.manifest.toVariantMap();
+            pack["path"] = created.path;
+            pack["managed"] = true;
+        }
+        if (neoForge)
+            pack["loader"] = "neoforge";
+        const auto incoming = archive(temp.path() + "/new.jar", "mods", "accessorify", 2, 0, neoForge);
+        const auto previous =
+            identical ? incoming : archive(temp.path() + "/old.jar", "mods", "accessorify", 1, 0, neoForge);
+        const auto root = pack.value("path").toString();
+        const auto original = "mods/" + (managed ? hash(previous) : QString("renamed-accessorify-old")) +
+                              ".jar" + (enabled ? "" : ".disabled");
+        write(root + '/' + original, previous);
+        if (managed) {
+            auto oldPin = QJsonObject::fromVariantMap(release("11", previous, "old.jar").toVariant());
+            oldPin["provider"] = "curseforge";
+            oldPin["id"] = "101";
+            oldPin["installPath"] = original;
+            oldPin["enabled"] = enabled;
+            if (neoForge)
+                oldPin["loaders"] = QJsonArray{"neoforge"};
+            const auto current = PackRepository::inspectContent(root);
+            QVERIFY(current.ok);
+            const auto updated =
+                PackRepository::updateContentReferences(root, current.manifest, {oldPin}, {});
+            QVERIFY2(updated.ok, qPrintable(updated.error));
+            pack["mods"] = QVariantList{oldPin.toVariantMap()};
+        }
+        if (copies == 2)
+            write(root + "/mods/extra-accessorify.jar" + (enabled ? "" : QString(".disabled")), previous);
+        NativeContentStore files(nullptr, temp.path() + "/backups");
+        const auto input = files.reload(pack, {}).rows;
+        QCOMPARE(input.size(), copies);
+        write(stage.path() + "/mods/download.jar", incoming);
+        auto ref = QJsonObject::fromVariantMap(
+            release("new-provider-project", incoming, "accessorify-new.jar").toVariant());
+        ref["installPath"] = "mods/download.jar";
+        const auto result =
+            files.commitStagedContent(pack, input, stage.path(), {{"mods", QJsonArray{ref}}}, {}, true);
+        QVERIFY2(result.ok, qPrintable(result.error));
+        const auto confirmed = files.reload(pack, {}).rows;
+        QCOMPARE(confirmed.size(), 1);
+        const auto installed = confirmed.first().toMap();
+        QCOMPARE(installed.value("sha1").toString(), hash(incoming));
+        QCOMPARE(installed.value("enabled").toBool(), enabled);
+        QCOMPARE(read(root + '/' + installed.value("relativePath").toString()), incoming);
+        if (!identical)
+            QCOMPARE(read(result.backupPath + '/' + original), previous);
+        if (managed) {
+            const auto state = PackRepository::inspectContent(root);
+            QVERIFY2(state.ok, qPrintable(state.error));
+            const auto pins = state.manifest.value("mods").toArray();
+            QCOMPARE(pins.size(), 1);
+            QCOMPARE(pins.first().toObject().value("sha1").toString(), hash(incoming));
+        }
     }
     void downloadingSameFilenameOverwritesAcrossAllContent_data() {
         QTest::addColumn<QString>("type");

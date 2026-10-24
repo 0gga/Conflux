@@ -592,6 +592,38 @@ class ContentActionsTests : public QObject {
         QVERIFY(selectedSucceeded);
         QVERIFY(dependenciesFailed);
     }
+    void installationIndexesConfirmedFilesWithoutHoldingTheQueueOrFollowingNavigation() {
+        QTemporaryDir temp;
+        auto catalogue = std::make_shared<ContentCatalogueFixture>();
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        ContentActions content(std::make_shared<ContentFileFixture>(), catalogue, installer,
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        const QVariantMap first{{"path", temp.path() + "/first"}}, second{{"path", temp.path() + "/second"}};
+        content.setContext(first, {row("Root", "Author")});
+        QTRY_VERIFY(!content.busy());
+        catalogue->holdMetadata = true;
+        content.update("mods/Root.jar");
+        QVERIFY(bool(installer->completion));
+        installer->completion({true, {}});
+        QTRY_VERIFY(bool(catalogue->metadataCompletion));
+        QVERIFY(!content.operationsBusy());
+        QCOMPARE(content.operations()->failedCount(), 0);
+        QCOMPARE(catalogue->identifiedPack, first);
+        auto indexed = catalogue->identified;
+        QVERIFY(!indexed.isEmpty());
+        auto resolved = indexed.first().toMap();
+        resolved["author"] = "Cached after install";
+        indexed[0] = resolved;
+        auto completion = std::move(catalogue->metadataCompletion);
+        catalogue->holdMetadata = false;
+        content.setContext(second, {row("Other", "Other author")});
+        QTRY_VERIFY(!content.busy());
+        const auto visible = content.inventory();
+        completion(indexed, {});
+        QCOMPARE(content.inventory(), visible);
+        content.setContext(first, {});
+        QCOMPARE(content.inventory().first().toMap().value("author").toString(), "Cached after install");
+    }
     void renamedUpdateStaysOneEntryAndFailedWorkCanBeRetried() {
         QTemporaryDir temp;
         auto files = std::make_shared<ContentFileFixture>();
@@ -764,6 +796,35 @@ class ContentActionsTests : public QObject {
         QVERIFY(content.rows()[0].toMap().value("locked").toBool());
         QVERIFY(!content.rows()[1].toMap().value("locked").toBool());
     }
+    void resolvedAuthorsAreUsableWhileUpdateChecksAreStillRunning() {
+        QTemporaryDir temp;
+        auto catalogue = std::make_shared<ContentCatalogueFixture>();
+        catalogue->holdUpdates = true;
+        catalogue->metadataTransform = [](QVariantList rows) {
+            auto row = rows.first().toMap();
+            row["author"] = "Resolved Author";
+            row["projectId"] = "verified";
+            row["sourceIds"] = QVariantMap{{"modrinth", "verified"}};
+            row["metadataResolved"] = true;
+            rows[0] = row;
+            return rows;
+        };
+        ContentActions content(std::make_shared<ContentFileFixture>(), catalogue,
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        content.setContext({{"path", temp.path()}}, {row("Example", "")});
+        QTRY_VERIFY(bool(catalogue->updateCompletion));
+        QVERIFY(content.busy());
+        QCOMPARE(content.inventory().first().toMap().value("author").toString(), "Resolved Author");
+        QCOMPARE(content.inventory().first().toMap().value("projectId").toString(), "verified");
+        content.setQuery("Resolved Author");
+        QCOMPARE(content.rows().size(), 1);
+        auto completion = std::move(catalogue->updateCompletion);
+        completion(catalogue->refreshed, {});
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(catalogue->identifyCount, 1);
+        QCOMPARE(catalogue->refreshCount, 1);
+    }
     void refreshMetadataUsesExactCategoryAndHashIncludingRenames() {
         QTemporaryDir temp;
         auto catalogue = std::make_shared<ContentCatalogueFixture>();
@@ -774,7 +835,7 @@ class ContentActionsTests : public QObject {
         auto original = row("original", "Verified author");
         content.setContext(pack, {original});
         QTRY_VERIFY(!content.busy());
-        const int checks = catalogue->refreshCount;
+        const int checks = catalogue->refreshCount, identities = catalogue->identifyCount;
         auto renamed = original;
         renamed["relativePath"] = "mods/renamed.jar";
         renamed.remove("author");
@@ -785,15 +846,16 @@ class ContentActionsTests : public QObject {
         content.select("mods/original.jar", true);
         content.setContext(pack, {renamed, asset});
         QTRY_VERIFY(!content.busy());
-        QCOMPARE(catalogue->refreshCount, checks + 1);
-        QCOMPARE(catalogue->refreshed.size(), 1);
-        QCOMPARE(catalogue->refreshed.first().toMap().value("category").toString(), QString("resourcepacks"));
+        QCOMPARE(catalogue->refreshCount, checks);
+        QCOMPARE(catalogue->identifyCount, identities + 1);
+        QCOMPARE(catalogue->identified.size(), 2);
         QCOMPARE(content.inventory().at(0).toMap().value("author").toString(), QString("Verified author"));
         QCOMPARE(content.inventory().at(1).toMap().value("author").toString(), QString("Asset author"));
         QVERIFY(content.selected().isEmpty());
         content.setContext(pack, {renamed, asset}, true);
         QTRY_VERIFY(!content.busy());
-        QCOMPARE(catalogue->refreshCount, checks + 1);
+        QCOMPARE(catalogue->refreshCount, checks);
+        QCOMPARE(catalogue->identifyCount, identities + 2);
     }
     void forcedContextRefreshDetectsChangesWithIdenticalInventory() {
         class Files final : public IContentFileStore {
@@ -831,7 +893,8 @@ class ContentActionsTests : public QObject {
         QTRY_VERIFY(!content.busy());
         QCOMPARE(files->reads, 2);
         QCOMPARE(content.inventory().first().toMap().value("sha1").toString(), QString("2"));
-        QCOMPARE(catalogue->refreshCount, 2);
+        QCOMPARE(catalogue->identifyCount, 2);
+        QCOMPARE(catalogue->refreshCount, 1);
     }
     void refreshHonorsDefaultReleaseAndExplicitStages_data() {
         QTest::addColumn<QString>("oldChannel");
@@ -999,6 +1062,7 @@ class ContentActionsTests : public QObject {
                 {"loaders", QJsonArray::fromStringList(loaders)},
                 {"files", QJsonArray{QJsonObject{
                               {"filename", "barehanded-" + loaders.first() + "-" + version + ".jar"},
+                              {"url", "https://example.invalid/barehanded.jar"},
                               {"primary", true},
                               {"size", 100},
                               {"hashes", QJsonObject{{"sha1", fileHash}}}}}}};
@@ -1051,15 +1115,18 @@ class ContentActionsTests : public QObject {
         QVariantList indexed;
         QString error;
         bool done = false;
-        const QVariantList rows{
-            QVariantMap{{"category", "mods"}, {"relativePath", "mods/barehanded.jar"}, {"sha1", hash}}};
+        const QVariantList rows{QVariantMap{{"category", "mods"},
+                                            {"relativePath", "mods/barehanded.jar"},
+                                            {"sha1", hash},
+                                            {"installedRelease", modrinthRelease(installed).toVariant()}}};
         auto check = [&] {
             done = false;
-            catalogue.refresh(rows, "1.21.1", "neoforge|fabric", [&](QVariantList result, QString failure) {
-                indexed = result;
-                error = failure;
-                done = true;
-            });
+            catalogue.checkUpdates(rows, "1.21.1", "neoforge|fabric", {},
+                                   [&](QVariantList result, QString failure) {
+                                       indexed = result;
+                                       error = failure;
+                                       done = true;
+                                   });
         };
         check();
         QTRY_VERIFY_WITH_TIMEOUT(done, 10000);
@@ -1098,6 +1165,10 @@ class ContentActionsTests : public QObject {
                                              {"resourcepacks", "minecraft"},
                                              {"shaderpacks", "iris"},
                                              {"datapacks", "datapack"}};
+        QHash<QString, QString> categories;
+        for (auto it = loaders.cbegin(); it != loaders.cend(); ++it)
+            categories[QString::fromLatin1(
+                QCryptographicHash::hash(it.key().toUtf8(), QCryptographicHash::Sha1).toHex())] = it.key();
         connect(&server, &QTcpServer::newConnection, &server, [&] {
             auto *socket = server.nextPendingConnection();
             auto buffer = std::make_shared<QByteArray>();
@@ -1125,10 +1196,10 @@ class ContentActionsTests : public QObject {
                 } else if (path == "/version_files/update") {
                     updateQueries << request;
                     for (const auto &hash : request.value("hashes").toArray()) {
-                        const auto key = hash.toString();
-                        values[key] = version(newer ? "2" : "1", key, loaders.value(key),
-                                              key == "mods" ? ".jar" : ".zip",
-                                              newer ? "2026-02-01T00:00:00Z" : "2026-01-01T00:00:00Z");
+                        const auto key = categories.value(hash.toString());
+                        values[hash.toString()] = version(
+                            newer ? "2" : "1", key, loaders.value(key), key == "mods" ? ".jar" : ".zip",
+                            newer ? "2026-02-01T00:00:00Z" : "2026-01-01T00:00:00Z");
                     }
                     response = QJsonDocument(values);
                 } else
@@ -1143,13 +1214,20 @@ class ContentActionsTests : public QObject {
         ContentCatalogue catalogue(nullptr,
                                    QUrl("http://127.0.0.1:" + QString::number(server.serverPort()) + "/"));
         QVariantList rows;
-        for (auto it = loaders.cbegin(); it != loaders.cend(); ++it)
-            rows << QVariantMap{
-                {"sha1", it.key()}, {"category", it.key()}, {"relativePath", it.key() + "/old.zip"}};
+        for (auto it = categories.cbegin(); it != categories.cend(); ++it) {
+            auto installed =
+                modrinthRelease(version("1", it.value(), loaders.value(it.value()),
+                                        it.value() == "mods" ? ".jar" : ".zip", "2026-01-01T00:00:00Z"));
+            installed.sha1 = it.key();
+            rows << QVariantMap{{"sha1", it.key()},
+                                {"category", it.value()},
+                                {"relativePath", it.value() + "/old.zip"},
+                                {"installedRelease", installed.toVariant()}};
+        }
         bool done = false;
         QVariantList indexed;
         QString error;
-        catalogue.refresh(rows, "1.21.1", "fabric", [&](QVariantList value, QString failure) {
+        catalogue.checkUpdates(rows, "1.21.1", "fabric", {}, [&](QVariantList value, QString failure) {
             indexed = value;
             error = failure;
             done = true;
@@ -1160,12 +1238,12 @@ class ContentActionsTests : public QObject {
         for (const auto &value : indexed)
             QVERIFY(value.toMap().value("updateAvailable").toBool());
         for (const auto &query : updateQueries) {
-            const auto key = query.value("hashes").toArray().first().toString();
+            const auto key = categories.value(query.value("hashes").toArray().first().toString());
             QCOMPARE(query.value("loaders").toArray(), QJsonArray{loaders.value(key)});
         }
         newer = false;
         done = false;
-        catalogue.refresh(indexed, "1.21.1", "fabric", [&](QVariantList value, QString failure) {
+        catalogue.checkUpdates(indexed, "1.21.1", "fabric", {}, [&](QVariantList value, QString failure) {
             indexed = value;
             error = failure;
             done = true;
@@ -1220,7 +1298,7 @@ class ContentActionsTests : public QObject {
         installer->completion({true, {}});
         QVERIFY(content.notice().isEmpty());
     }
-    void implicitRefreshIndexesOnlyChangedFilesAcrossAllTypes() {
+    void implicitRefreshUsesMetadataIndexWithoutRepeatingProviderUpdateChecks() {
         QTemporaryDir temp;
         auto catalogue = std::make_shared<ContentCatalogueFixture>();
         ContentActions content(std::make_shared<ContentFileFixture>(), catalogue,
@@ -1230,13 +1308,15 @@ class ContentActionsTests : public QObject {
         const auto original = row("unchanged", "Author");
         content.setContext(pack, {original});
         QTRY_VERIFY(!content.busy());
+        const int updateChecks = catalogue->refreshCount;
         auto asset = row("new", "Author");
         asset["category"] = "resourcepacks";
         asset["relativePath"] = "resourcepacks/new.zip";
         content.setContext(pack, {original, asset});
         QTRY_VERIFY(!content.busy());
-        QCOMPARE(catalogue->refreshed.size(), 1);
-        QCOMPARE(catalogue->refreshed.first().toMap().value("relativePath").toString(),
+        QCOMPARE(catalogue->refreshCount, updateChecks);
+        QCOMPARE(catalogue->identified.size(), 2);
+        QCOMPARE(catalogue->identified.last().toMap().value("relativePath").toString(),
                  QString("resourcepacks/new.zip"));
         QCOMPARE(content.rows().size(), 2);
     }

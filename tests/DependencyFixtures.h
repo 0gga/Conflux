@@ -27,6 +27,8 @@ class Server final : public QTcpServer {
     QHash<QString, QByteArray> bodies;
     QHash<QString, int> statuses;
     QStringList requests;
+    QHash<QString, QList<QByteArray>> payloads;
+    QHash<QString, QByteArray> requestHeaders;
     std::function<void(const QString &)> requested;
     Server() {
         listen(QHostAddress::LocalHost);
@@ -38,10 +40,19 @@ class Server final : public QTcpServer {
                     socket->setProperty("input", input);
                     if (!input.contains("\r\n\r\n") || socket->property("answered").toBool())
                         return;
+                    const int headerEnd = input.indexOf("\r\n\r\n") + 4;
+                    int length = 0;
+                    for (const auto &line : input.left(headerEnd).split('\n'))
+                        if (line.toLower().startsWith("content-length:"))
+                            length = line.mid(15).trimmed().toInt();
+                    if (input.size() < headerEnd + length)
+                        return;
                     socket->setProperty("answered", true);
                     const auto target = QString::fromUtf8(input.split(' ').value(1));
                     requests << target;
                     const auto path = QUrl(target).path();
+                    payloads[path] << input.mid(headerEnd, length);
+                    requestHeaders[path] = input.left(headerEnd);
                     if (requested)
                         requested(path);
                     const auto body = bodies.value(path, "not found");

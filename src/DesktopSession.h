@@ -2,6 +2,7 @@
 #include "features/config/ConfigEditor.h"
 #include "features/config/ConfigLibrary.h"
 #include "features/content/ContentActions.h"
+#include "features/content/ContentIndex.h"
 #include "features/explore/BrowseCatalogue.h"
 #include "features/explore/BrowseInstalls.h"
 #include "features/launch/WorldLaunch.h"
@@ -112,6 +113,8 @@ class DesktopSession final : public QObject {
     std::shared_ptr<IBrowseSettingsStore> m_browseStore;
     std::shared_ptr<ContentVisibility> m_visibility;
     std::shared_ptr<PackReleasePolicy> m_releasePolicy;
+    QHash<QString, QString> m_reviewedIdentities;
+    std::shared_ptr<const IContentIndex> m_contentIndex;
     std::shared_ptr<const NativePackFileStore> m_fileStore;
     std::shared_ptr<ContentLockRegistry> m_contentLocks;
     std::shared_ptr<const NativeContentStore> m_contentFiles;

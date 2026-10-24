@@ -204,7 +204,7 @@ class CurseforgeInstallTests final : public QObject {
             bool done = false;
             QVariantList rows;
             QString error;
-            source.refresh({row}, "1.21.1", "fabric", [&](auto result, QString failure) {
+            source.checkUpdates({row}, "1.21.1", "fabric", {}, [&](auto result, QString failure) {
                 rows = result;
                 error = failure;
                 done = true;
@@ -240,13 +240,13 @@ class CurseforgeInstallTests final : public QObject {
                 candidate["releaseType"] = stage;
                 server.json("/mods/11/files", QJsonArray{candidate});
                 bool done = false;
-                source.refreshWithChannels(
-                    {row}, "1.21.1", "fabric", selection, [&](QVariantList rows, QString error) {
-                        QVERIFY2(error.isEmpty(), qPrintable(error));
-                        QCOMPARE(rows.first().toMap().value("updateAvailable").toBool(),
-                                 selection.contains(stages[stage - 1]));
-                        done = true;
-                    });
+                source.checkUpdates({row}, "1.21.1", "fabric", selection,
+                                    [&](QVariantList rows, QString error) {
+                                        QVERIFY2(error.isEmpty(), qPrintable(error));
+                                        QCOMPARE(rows.first().toMap().value("updateAvailable").toBool(),
+                                                 selection.contains(stages[stage - 1]));
+                                        done = true;
+                                    });
                 QTRY_VERIFY(done);
             }
         }

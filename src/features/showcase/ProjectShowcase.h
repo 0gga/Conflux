@@ -31,6 +31,7 @@ class ProjectShowcase final : public QObject {
                     std::shared_ptr<const IInstalledModIdentity> identity, QObject *parent = nullptr);
     void open(const QVariantMap &pack, const QVariantMap &file);
     void openProject(const QVariantMap &pack, const QVariantMap &project);
+    void applyInstalledMetadata(const QVariantMap &);
     void close();
     Q_INVOKABLE void selectChangelog(const QVariantMap &release);
     Q_INVOKABLE void requestChangelog(int index, bool retry = false) {
@@ -107,6 +108,7 @@ class ProjectShowcase final : public QObject {
     QVariantMap m_project;
     QString m_description, m_notice, m_filePath, m_requestKey;
     void resolve(const InstalledModIdentity &, const QVariantMap &, int generation);
+    void presentProject(const QVariantMap &, Project, const QString &error, int generation);
     QStringList m_gallery;
     QVariantList m_versions, m_descriptionBlocks;
     bool m_busy = false;

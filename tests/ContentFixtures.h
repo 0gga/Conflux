@@ -21,13 +21,31 @@ class ContentFileFixture final : public IContentFileStore {
 };
 class ContentCatalogueFixture final : public IContentCatalogue {
   public:
-    int refreshCount = 0;
-    QVariantList refreshed;
+    int refreshCount = 0, identifyCount = 0;
+    QVariantList refreshed, identified;
+    bool holdUpdates = false, holdMetadata = false;
+    IndexCallback updateCompletion, metadataCompletion;
+    QVariantMap identifiedPack;
+    std::function<QVariantList(QVariantList)> metadataTransform;
+    void identify(const QVariantMap &pack, const QVariantList &rows, IndexCallback callback,
+                  IndexProgress = {}) override {
+        ++identifyCount;
+        identified = rows;
+        identifiedPack = pack;
+        if (holdMetadata) {
+            metadataCompletion = std::move(callback);
+            return;
+        }
+        callback(metadataTransform ? metadataTransform(rows) : rows, {});
+    }
     void refresh(const QVariantList &rows, const QString &, const QString &,
                  IndexCallback callback) override {
         ++refreshCount;
         refreshed = rows;
-        callback(rows, {});
+        if (holdUpdates)
+            updateCompletion = std::move(callback);
+        else
+            callback(rows, {});
     }
     void versions(const QVariantMap &, const QString &, const QString &, VersionsCallback callback) override {
         callback({}, {});

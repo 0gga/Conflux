@@ -26,7 +26,7 @@ Requests are prioritized here; listing an idea does not mean it is implemented. 
 | P1 | Config changes in Git | Explicitly include reviewed config files in managed commits; preserve secret/unrelated-file staging guards. Current Git save remains for the pack manifest. |
 | P1 | Config change preview and restore | Show a diff before save, list timestamped backups, and restore only after an explicit action with conflict checks. |
 | P1 | GitHub sign-in and sync | OAuth, repository creation, push/pull and conflicts through UI; credentials stay outside repositories. |
-| P2 | CurseForge identification for untracked files | Add bounded provider fingerprint identification for files without verified pins or launcher source IDs. Approved-key downloads and required dependency staging use the shared content transaction. |
+| P2 | Broader verified cross-platform identity | Extend reviewed mappings for different binaries without title matching. Exact-SHA1-confirmed CurseForge fingerprints now identify untracked files and known launcher projects lacking exact pins. |
 | P2 | Dependency and incompatibility graph | Separate rules evaluate version constraints, duplicate/nested IDs, optional dependencies and explicit incompatibilities with evidence. Static results do not promise a successful game launch. |
 | P1 | Independent Conflux and CurseForge world launch | Add supported runtime/account/provider adapters, loader/Java resolution and real launch-state/error verification. Do not treat content API approval as a game-launch API. Current direct handoff supports verified Modrinth instances only. |
 | P2 | Richer mod identity and icons | Resolve nested-JAR identity/icons and verified provider artwork; retain a clear generic fallback. Cache with size limits and invalidation. |
@@ -40,7 +40,7 @@ Requests are prioritized here; listing an idea does not mean it is implemented. 
 
 ## Content follow-ups
 
-- Extend provider identification to untracked CurseForge-only files and broader independently verified cross-platform links. Known CurseForge pins now support approved-key installs, compatible update checks and version selection; exact shared file hashes merge catalogue entries. Different binaries require another verified mapping. Actual Minecraft execution remains separate from content API validation.
+- Extend broader independently verified cross-platform links. CurseForge-only files now resolve through bounded fingerprints with published SHA1 confirmation and a persistent metadata index. Known pins support approved-key installs, compatible update checks and version selection; exact shared file hashes merge catalogue entries. Different binaries require another verified mapping. Actual Minecraft execution remains separate from content API validation.
 - Add safe folder-pack identity/mutations and cross-type required asset dependency planning and crash-durable multi-file recovery. Mixed known stable ZIP/mod commands now stage together and roll back handled commit failures; individual verified Modrinth ZIP install/version selection is implemented; this does not imply a universal shader-settings adapter.
 - Add shared Git freeze-policy files, richer update channels and backup restore/retention UI. Current freeze preferences are local.
 - Add full NBT world names/metadata and game-process observation; handing a URL to a launcher is not proof of a successful game launch.
@@ -106,7 +106,7 @@ These are ideas, not delivered features or additional owner requirements.
 
 | Priority | Improvement | Acceptance criteria | State |
 | --- | --- | --- | --- |
-| P1 | Persistent installed-content metadata index | Resolve exact project/author/tag metadata once on first load or installation, persist across sessions in SQLite, identify changed files by hash, publish metadata before update checks and keep failed lookups retryable. Include CurseForge-only known identities. | In progress; owner requested24 Oct2026 |
+| P1 | Persistent installed-content metadata index | Resolve exact project/author/tag metadata once on first load or installation, persist across sessions in SQLite, identify changed files by hash, publish metadata before update checks and keep failed lookups retryable. Include CurseForge-only known identities. | Delivered; 35 suites and packaged smoke pass |
 | P1 | Loaded instance filter budgets | Reuse prepared search/filter/sort/author state; remove repeated model key scans, preserve persistent/duplicate identities and verify real rendered filtering without new catalogue reads. | Delivered; 33 suites and packaged smoke pass |
 | P1 | Post-commit inventory recovery | Keep a verified committed install successful if a later inventory read fails; show separate verification diagnostics, preserve known state and block unsafe follow-up writes until a fresh read succeeds. | Backlogged |
 | P1 | Optional dependency overlay | After initial installation, offer declared optional dependencies in a focused overlay with per-item Install actions and a Settings toggle. Required dependencies remain automatic; optional failures never undo installed content. | Backlogged; owner requested24 Oct2026 |

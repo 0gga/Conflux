@@ -1,5 +1,6 @@
 #pragma once
 #include "features/content/ContentPorts.h"
+#include "platform/ContentMetadataSource.h"
 #include "services/CatalogueClient.h"
 #include <QNetworkAccessManager>
 namespace studio {
@@ -7,7 +8,12 @@ class ContentCatalogue final : public QObject, public IContentCatalogue {
     Q_OBJECT
   public:
     explicit ContentCatalogue(QObject *parent = nullptr, QUrl api = QUrl("https://api.modrinth.com/v2/"),
-                              QUrl curseforgeApi = QUrl("https://api.curseforge.com/v1/"));
+                              QUrl curseforgeApi = QUrl("https://api.curseforge.com/v1/"),
+                              std::shared_ptr<const IContentIndex> index = {},
+                              QHash<QString, QString> reviewedIdentities = {});
+    void identify(const QVariantMap &, const QVariantList &, IndexCallback, IndexProgress = {}) override;
+    void checkUpdates(const QVariantList &, const QString &, const QString &, const QStringList &,
+                      IndexCallback) override;
     void refresh(const QVariantList &, const QString &, const QString &, IndexCallback) override;
     void refreshWithChannels(const QVariantList &, const QString &, const QString &, const QStringList &,
                              IndexCallback) override;
@@ -16,6 +22,7 @@ class ContentCatalogue final : public QObject, public IContentCatalogue {
     void setCurseforgeKey(const QByteArray &key) override {
         m_client.setCurseforgeKey(key);
         m_versionClient.setCurseforgeKey(key);
+        m_metadata.setCurseforgeKey(key);
     }
 
   private:
@@ -25,6 +32,7 @@ class ContentCatalogue final : public QObject, public IContentCatalogue {
                            const QStringList &);
     QNetworkAccessManager m_network;
     QUrl m_api;
+    ContentMetadataSource m_metadata;
     CatalogueClient m_client, m_versionClient;
     int m_generation = 0;
     QHash<int, VersionsCallback> m_versions;

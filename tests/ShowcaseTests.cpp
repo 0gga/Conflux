@@ -23,10 +23,12 @@ class ShowcaseFixture final : public IProjectShowcaseSource {
     QList<ResolveCallback> pending;
     DetailCallback detail;
     QString requestedGame, requestedLoader;
+    int loads = 0;
     void resolve(const InstalledModIdentity &, ResolveCallback callback) override {
         pending << std::move(callback);
     }
     void load(const Project &, const QString &game, const QString &loader, DetailCallback callback) override {
+        ++loads;
         requestedGame = game;
         requestedLoader = loader;
         detail = std::move(callback);
@@ -54,6 +56,91 @@ class ShowcaseTests : public QObject {
         QCOMPARE(file.write(data), data.size());
     }
   private slots:
+    void cachedInstalledMetadataOpensWithoutAnotherIdentityRequest() {
+        auto source = std::make_shared<ShowcaseFixture>();
+        ProjectShowcase showcase(source, std::make_shared<IdentityFixture>());
+        const QVariantList authors{
+            QVariantMap{{"name", "Alice"}, {"ids", QVariantMap{{"modrinth", "alice-id"}}}}};
+        const QVariantMap row{{"provider", "modrinth"},
+                              {"id", "project"},
+                              {"title", "Cached project"},
+                              {"sourceIds", QVariantMap{{"modrinth", "project"}}},
+                              {"sha1", QString(40, 'a')},
+                              {"metadataSha1", QString(40, 'a')},
+                              {"metadataResolved", true},
+                              {"relativePath", "mods/example.jar"},
+                              {"author", "Alice"},
+                              {"authors", authors},
+                              {"type", "mod"}};
+        QSignalSpy changed(&showcase, &ProjectShowcase::changed);
+        showcase.openProject({}, row);
+        QCOMPARE(source->pending.size(), 0);
+        QCOMPARE(source->loads, 1);
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(showcase.filePath(), "mods/example.jar");
+        QCOMPARE(showcase.project().value("authors").toList(), authors);
+        auto updated = row;
+        updated["author"] = "Bob";
+        updated["authors"] =
+            QVariantList{QVariantMap{{"name", "Bob"}, {"ids", QVariantMap{{"modrinth", "bob-id"}}}}};
+        showcase.applyInstalledMetadata(updated);
+        QCOMPARE(showcase.project().value("author").toString(), "Bob");
+        QCOMPARE(source->loads, 1);
+        updated["sourceIds"] = QVariantMap{{"modrinth", "unrelated"}};
+        updated["author"] = "Wrong author";
+        showcase.applyInstalledMetadata(updated);
+        QCOMPARE(showcase.project().value("author").toString(), "Bob");
+    }
+    void incompleteOrConflictingCachedMetadataStillResolves_data() {
+        QTest::addColumn<QString>("fault");
+        for (const auto &fault : {"unresolved", "hash", "identity", "provider", "proof"})
+            QTest::newRow(fault) << QString(fault);
+    }
+    void incompleteOrConflictingCachedMetadataStillResolves() {
+        QFETCH(QString, fault);
+        auto source = std::make_shared<ShowcaseFixture>();
+        ProjectShowcase showcase(source, std::make_shared<IdentityFixture>());
+        QVariantMap row{{"provider", "modrinth"},
+                        {"id", "project"},
+                        {"sha1", QString(40, 'a')},
+                        {"metadataSha1", QString(40, 'a')},
+                        {"sourceIds", QVariantMap{{"modrinth", "project"}}},
+                        {"metadataResolved", true}};
+        if (fault == "unresolved")
+            row["metadataResolved"] = false;
+        if (fault == "hash")
+            row["sha1"] = "invalid";
+        if (fault == "identity")
+            row["sourceIds"] = QVariantMap{{"modrinth", "other"}};
+        if (fault == "proof")
+            row["metadataSha1"] = QString(40, 'b');
+        if (fault == "provider")
+            row["provider"] = "unknown";
+        showcase.openProject({}, row);
+        QCOMPARE(source->pending.size(), 1);
+        QCOMPARE(source->loads, 0);
+    }
+    void closingDuringCachedPublicationDoesNotStartObsoleteDetails() {
+        auto source = std::make_shared<ShowcaseFixture>();
+        ProjectShowcase showcase(source, std::make_shared<IdentityFixture>());
+        bool closed = false;
+        connect(&showcase, &ProjectShowcase::changed, &showcase, [&] {
+            if (!closed) {
+                closed = true;
+                showcase.close();
+            }
+        });
+        showcase.openProject({}, {{"provider", "modrinth"},
+                                  {"id", "project"},
+                                  {"sha1", QString(40, 'a')},
+                                  {"metadataSha1", QString(40, 'a')},
+                                  {"sourceIds", QVariantMap{{"modrinth", "project"}}},
+                                  {"metadataResolved", true}});
+        QVERIFY(closed);
+        QVERIFY(showcase.requestKey().isEmpty());
+        QVERIFY(!showcase.busy());
+        QCOMPARE(source->loads, 0);
+    }
     void platformCountsOnlyIncludeAvailablePlatforms() {
         ReleaseFilters filters;
         const QVariantMap release{{"provider", "modrinth"},

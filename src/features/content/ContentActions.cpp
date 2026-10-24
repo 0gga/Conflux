@@ -159,20 +159,6 @@ void ContentActions::refresh(bool checkUpdates) {
                 m_sourceLocks.remember(state.pack);
                 ++m_lockRevision;
                 auto result = reconcileContentRows(rows, previous);
-                QVariantList unidentified;
-                QSet<QPair<QString, QString>> knownFiles;
-                for (const auto &value : previous) {
-                    const auto row = value.toMap();
-                    knownFiles.insert({row.value("category").toString(), row.value("sha1").toString()});
-                }
-                for (const auto &value : result) {
-                    const auto row = value.toMap();
-                    const auto key =
-                        qMakePair(row.value("category").toString(), row.value("sha1").toString());
-                    if (!knownFiles.contains(key) || (row.value("sourceIds").toMap().isEmpty() &&
-                                                      row.value("installedRelease").toMap().isEmpty()))
-                        unidentified << row;
-                }
                 const auto done = [guard, generation, checkUpdates](QVariantList rows, QString error) {
                     if (!guard || generation != guard->m_generation)
                         return;
@@ -183,6 +169,8 @@ void ContentActions::refresh(bool checkUpdates) {
                     guard->m_notice = error;
                     guard->m_activity = error.isEmpty() ? "idle" : "error";
                     guard->applyPreferences();
+                    guard->storeState(guard->m_pack.value("path").toString(),
+                                      {guard->m_pack, guard->m_rows, {}});
                     QSet<QString> available;
                     for (const auto &value : rows)
                         available.insert(value.toMap().value("relativePath").toString());
@@ -196,38 +184,50 @@ void ContentActions::refresh(bool checkUpdates) {
                 m_rows = reconcileContentRows(result, previous);
                 applyPreferences();
                 emit changed();
-                if (checkUpdates || !unidentified.isEmpty()) {
-                    const auto lookup = checkUpdates ? result : unidentified;
-                    m_catalogue->refreshWithChannels(
-                        lookup, m_pack.value("minecraft").toString(),
-                        compatibleLoaders(m_pack.value("loader").toString(), result).join('|'),
-                        m_releasePolicy ? m_releasePolicy->channels(m_pack.value("path").toString())
-                                        : QStringList{},
-                        [done, result, checkUpdates](QVariantList indexed, QString error) mutable {
-                            if (checkUpdates) {
-                                done(indexed, error);
-                                return;
-                            }
-                            QHash<QPair<QString, QString>, QVariantMap> indexedByPath;
-                            indexedByPath.reserve(indexed.size());
-                            for (const auto &entry : indexed) {
-                                const auto row = entry.toMap();
-                                const auto key = qMakePair(row.value("relativePath").toString(),
-                                                           row.value("sha1").toString());
-                                if (!indexedByPath.contains(key))
-                                    indexedByPath.insert(key, row);
-                            }
-                            for (auto &value : result) {
-                                const auto row = value.toMap();
-                                const auto item = indexedByPath.constFind(qMakePair(
-                                    row.value("relativePath").toString(), row.value("sha1").toString()));
-                                if (item != indexedByPath.cend())
-                                    value = *item;
-                            }
-                            done(result, error);
-                        });
-                } else
-                    done(result, {});
+                if (!guard || generation != guard->m_generation)
+                    return;
+                const auto requestedPack = m_pack;
+                const auto lastPublished = std::make_shared<QVariantList>(result);
+                const auto progress = [guard, generation, lastPublished](QVariantList indexed) {
+                    if (!guard || generation != guard->m_generation)
+                        return;
+                    if (indexed == *lastPublished)
+                        return;
+                    *lastPublished = indexed;
+                    guard->m_rows = reconcileContentRows(indexed, guard->m_rows, {}, true);
+                    guard->applyPreferences();
+                    emit guard->changed();
+                };
+                m_catalogue->identify(
+                    requestedPack, result,
+                    [guard, generation, requestedPack, checkUpdates, done, progress](QVariantList indexed,
+                                                                                     QString metadataError) {
+                        if (!guard || generation != guard->m_generation)
+                            return;
+                        if (!checkUpdates) {
+                            done(std::move(indexed), metadataError);
+                            return;
+                        }
+                        // Publish identities/authors before independent provider update requests.
+                        progress(indexed);
+                        if (!guard || generation != guard->m_generation)
+                            return;
+                        guard->m_catalogue->checkUpdates(
+                            indexed, requestedPack.value("minecraft").toString(),
+                            compatibleLoaders(requestedPack.value("loader").toString(), indexed).join('|'),
+                            guard->m_releasePolicy
+                                ? guard->m_releasePolicy->channels(requestedPack.value("path").toString())
+                                : QStringList{},
+                            [done, metadataError](QVariantList updated, QString updateError) {
+                                QStringList errors;
+                                if (!metadataError.isEmpty())
+                                    errors << metadataError;
+                                if (!updateError.isEmpty())
+                                    errors << updateError;
+                                done(std::move(updated), errors.join('\n'));
+                            });
+                    },
+                    progress);
             });
     watcher->setFuture(QtConcurrent::run([files, pack, inventory] {
         try {
@@ -695,6 +695,32 @@ void ContentActions::completeOperation(ContentOperation operation, ContentWriteR
     m_activeOperationId = 0;
     ++m_lockRevision;
     publishProjection();
+    if ((result.ok || result.changed) &&
+        (operation.kind == ContentOperation::Install || operation.kind == ContentOperation::Import)) {
+        // Cache verified installation results even when the user leaves this instance.
+        // This read-only work is independent of the mutation queue's completion.
+        const QPointer<ContentActions> guard(this);
+        m_catalogue->identify(
+            current.pack, current.rows,
+            [guard, path = operation.packPath, snapshot = current.rows](QVariantList indexed, QString error) {
+                if (!guard)
+                    return;
+                auto accepted = guard->m_states.value(path);
+                if (accepted.rows != snapshot)
+                    return;
+                accepted.rows = std::move(indexed);
+                guard->storeState(path, std::move(accepted));
+                if (guard->m_pack.value("path").toString() == path) {
+                    guard->publishProjection();
+                    if (!guard)
+                        return;
+                    if (!error.isEmpty()) {
+                        guard->m_notice = error;
+                        emit guard->operationFailed(error);
+                    }
+                }
+            });
+    }
     done();
 }
 void ContentActions::setEnabled(const QString &path, bool value) {

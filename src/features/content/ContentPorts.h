@@ -45,12 +45,21 @@ class IContentFileStore {
 class IContentCatalogue {
   public:
     using IndexCallback = std::function<void(QVariantList, QString)>;
+    using IndexProgress = std::function<void(QVariantList)>;
     using VersionsCallback = std::function<void(QVector<Release>, QString)>;
     virtual ~IContentCatalogue() = default;
+    virtual void identify(const QVariantMap &, const QVariantList &rows, IndexCallback callback,
+                          IndexProgress = {}) {
+        callback(rows, {});
+    }
     virtual void refresh(const QVariantList &, const QString &, const QString &, IndexCallback) = 0;
     virtual void refreshWithChannels(const QVariantList &rows, const QString &game, const QString &loader,
                                      const QStringList &, IndexCallback callback) {
         refresh(rows, game, loader, std::move(callback));
+    }
+    virtual void checkUpdates(const QVariantList &rows, const QString &game, const QString &loader,
+                              const QStringList &channels, IndexCallback callback) {
+        refreshWithChannels(rows, game, loader, channels, std::move(callback));
     }
     virtual void versions(const QVariantMap &, const QString &, const QString &, VersionsCallback) = 0;
     virtual void cancelVersions() {}

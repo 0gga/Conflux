@@ -11,9 +11,12 @@
 #include <memory>
 namespace studio {
 
-ContentCatalogue::ContentCatalogue(QObject *parent, QUrl api, QUrl curseforgeApi)
-    : QObject(parent), m_network(this), m_api(std::move(api)), m_client(this, m_api, curseforgeApi),
-      m_versionClient(this, m_api, curseforgeApi) {
+ContentCatalogue::ContentCatalogue(QObject *parent, QUrl api, QUrl curseforgeApi,
+                                   std::shared_ptr<const IContentIndex> index,
+                                   QHash<QString, QString> reviewedIdentities)
+    : QObject(parent), m_network(this), m_api(std::move(api)),
+      m_metadata(std::move(index), this, m_api, curseforgeApi, std::move(reviewedIdentities)),
+      m_client(this, m_api, curseforgeApi), m_versionClient(this, m_api, curseforgeApi) {
     setCurseforgeKey(qgetenv("CURSEFORGE_API_KEY"));
     connect(&m_versionClient, &CatalogueClient::detailFinished, this,
             [this](int generation, const ProjectDetail &detail) {
@@ -52,230 +55,134 @@ void ContentCatalogue::refresh(const QVariantList &input, const QString &game, c
                                IndexCallback complete) {
     refreshWithChannels(input, game, loader, {}, std::move(complete));
 }
+void ContentCatalogue::identify(const QVariantMap &pack, const QVariantList &rows, IndexCallback callback,
+                                IndexProgress progress) {
+    m_metadata.resolve(pack, rows, std::move(callback), std::move(progress));
+}
 void ContentCatalogue::refreshWithChannels(const QVariantList &input, const QString &game,
                                            const QString &loader, const QStringList &selection,
-                                           IndexCallback complete) {
-    const IndexCallback callback = [this, game, loader, complete, selection](QVariantList rows,
-                                                                             QString error) {
-        refreshCurseforge(std::move(rows), game, loader, complete, error, selection);
+                                           IndexCallback callback) {
+    const QPointer<ContentCatalogue> guard(this);
+    identify({}, input, [guard, game, loader, selection, callback](QVariantList rows, QString metadataError) {
+        if (!guard)
+            return;
+        guard->checkUpdates(rows, game, loader, selection,
+                            [callback, metadataError](QVariantList updated, QString updateError) {
+                                QStringList errors;
+                                if (!metadataError.isEmpty())
+                                    errors << metadataError;
+                                if (!updateError.isEmpty())
+                                    errors << updateError;
+                                callback(std::move(updated), errors.join('\n'));
+                            });
+    });
+}
+void ContentCatalogue::checkUpdates(const QVariantList &input, const QString &game, const QString &loader,
+                                    const QStringList &selection, IndexCallback callback) {
+    struct Group {
+        QString category;
+        QStringList loaders, channels;
+        QJsonArray hashes;
+        QSet<QString> seen;
     };
     struct Batch {
         QVariantList rows;
-        QJsonObject installed, latest, projects;
         QStringList errors;
+        int pending = 0;
     };
     auto batch = std::make_shared<Batch>();
     batch->rows = input;
-    QJsonArray hashes;
-    for (const auto &value : input) {
-        const auto row = value.toMap();
-        if (!row.value("sha1").toString().isEmpty())
-            hashes << row.value("sha1").toString();
+    QMap<QString, Group> groups;
+    const auto allowedChannels = effectiveReleaseStages(selection);
+    for (auto &value : batch->rows) {
+        auto row = value.toMap();
+        row["updateAvailable"] = false;
+        row.remove("updateRelease");
+        value = row;
+        const auto hash = row.value("sha1").toString();
+        const auto installed = releaseFromVariant(row.value("installedRelease").toMap());
+        if (game.isEmpty() || installed.provider != "modrinth" || installed.projectId.isEmpty() ||
+            installed.sha1.compare(hash, Qt::CaseInsensitive) || row.value("directory").toBool())
+            continue;
+        const auto category = row.value("category").toString();
+        QStringList loaders;
+        if (category == "mods") {
+            const auto permitted = loader.split('|', Qt::SkipEmptyParts);
+            for (const auto &candidate : permitted)
+                if (candidate != "vanilla" && installed.loaders.contains(candidate))
+                    loaders << candidate;
+            if (!permitted.isEmpty() && loaders.contains(permitted.first()))
+                loaders = {permitted.first()};
+        } else if (category == "datapacks")
+            loaders = {"datapack"};
+        else if (category == "resourcepacks")
+            loaders = {"minecraft"};
+        else if (category == "shaderpacks")
+            loaders = installed.loaders;
+        if (loaders.isEmpty())
+            continue;
+        loaders.sort();
+        const auto key = category + '|' + loaders.join('|') + '|' + allowedChannels.join(',');
+        auto &group = groups[key];
+        group.category = category;
+        group.loaders = loaders;
+        group.channels = allowedChannels;
+        if (!group.seen.contains(hash)) {
+            group.seen.insert(hash);
+            group.hashes << hash;
+        }
     }
-    if (hashes.isEmpty()) {
-        callback(input, {});
+    const QPointer<ContentCatalogue> guard(this);
+    auto finish = [guard, batch, game, loader, selection, callback] {
+        if (guard)
+            guard->refreshCurseforge(batch->rows, game, loader, callback, batch->errors.join('\n'),
+                                     selection);
+    };
+    if (groups.isEmpty()) {
+        finish();
         return;
     }
-    QJsonObject body{{"hashes", hashes}, {"algorithm", "sha1"}};
-    request("version_files", &body,
-            [this, batch, game, loader, hashes, callback, selection](const QJsonDocument &doc,
-                                                                     const QString &error) {
-                if (!error.isEmpty())
-                    batch->errors << "Identification: " + error;
-                batch->installed = doc.object();
-                QJsonArray ids;
-                for (const auto &version : batch->installed) {
-                    const auto id = version.toObject().value("project_id");
-                    if (!ids.contains(id))
-                        ids << id;
-                }
-                const auto finish = [batch, callback](const QJsonObject &teams) {
-                    for (int index = 0; index < batch->rows.size(); ++index) {
-                        auto row = batch->rows.at(index).toMap();
-                        row["updateAvailable"] = false;
-                        row.remove("updateRelease");
-                        const auto hash = row.value("sha1").toString();
-                        const auto installed = batch->installed.value(hash).toObject();
-                        if (!installed.isEmpty()) {
-                            const auto id = installed.value("project_id").toString();
-                            auto sources = row.value("sourceIds").toMap();
-                            sources["modrinth"] = id;
-                            row["sourceIds"] = sources;
-                            row["provider"] = "modrinth";
-                            row["projectId"] = id;
-                            row["external"] = false;
-                            row["installedRelease"] = modrinthRelease(installed, hash).toVariant();
-                            row["version"] = installed.value("version_number").toString();
-                            const auto project = batch->projects.value(id).toObject();
-                            row["projectUrl"] = "https://modrinth.com/" +
-                                                categoryType(row.value("category").toString()) + "/" + id;
-                            if (!project.isEmpty()) {
-                                row["title"] = project.value("title").toString(row.value("title").toString());
-                                if (!project.value("icon_url").toString().isEmpty())
-                                    row["icon"] = project.value("icon_url");
-                                const auto license =
-                                    project.value("license").toObject().value("id").toString();
-                                row["openSource"] = isKnownOpenSourceLicense(license);
-                                const auto environments = project.value("environment").toArray();
-                                if (environments.contains("client_only") ||
-                                    environments.contains("client_only_server_optional") ||
-                                    environments.contains("singleplayer_only"))
-                                    row["environment"] = "client";
-                                else if (environments.contains("server_only") ||
-                                         environments.contains("dedicated_server_only") ||
-                                         environments.contains("server_only_client_optional"))
-                                    row["environment"] = "server";
-                                else if (environments.contains("client_and_server") ||
-                                         environments.contains("client_or_server") ||
-                                         environments.contains("client_or_server_prefers_both"))
-                                    row["environment"] = "both";
-                                else if (!project.value("client_side").toString().isEmpty() &&
-                                         !project.value("server_side").toString().isEmpty()) {
-                                    const bool client = project.value("client_side") != "unsupported",
-                                               server = project.value("server_side") != "unsupported";
-                                    row["environment"] = client && server ? "both"
-                                                         : client         ? "client"
-                                                         : server         ? "server"
-                                                                          : "unknown";
-                                } else if (!environments.isEmpty())
-                                    row["environment"] = "unknown";
-                                const auto authors = ProjectAuthors::modrinthTeam(
-                                    teams.value(project.value("team").toString()).toArray());
-                                if (!authors.isEmpty()) {
-                                    QStringList names;
-                                    for (const auto &author : authors)
-                                        names << author.toMap().value("name").toString();
-                                    row["authors"] = authors;
-                                    row["author"] = names.join(", ");
-                                    row["authorIcon"] = authors.first().toMap().value("icon");
-                                    row["authorIds"] = authors.first().toMap().value("ids");
-                                }
-                            }
-                            const auto latest =
-                                batch->latest.value(hash + '|' + row.value("category").toString()).toObject();
-                            if (!latest.isEmpty() &&
-                                latest.value("project_id") == installed.value("project_id")) {
-                                row["updateRelease"] = modrinthRelease(latest).toVariant();
-                                row["updateAvailable"] =
-                                    isNewerRelease(modrinthRelease(installed, hash), modrinthRelease(latest));
+    for (const auto &group : groups)
+        batch->pending += (group.hashes.size() + 499) / 500;
+    for (const auto &group : groups)
+        for (int start = 0; start < group.hashes.size(); start += 500) {
+            QJsonArray hashes;
+            for (int i = start; i < qMin(start + 500, int(group.hashes.size())); ++i)
+                hashes << group.hashes[i];
+            QJsonObject body{{"hashes", hashes},
+                             {"algorithm", "sha1"},
+                             {"game_versions", QJsonArray{game}},
+                             {"loaders", QJsonArray::fromStringList(group.loaders)},
+                             {"version_types", QJsonArray::fromStringList(group.channels)}};
+            request("version_files/update", &body,
+                    [batch, finish, hashes, group, game](QJsonDocument document, QString error) {
+                        if (!error.isEmpty())
+                            batch->errors << "Update check: " + error;
+                        const auto values = document.object();
+                        for (auto &value : batch->rows) {
+                            auto row = value.toMap();
+                            const auto hash = row.value("sha1").toString();
+                            if (row.value("category") != group.category || !hashes.contains(hash))
+                                continue;
+                            const auto installed = releaseFromVariant(row.value("installedRelease").toMap());
+                            const auto candidate = modrinthRelease(values.value(hash).toObject());
+                            if (candidate.projectId == installed.projectId &&
+                                group.channels.contains(candidate.channel) &&
+                                candidate.gameVersions.contains(game) &&
+                                sharesLoader(candidate.loaders, group.loaders) &&
+                                candidate.filename.endsWith(group.category == "mods" ? ".jar" : ".zip",
+                                                            Qt::CaseInsensitive) &&
+                                !candidate.url.isEmpty() && !candidate.sha1.isEmpty() &&
+                                isNewerRelease(installed, candidate)) {
+                                row["updateAvailable"] = true;
+                                row["updateRelease"] = candidate.toVariant();
+                                value = row;
                             }
                         }
-                        batch->rows[index] = row;
-                    }
-                    callback(batch->rows, batch->errors.join('\n'));
-                };
-                auto loadMetadata = [this, batch, ids, finish] {
-                    if (ids.isEmpty()) {
-                        finish({});
-                        return;
-                    }
-                    const auto encoded = QString::fromLatin1(QUrl::toPercentEncoding(
-                        QString::fromUtf8(QJsonDocument(ids).toJson(QJsonDocument::Compact))));
-                    request("projects?ids=" + encoded, nullptr,
-                            [this, batch, finish](const QJsonDocument &projects, const QString &error) {
-                                if (!error.isEmpty())
-                                    batch->errors << "Project metadata: " + error;
-                                QJsonArray teams;
-                                for (const auto &value : projects.array()) {
-                                    const auto project = value.toObject();
-                                    batch->projects[project.value("id").toString()] = project;
-                                    if (!teams.contains(project.value("team")))
-                                        teams << project.value("team");
-                                }
-                                if (teams.isEmpty()) {
-                                    finish({});
-                                    return;
-                                }
-                                const auto encoded = QString::fromLatin1(QUrl::toPercentEncoding(
-                                    QString::fromUtf8(QJsonDocument(teams).toJson(QJsonDocument::Compact))));
-                                request("teams?ids=" + encoded, nullptr,
-                                        [batch, finish](const QJsonDocument &members, const QString &error) {
-                                            if (!error.isEmpty())
-                                                batch->errors << "Authors: " + error;
-                                            QJsonObject teams;
-                                            for (const auto &team : members.array())
-                                                for (const auto &value : team.toArray()) {
-                                                    const auto member = value.toObject();
-                                                    const auto id = member.value("team_id").toString();
-                                                    auto roster = teams.value(id).toArray();
-                                                    roster << member;
-                                                    teams[id] = roster;
-                                                }
-                                            finish(teams);
-                                        });
-                            });
-                };
-                QMap<QString, QJsonArray> groups;
-                QMap<QString, QStringList> permitted, channels;
-                if (!game.isEmpty())
-                    for (const auto &value : batch->rows) {
-                        const auto row = value.toMap();
-                        const auto hash = row.value("sha1").toString();
-                        const auto installed = batch->installed.value(hash).toObject();
-                        if (installed.isEmpty() || row.value("directory").toBool())
-                            continue;
-                        const auto category = row.value("category").toString();
-                        QStringList loaders;
-                        if (category == "mods") {
-                            const auto permitted = loader.split('|', Qt::SkipEmptyParts);
-                            const auto installedLoaders = modrinthRelease(installed, hash).loaders;
-                            // Automatic updates keep the installed edition. Connector expands discovery
-                            // compatibility, but must not switch a native mod to its Fabric upload.
-                            for (const auto &candidate : permitted)
-                                if (candidate != "vanilla" && installedLoaders.contains(candidate))
-                                    loaders << candidate;
-                            if (!permitted.isEmpty() && loaders.contains(permitted.first()))
-                                loaders = {permitted.first()};
-                        } else if (category == "datapacks")
-                            loaders = {"datapack"};
-                        else if (category == "resourcepacks")
-                            loaders = {"minecraft"};
-                        else if (category == "shaderpacks")
-                            loaders = modrinthRelease(installed, hash).loaders;
-                        if (loaders.isEmpty())
-                            continue;
-                        loaders.sort();
-                        const auto allowedChannels = effectiveReleaseStages(selection);
-                        const auto key = category + '|' + loaders.join('|') + '|' + allowedChannels.join(',');
-                        channels[key] = allowedChannels;
-                        if (!groups[key].contains(hash))
-                            groups[key] << hash;
-                        permitted[key] = loaders;
-                    }
-                if (groups.isEmpty()) {
-                    loadMetadata();
-                    return;
-                }
-                auto pending = std::make_shared<int>(groups.size());
-                for (auto it = groups.cbegin(); it != groups.cend(); ++it) {
-                    const auto category = it.key().section('|', 0, 0);
-                    const auto loaders = permitted.value(it.key());
-                    const auto allowedChannels = channels.value(it.key());
-                    QJsonObject updates{{"hashes", it.value()},
-                                        {"algorithm", "sha1"},
-                                        {"game_versions", QJsonArray{game}},
-                                        {"loaders", QJsonArray::fromStringList(loaders)},
-                                        {"version_types", QJsonArray::fromStringList(allowedChannels)}};
-                    request("version_files/update", &updates,
-                            [batch, loadMetadata, pending, category, loaders, game,
-                             allowedChannels](const QJsonDocument &doc, const QString &error) {
-                                if (!error.isEmpty())
-                                    batch->errors << "Update check: " + error;
-                                const auto values = doc.object();
-                                for (auto it = values.begin(); it != values.end(); ++it) {
-                                    const auto release = modrinthRelease(it.value().toObject());
-                                    const auto extension = category == "mods" ? ".jar" : ".zip";
-                                    if (allowedChannels.contains(release.channel) &&
-                                        release.gameVersions.contains(game) &&
-                                        sharesLoader(release.loaders, loaders) &&
-                                        release.filename.endsWith(extension, Qt::CaseInsensitive))
-                                        batch->latest[it.key() + '|' + category] = it.value();
-                                }
-                                if (--*pending == 0)
-                                    loadMetadata();
-                            });
-                }
-            });
+                        if (--batch->pending == 0)
+                            finish();
+                    });
+        }
 }
 void ContentCatalogue::refreshCurseforge(QVariantList rows, const QString &game, const QString &loader,
                                          IndexCallback callback, const QString &previousError,

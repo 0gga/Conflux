@@ -9,13 +9,21 @@
 #include "platform/InstanceProcessSource.h"
 #include "platform/LauncherContentLocks.h"
 #include "platform/ReviewedProjectIdentities.h"
+#include "platform/SqliteContentIndex.h"
 #include "platform/WorldLaunchAdapters.h"
 #include "services/ContentCatalogue.h"
+#include <QFileInfo>
+#include <QStandardPaths>
 namespace studio {
 DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString backupRoot)
     : QObject(parent), m_browseStore(std::make_shared<BrowseSettingsStore>(settingsFile)),
       m_visibility(std::make_shared<ContentVisibility>(m_browseStore)),
       m_releasePolicy(std::make_shared<PackReleasePolicy>(m_browseStore)),
+      m_reviewedIdentities(ReviewedProjectIdentities::load()),
+      m_contentIndex(std::make_shared<SqliteContentIndex>(
+          (settingsFile.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
+                                  : QFileInfo(settingsFile).absolutePath()) +
+          "/content-index.sqlite3")),
       m_fileStore(std::make_shared<NativePackFileStore>(backupRoot)),
       m_contentLocks(std::make_shared<ContentLockRegistry>()),
       m_contentFiles(std::make_shared<NativeContentStore>(
@@ -36,11 +44,18 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
                m_fileStore, this),
       m_showcase(std::make_shared<CatalogueShowcaseSource>(),
                  std::make_shared<NativeInstalledModIdentity>(m_fileStore), this),
-      m_content(m_contentFiles, std::make_shared<ContentCatalogue>(), m_dependencyInstaller,
-                std::make_shared<SettingsContentPreferences>(settingsFile), this),
-      m_browse(std::make_shared<ContentCatalogue>(), this), m_browsePreferences(m_browseStore, this),
+      m_content(m_contentFiles,
+                std::make_shared<ContentCatalogue>(nullptr, QUrl("https://api.modrinth.com/v2/"),
+                                                   QUrl("https://api.curseforge.com/v1/"), m_contentIndex,
+                                                   m_reviewedIdentities),
+                m_dependencyInstaller, std::make_shared<SettingsContentPreferences>(settingsFile), this),
+      m_browse(std::make_shared<ContentCatalogue>(nullptr, QUrl("https://api.modrinth.com/v2/"),
+                                                  QUrl("https://api.curseforge.com/v1/"), m_contentIndex,
+                                                  m_reviewedIdentities),
+               this),
+      m_browsePreferences(m_browseStore, this),
       m_catalogue(std::make_shared<TolerantCatalogueSearch>(std::make_shared<CatalogueClient>()),
-                  m_visibility, ReviewedProjectIdentities::load(),
+                  m_visibility, m_reviewedIdentities,
                   std::make_shared<BrowseFilterPreferences>(m_browseStore), this),
       m_changes(this) {
     m_content.setReleasePolicy(m_releasePolicy);
@@ -96,6 +111,14 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
     connect(&m_content, &ContentActions::changed, this, [this] {
         m_browse.setContext(m_workspace.pack(), m_content.inventory(),
                             m_content.inventory().isEmpty() && (m_content.busy() || m_workspace.busy()));
+        for (const auto &value : m_content.inventory()) {
+            const auto row = value.toMap();
+            if (!m_showcase.filePath().isEmpty() &&
+                row.value("relativePath").toString() == m_showcase.filePath()) {
+                m_showcase.applyInstalledMetadata(row);
+                break;
+            }
+        }
     });
 
     connect(&m_navigation, &NavigationHistory::changed, this, &DesktopSession::activateRoute);
@@ -165,11 +188,10 @@ void DesktopSession::activateRoute() {
         }
         const auto path = route.value("modPath").toString();
         if (!path.isEmpty() && m_showcase.filePath() != path) {
-            bool pending = false;
+            bool resolvedProject = false;
             for (const auto &value : m_content.inventory()) {
                 const auto row = value.toMap();
-                if (row.value("relativePath") == path && row.value("pending").toBool() &&
-                    !row.value("projectId").toString().isEmpty()) {
+                if (row.value("relativePath") == path && !row.value("projectId").toString().isEmpty()) {
                     auto project = row;
                     project["id"] = row.value("projectId");
                     project["type"] = categoryType(row.value("category").toString());
@@ -177,11 +199,11 @@ void DesktopSession::activateRoute() {
                         project.value("provider").toString() + ':' + project.value("id").toString();
                     if (m_showcase.requestKey() != key)
                         m_showcase.openProject(pack, project);
-                    pending = true;
+                    resolvedProject = true;
                     break;
                 }
             }
-            if (pending)
+            if (resolvedProject)
                 return;
             for (const auto &item : m_workspace.files()) {
                 const auto file = item.toMap();

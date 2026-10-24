@@ -326,14 +326,26 @@ void ContentActions::hide(const QString &path, bool hidden) {
 }
 void ContentActions::setFilter(const QString &key, const QVariant &value) {
     if (m_filters.contains(key)) {
+        if (QStringList{"author", "environment", "state"}.contains(key)) {
+            if (value.metaType().id() != QMetaType::QString)
+                return;
+            if (key == "environment" &&
+                !QStringList{"", "client", "server", "both", "unknown"}.contains(value.toString()))
+                return;
+            if (key == "state" && !QStringList{"", "enabled", "disabled"}.contains(value.toString()))
+                return;
+        } else if (value.metaType().id() != QMetaType::Bool)
+            return;
+        if (m_filters.value(key) == value)
+            return;
         m_filters[key] = value;
         emit changed();
     }
 }
 void ContentActions::clearFilters() {
-    m_filters = {{"author", ""},     {"environment", ""},   {"state", ""},
-                 {"updates", false}, {"openSource", false}, {"external", false},
-                 {"hidden", false},  {"locked", false},     {"recent", false}};
+    m_filters = {{"author", ""},        {"environment", ""},    {"state", ""},     {"updates", false},
+                 {"openSource", false}, {"external", false},    {"hidden", false}, {"locked", false},
+                 {"recent", false},     {"dependencies", false}};
     emit changed();
 }
 void ContentActions::select(const QString &path, bool value) {
@@ -608,7 +620,7 @@ void ContentActions::startOperation(ContentOperation operation, ContentOperation
             });
     };
     const auto before = m_states.value(operation.packPath);
-    if (before.error.isEmpty()) {
+    if (before.error.isEmpty() && !operation.dependencyCleanup) {
         execute(before);
         return;
     }
@@ -742,6 +754,11 @@ void ContentActions::completeOperation(ContentOperation operation, ContentWriteR
         for (const auto &request : operation.requests)
             completedReleases << request.release.toVariant();
     const QPointer<ContentActions> guard(this);
+    if (operation.kind == ContentOperation::Remove)
+        emit removalFinished(current.pack, before.rows, current.rows, operation.targets, result.error,
+                             operation.dependencyCleanup);
+    if (!guard)
+        return;
     done();
     if (guard && !completedReleases.isEmpty())
         emit guard->installationFinished(operation.packPath, completedReleases, current.rows, result.error);
@@ -783,6 +800,23 @@ void ContentActions::removeSelected() {
             operation.targets << contentRowKey(value.toMap());
     if (!operation.targets.isEmpty())
         enqueue(operation);
+}
+bool ContentActions::removeDependencies(const QVariantMap &pack, const QVariantList &rows) {
+    const auto path = pack.value("path").toString();
+    if (path.isEmpty() || rows.isEmpty() || !m_states.contains(path))
+        return false;
+    ContentOperation operation;
+    operation.kind = ContentOperation::Remove;
+    operation.packPath = path;
+    operation.dependencyCleanup = true;
+    for (const auto &value : rows) {
+        const auto row = value.toMap();
+        const auto key = contentRowKey(row);
+        if (!operation.targets.contains(key))
+            operation.targets << key;
+        operation.expectedHashes[key] = row.value("sha1").toString();
+    }
+    return enqueue(std::move(operation));
 }
 void ContentActions::importFiles(const QList<QUrl> &urls, const QString &category) {
     if (urls.isEmpty())

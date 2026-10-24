@@ -4,6 +4,7 @@
 #include "domain/ReleaseStages.h"
 #include "platform/ProjectAuthors.h"
 #include "platform/ReviewedAuthorIdentities.h"
+#include <QDebug>
 #include <QJsonArray>
 #include <QNetworkReply>
 #include <QPointer>
@@ -127,6 +128,33 @@ void CatalogueClient::modrinthDependency(const QString &projectId, const QString
 void CatalogueClient::setReadCacheLifetime(int milliseconds) {
     m_cacheLifetime = qBound(0, milliseconds, 300000);
     m_readCache.clear();
+}
+void CatalogueClient::modrinthVersions(const QString &id, const QString &game, const QStringList &loaders,
+                                       std::function<void(QVector<Release>, QString)> callback) {
+    static const QRegularExpression identifier("^[A-Za-z0-9_-]+$");
+    if (!identifier.match(id).hasMatch()) {
+        callback({}, "Invalid Modrinth project identity.");
+        return;
+    }
+    QUrl url("https://api.modrinth.com/v2/project/" + id + "/version");
+    QUrlQuery query;
+    query.addQueryItem("game_versions", jsonArray(game));
+    query.addQueryItem(
+        "loaders",
+        QString::fromUtf8(QJsonDocument(QJsonArray::fromStringList(loaders)).toJson(QJsonDocument::Compact)));
+    url.setQuery(query);
+    request(url, false,
+            [id, game, loaders, callback = std::move(callback)](QJsonDocument document, QString error) {
+                QVector<Release> releases;
+                if (error.isEmpty())
+                    for (const auto &value : document.array()) {
+                        auto release = modrinthRelease(value.toObject());
+                        if (release.projectId == id && !release.id.isEmpty() &&
+                            release.gameVersions.contains(game) && sharesLoader(release.loaders, loaders))
+                            releases << std::move(release);
+                    }
+                callback(std::move(releases), error);
+            });
 }
 void CatalogueClient::setCurseforgeKey(const QByteArray &key) {
     if (key == m_curseforgeKey)
@@ -723,7 +751,8 @@ void CatalogueClient::loadProject(const Project &project, const QString &request
         const bool cf = it.key() == "curseforge";
         const auto id = it.value();
         if (cf && !hasCurseforgeKey()) {
-            batch->detail.errors << "CurseForge content needs an approved API key in Settings.";
+            if (!project.sourceIds.contains("modrinth"))
+                batch->detail.errors << "CurseForge content needs an approved API key in Settings.";
             done();
             done();
             done();
@@ -755,7 +784,7 @@ void CatalogueClient::loadProject(const Project &project, const QString &request
         if (cf)
             request(QUrl(base), true, [batch, done](const QJsonDocument &doc, const QString &error) {
                 if (!error.isEmpty())
-                    batch->detail.errors << "CurseForge gallery: " + error;
+                    qInfo().noquote() << "Optional CurseForge gallery:" << error;
                 else
                     for (const auto &image :
                          doc.object().value("data").toObject().value("screenshots").toArray())

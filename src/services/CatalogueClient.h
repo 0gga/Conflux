@@ -37,6 +37,8 @@ class CatalogueClient : public QObject, public ICatalogueSearch {
     void loadChangelog(const Release &, std::function<void(QString, QString)>);
     void curseforgeVersions(const QString &projectId, const QString &game, const QStringList &loaders,
                             std::function<void(QVector<Release>, QString)>);
+    void modrinthVersions(const QString &projectId, const QString &game, const QStringList &loaders,
+                          std::function<void(QVector<Release>, QString)>);
     void modrinthDependency(const QString &projectId, const QString &versionId, const QString &game,
                             const QStringList &loaders, const QStringList &channels,
                             std::function<void(Release, QString)>);

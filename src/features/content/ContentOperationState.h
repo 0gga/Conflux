@@ -10,6 +10,7 @@ struct ContentOperation {
     QHash<QString, QString> expectedHashes;
     QVariantMap sourceLock;
     bool enabled = true, locked = false;
+    bool dependencyCleanup = false;
     QList<QUrl> urls;
     QString category;
     QVector<ContentInstallRequest> requests;

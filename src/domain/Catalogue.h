@@ -58,6 +58,7 @@ QVector<Release> mergeReleases(const QVector<Release> &releases);
 Release modrinthRelease(const QJsonObject &version, const QString &fileSha1 = {});
 Release curseforgeRelease(const QJsonObject &file);
 bool isNewerRelease(const Release &installed, const Release &candidate);
+bool isNewerLinkedRelease(const Release &installed, const Release &candidate, const QVariantMap &verifiedIds);
 QVariantList groupReleaseVariants(const QVector<Release> &releases);
 Release releaseFromVariant(const QVariantMap &value);
 QByteArray decodedImageFingerprint(const QByteArray &encodedImage);

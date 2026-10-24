@@ -57,6 +57,7 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
                this),
       m_browsePreferences(m_browseStore, this),
       m_optionalDependencies(m_optionalSource, m_installationPreferences, m_releasePolicy, this),
+      m_dependencyRemovals(this),
       m_catalogue(std::make_shared<TolerantCatalogueSearch>(std::make_shared<CatalogueClient>()),
                   m_visibility, m_reviewedIdentities,
                   std::make_shared<BrowseFilterPreferences>(m_browseStore), this),
@@ -72,6 +73,10 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
             &m_optionalDependencies, &OptionalDependencies::offer);
     connect(&m_content, &ContentActions::installationFinished, &m_optionalDependencies,
             &OptionalDependencies::installationFinished);
+    m_dependencyRemovals.setRemover(
+        [this](QVariantMap pack, QVariantList rows) { return m_content.removeDependencies(pack, rows); });
+    connect(&m_content, &ContentActions::removalFinished, &m_dependencyRemovals,
+            &DependencyRemovals::observe);
     m_content.setLauncherLocks(std::make_shared<LauncherContentLocks>(backupRoot));
     connect(m_visibility.get(), &ContentVisibility::changed, &m_content, &ContentActions::visibilityChanged);
     connect(m_visibility.get(), &ContentVisibility::changed, &m_catalogue, &BrowseCatalogue::refresh);

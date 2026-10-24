@@ -8,6 +8,7 @@
 #include "services/JsonResponse.h"
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <QDebug>
 #include <QFutureWatcher>
 #include <QJsonArray>
 #include <QNetworkReply>
@@ -31,6 +32,11 @@ struct ContentMetadataSource::Batch {
     QSet<QString> ambiguousFingerprints;
     int pending = 0;
     bool dirty = false;
+    void complete() {
+        if (!errors.isEmpty())
+            qInfo().noquote() << "Optional content metadata:" << errors.join('\n');
+        callback(rows, {});
+    }
 };
 namespace {
 QStringList strings(const QJsonArray &array) {
@@ -58,8 +64,8 @@ bool verifiedInstalledRelease(const QVariantMap &row) {
            row.value("sourceIds").toMap().value(release.provider).toString() == release.projectId;
 }
 bool needsFingerprint(const QVariantMap &row) {
-    return !row.value("directory").toBool() && primary(row) != "modrinth" &&
-           knownHash(row.value("sha1").toString()) && !verifiedInstalledRelease(row);
+    return !row.value("directory").toBool() && knownHash(row.value("sha1").toString()) &&
+           !verifiedInstalledRelease(row);
 }
 void authors(QVariantMap &project, const QVariantList &members) {
     project["authors"] = members;
@@ -83,6 +89,8 @@ void acceptRelease(QVariantMap &row, const Release &release) {
     if (release.provider == "modrinth" || ids.value("modrinth").toString().isEmpty()) {
         row["provider"] = release.provider;
         row["projectId"] = release.projectId;
+    }
+    if (release.provider == "modrinth" || !verifiedInstalledRelease(row)) {
         row["installedRelease"] = release.toVariant();
         row["version"] = release.version;
     }
@@ -255,7 +263,7 @@ void ContentMetadataSource::resolve(const QVariantMap &pack, const QVariantList 
                 return true;
             });
         if (complete) {
-            batch->callback(batch->rows, batch->errors.join('\n'));
+            batch->complete();
             return;
         }
         identify(batch);
@@ -654,7 +662,7 @@ void ContentMetadataSource::finish(const std::shared_ptr<Batch> &batch) {
         return;
     batch->errors.removeDuplicates();
     if (!m_index || !batch->dirty) {
-        batch->callback(batch->rows, batch->errors.join('\n'));
+        batch->complete();
         return;
     }
     const auto index = m_index;
@@ -665,7 +673,7 @@ void ContentMetadataSource::finish(const std::shared_ptr<Batch> &batch) {
         watcher->deleteLater();
         if (!error.isEmpty())
             batch->errors << "Local content index: " + error;
-        batch->callback(batch->rows, batch->errors.join('\n'));
+        batch->complete();
     });
     watcher->setFuture(QtConcurrent::run([index, rows] {
         try {

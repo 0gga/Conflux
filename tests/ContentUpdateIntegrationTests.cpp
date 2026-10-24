@@ -49,6 +49,7 @@ class ContentUpdateIntegrationTests : public QObject {
         QTest::addColumn<int>("failureAt");
         QTest::addColumn<bool>("managed");
         QTest::addColumn<bool>("verificationFailure");
+        QTest::addColumn<bool>("missingRelease");
         for (const auto &type : {"mods", "resourcepacks", "shaderpacks", "datapacks", "mixed"})
             for (int index = 0; index < 3; ++index)
                 for (bool managed : {false, true})
@@ -58,13 +59,18 @@ class ContentUpdateIntegrationTests : public QObject {
                                                      .arg(index)
                                                      .arg(managed)
                                                      .arg(verificationFailure)))
-                            << QString(type) << index << managed << verificationFailure;
+                            << QString(type) << index << managed << verificationFailure << false;
+        for (const auto &type : {"mods", "mixed"})
+            for (int index = 0; index < 3; ++index)
+                QTest::newRow(qPrintable(QString("%1-missing-release-fail%2").arg(type).arg(index)))
+                    << QString(type) << index << false << true << true;
     }
     void realTransactionsKeepPartialSuccess() {
         QFETCH(QString, category);
         QFETCH(int, failureAt);
         QFETCH(bool, managed);
         QFETCH(bool, verificationFailure);
+        QFETCH(bool, missingRelease);
         QTemporaryDir temp;
         QVariantMap pack{{"path", temp.path() + "/ModrinthApp/profiles/Fixture"},
                          {"minecraft", "1.21.1"},
@@ -113,7 +119,10 @@ class ContentUpdateIntegrationTests : public QObject {
             payloads['/' + next.filename] = bytes;
             item["relativePath"] = path;
             item["sha1"] = old.sha1;
-            item["installedRelease"] = old.toVariant();
+            if (missingRelease)
+                item.remove("installedRelease");
+            else
+                item["installedRelease"] = old.toVariant();
             item["updateRelease"] = next.toVariant();
             rows << item;
             auto pin = QJsonObject::fromVariantMap(old.toVariant());

@@ -161,7 +161,7 @@ class ContentMetadataTests final : public QObject {
         source.setCurseforgeKey({});
         bool done = false;
         source.resolve({}, {actual(bytes)}, [&](auto rows, QString error) {
-            QVERIFY(!error.isEmpty());
+            QVERIFY(error.isEmpty());
             QVERIFY(rows.first().toMap().value("identityResolved").toBool());
             QVERIFY(!rows.first().toMap().value("metadataResolved").toBool());
             done = true;
@@ -230,6 +230,45 @@ class ContentMetadataTests final : public QObject {
             server.requestHeaders.value("/fingerprints/432").toLower().contains("x-api-key: fixture-key"));
         QVERIFY(!server.requestHeaders.value("/version_files").toLower().contains("x-api-key"));
     }
+    void knownModrinthProjectDoesNotBlockExactCurseForgeReleaseRecovery() {
+        QTemporaryDir temp;
+        Server server;
+        const QByteArray bytes = "cross-provider file";
+        QVERIFY(QDir().mkpath(temp.path() + "/mods"));
+        QFile file(temp.path() + "/mods/example.jar");
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(bytes);
+        file.close();
+        modrinth(server, bytes);
+        server.json("/version_files", QJsonObject{});
+        server.json(
+            "/fingerprints/432",
+            QJsonObject{
+                {"data", QJsonObject{{"exactMatches",
+                                      QJsonArray{QJsonObject{
+                                          {"id", 11}, {"file", server.curseforge(11, 101, bytes)}}}}}}});
+        auto input = actual(bytes);
+        input["sourceIds"] = QVariantMap{{"modrinth", "example"}};
+        input["provider"] = "modrinth";
+        input["projectId"] = "example";
+        input["identityResolved"] = true;
+        input["identitySha1"] = input.value("sha1");
+        ContentMetadataSource source(std::make_shared<SqliteContentIndex>(temp.path() + "/index.sqlite3"),
+                                     nullptr, server.base(), server.base());
+        source.setCurseforgeKey("fixture-key");
+        bool done = false;
+        source.resolve({{"path", temp.path()}}, {input}, [&](QVariantList rows, QString error) {
+            QVERIFY(error.isEmpty());
+            const auto item = rows.first().toMap();
+            QCOMPARE(item.value("installedRelease").toMap().value("provider").toString(),
+                     QString("curseforge"));
+            QCOMPARE(item.value("sourceIds").toMap().value("modrinth").toString(), QString("example"));
+            QCOMPARE(item.value("sourceIds").toMap().value("curseforge").toString(), QString("11"));
+            QCOMPARE(item.value("projectId").toString(), QString("example"));
+            done = true;
+        });
+        QTRY_VERIFY(done);
+    }
     void curseforgeMissingAuthorsRemainRetryable() {
         QTemporaryDir temp;
         Server server;
@@ -244,7 +283,7 @@ class ContentMetadataTests final : public QObject {
         source.setCurseforgeKey("fixture-key");
         bool done = false;
         source.resolve({}, {input}, [&](auto rows, QString error) {
-            QVERIFY(!error.isEmpty());
+            QVERIFY(error.isEmpty());
             QVERIFY(!rows.first().toMap().value("metadataResolved").toBool());
             done = true;
         });
@@ -275,7 +314,7 @@ class ContentMetadataTests final : public QObject {
         server.statuses["/teams"] = 503;
         done = false;
         source.resolve({}, {actual("new")}, [&](auto rows, QString error) {
-            QVERIFY(!error.isEmpty());
+            QVERIFY(error.isEmpty());
             QVERIFY(!rows.first().toMap().value("metadataResolved").toBool());
             done = true;
         });
@@ -303,7 +342,7 @@ class ContentMetadataTests final : public QObject {
         source.setCurseforgeKey({});
         bool done = false;
         source.resolve({}, {actual("file")}, [&](auto rows, QString error) {
-            QVERIFY(!error.isEmpty());
+            QVERIFY(error.isEmpty());
             QVERIFY(!rows.first().toMap().value("metadataResolved").toBool());
             done = true;
         });

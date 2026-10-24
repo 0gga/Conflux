@@ -11,6 +11,12 @@ QVariantMap ModMetadataReader::read(const QString &path) const {
         m_archives->readEntries(path, {"fabric.mod.json", "quilt.mod.json", "META-INF/mods.toml",
                                        "META-INF/neoforge.mods.toml", "META-INF/jarjar/metadata.json"});
     QVariantMap result;
+    QMap<QString, bool> dependencies;
+    QStringList modIds, provides;
+    const auto addDependency = [&](const QString &id, bool required) {
+        if (!id.isEmpty())
+            dependencies[id] = dependencies.value(id) || required;
+    };
     const auto fabric = QJsonDocument::fromJson(entries.value("fabric.mod.json")).object();
     const auto quilt =
         QJsonDocument::fromJson(entries.value("quilt.mod.json")).object().value("quilt_loader").toObject();
@@ -43,6 +49,23 @@ QVariantMap ModMetadataReader::read(const QString &path) const {
     }
     if (!fabric.isEmpty())
         loaders << "fabric";
+    for (const auto &key : {"depends", "recommends", "suggests"}) {
+        const auto refs = fabric.value(key).toObject();
+        for (auto it = refs.constBegin(); it != refs.constEnd(); ++it)
+            addDependency(it.key(), QString(key) == "depends");
+    }
+    for (const auto &value : fabric.value("provides").toArray())
+        if (value.isString())
+            provides << value.toString();
+    for (const auto &value : quilt.value("depends").toArray()) {
+        const auto ref = value.toObject();
+        addDependency(ref.value("id").toString(), !ref.value("optional").toBool());
+    }
+    for (const auto &value : quilt.value("provides").toArray())
+        if (value.isString())
+            provides << value.toString();
+        else if (value.isObject())
+            provides << value.toObject().value("id").toString();
     if (!quilt.isEmpty())
         loaders << "quilt";
     for (const auto &entry : QList<QPair<QByteArray, QString>>{{"META-INF/neoforge.mods.toml", "neoforge"},
@@ -57,6 +80,24 @@ QVariantMap ModMetadataReader::read(const QString &path) const {
                 if (const auto *mod = mods->get(0)->as_table())
                     for (const auto *key : {"modId", "displayName", "version", "authors"})
                         declaration[key] = QString::fromStdString((*mod)[key].value_or(std::string{}));
+                for (const auto &value : *mods)
+                    if (const auto *mod = value.as_table()) {
+                        const auto id = QString::fromStdString((*mod)["modId"].value_or(std::string{}));
+                        if (!id.isEmpty())
+                            modIds << id;
+                        if (const auto *refs = table["dependencies"][id.toStdString()].as_array())
+                            for (const auto &value : *refs)
+                                if (const auto *ref = value.as_table()) {
+                                    const auto kind =
+                                        QString::fromStdString((*ref)["type"].value_or(std::string{}));
+                                    if (!kind.isEmpty() && kind != "required" && kind != "optional")
+                                        continue;
+                                    addDependency(
+                                        QString::fromStdString((*ref)["modId"].value_or(std::string{})),
+                                        kind == "required" ||
+                                            (kind.isEmpty() && (*ref)["mandatory"].value_or(true)));
+                                }
+                    }
             }
         } catch (const toml::parse_error &) {
             // Malformed metadata stays unidentified; dependency IDs are never owners.
@@ -76,6 +117,20 @@ QVariantMap ModMetadataReader::read(const QString &path) const {
         }
     }
     result["loaders"] = loaders;
+    modIds << result.value("modId").toString();
+    modIds.removeAll("");
+    modIds.removeDuplicates();
+    provides.removeAll("");
+    provides.removeDuplicates();
+    result["modIds"] = modIds;
+    result["provides"] = provides;
+    QVariantList references;
+    for (auto it = dependencies.cbegin(); it != dependencies.cend(); ++it)
+        references << QVariantMap{{"id", it.key()}, {"required", it.value()}};
+    result["runtimeDependencies"] = references;
+    const auto runtimeVersion = result.value("version").toString();
+    if (!runtimeVersion.startsWith("${"))
+        result["runtimeVersion"] = runtimeVersion;
     QString iconPath = fabric.value("icon").toString();
     if (fabric.value("icon").isObject()) {
         const auto sizes = fabric.value("icon").toObject();

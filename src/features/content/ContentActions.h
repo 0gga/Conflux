@@ -147,6 +147,7 @@ class ContentActions final : public QObject {
     Q_INVOKABLE void setEnabled(const QString &, bool);
     Q_INVOKABLE void remove(const QString &);
     Q_INVOKABLE void removeSelected();
+    bool removeDependencies(const QVariantMap &, const QVariantList &);
     Q_INVOKABLE void freeze(const QString &, bool);
     Q_INVOKABLE bool projectLocked(const QVariantMap &) const;
     Q_INVOKABLE QVariantMap sourceLock(const QVariantMap &) const;
@@ -187,6 +188,8 @@ class ContentActions final : public QObject {
     void contentChanged();
     void copyRequested(QString text);
     void installationFinished(QString packPath, QVariantList releases, QVariantList files, QString error);
+    void removalFinished(QVariantMap pack, QVariantList before, QVariantList current, QStringList targets,
+                         QString error, bool cleanup);
 
   private:
     void queueUpdates(const QVariantList &);

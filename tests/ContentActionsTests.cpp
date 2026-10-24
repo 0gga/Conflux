@@ -61,6 +61,33 @@ class ContentActionsTests : public QObject {
                 {"updateRelease", next.toVariant()}};
     }
   private slots:
+    void instanceFilterChangesPreserveSearchAndRejectInvalidFilterValues() {
+        QTemporaryDir temp;
+        auto catalogue = std::make_shared<ContentCatalogueFixture>();
+        ContentActions content(std::make_shared<ContentFileFixture>(), catalogue,
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        auto item = row("Example", "Alice, Bob");
+        item["authors"] = QVariantList{QVariantMap{{"name", "Alice"}}, QVariantMap{{"name", "Bob"}}};
+        item["tags"] = QStringList{"mr:performance"};
+        content.setContext({{"path", temp.path()}}, {item});
+        QTRY_VERIFY(!content.busy());
+        const auto reads = catalogue->refreshCount;
+        content.setQuery("performance");
+        content.setFilter("author", QString("Bob"));
+        QCOMPARE(content.rows().size(), 1);
+        content.setFilter("updates", true);
+        QCOMPARE(content.rows().size(), 1);
+        content.clearFilters();
+        QCOMPARE(content.query(), QString("performance"));
+        QCOMPARE(content.rows().size(), 1);
+        QSignalSpy changes(&content, &ContentActions::changed);
+        content.setFilter("locked", QString("false"));
+        content.setFilter("state", QString("nonsense"));
+        content.setFilter("environment", QString("nonsense"));
+        QCOMPARE(changes.size(), 0);
+        QCOMPARE(catalogue->refreshCount, reads);
+    }
 
     void projectLockReadsUseLatestAcceptedStateInsteadOfCapturedPackMetadata() {
         QTemporaryDir temp;

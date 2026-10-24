@@ -14,6 +14,7 @@ struct Server : QTcpServer {
     using Handler = std::function<QPair<int, QByteArray>(QByteArray, QJsonObject)>;
     Handler handler;
     int calls = 0, largestBatch = 0;
+    QMap<QByteArray, QByteArray> headers;
     explicit Server(QObject *parent = nullptr) : QTcpServer(parent) {
         connect(this, &QTcpServer::newConnection, this, [this] {
             while (hasPendingConnections()) {
@@ -33,6 +34,7 @@ struct Server : QTcpServer {
                     socket->setProperty("answered", true);
                     const auto body = QJsonDocument::fromJson(bytes.mid(end + 4, length)).object();
                     ++calls;
+                    headers[bytes.split(' ').value(1)] = bytes.left(end);
                     largestBatch = qMax(largestBatch, int(body.value("hashes").toArray().size()));
                     const auto response = handler(bytes.split(' ').value(1), body);
                     socket->write(
@@ -87,6 +89,181 @@ QJsonObject candidate(int id, const QString &category = "mods", const QStringLis
 class ContentCatalogueUpdateTests final : public QObject {
     Q_OBJECT
   private slots:
+    void knownProviderUpdatesAreMergedWithoutMigratingCompatibility_data() {
+        QTest::addColumn<QString>("variation");
+        QTest::addColumn<bool>("available");
+        for (const auto &name : {"cf-to-mr", "mr-to-cf", "no-pin", "neoforge", "beta-allowed",
+                                 "older-date-higher-version", "named-cf-file"})
+            QTest::newRow(name) << QString(name) << true;
+        for (const auto &name : {"unlinked", "wrong-game", "wrong-loader", "beta-excluded", "same-version",
+                                 "older-version", "stale-proof"})
+            QTest::newRow(name) << QString(name) << false;
+    }
+    void knownProviderUpdatesAreMergedWithoutMigratingCompatibility() {
+        QFETCH(QString, variation);
+        QFETCH(bool, available);
+        Server server;
+        QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+        const bool reverse = variation == "mr-to-cf",
+                   unpinned = variation == "no-pin" || variation == "stale-proof";
+        auto input =
+            installed(0, "mods", variation == "neoforge" ? QStringList{"neoforge"} : QStringList{"fabric"});
+        const auto oldHash = input.value("sha1").toString();
+        auto old = releaseFromVariant(input.value("installedRelease").toMap());
+        if (!reverse) {
+            old.provider = "curseforge";
+            old.projectId = "123";
+            old.id = "10";
+        }
+        input["installedRelease"] = old.toVariant();
+        if (variation == "named-cf-file") {
+            old.version = "Atmospherics Fabric 1.21.1 1.0.jar";
+            old.published = "2026-03-01T00:00:00Z";
+            input["installedRelease"] = old.toVariant();
+            input["runtimeVersion"] = "1.0";
+        }
+        input["sourceIds"] = QVariantMap{{"curseforge", "123"}, {"modrinth", "project-0"}};
+        if (variation == "unlinked")
+            input["sourceIds"] = QVariantMap{{"curseforge", "123"}};
+        if (unpinned) {
+            input.remove("installedRelease");
+            input["sourceIds"] = QVariantMap{{"modrinth", "project-0"}};
+            input["version"] = "2.6.5";
+            input["identityResolved"] = true;
+            input["identitySha1"] = variation == "stale-proof" ? QString(40, 'f') : oldHash;
+        }
+        auto mr =
+            candidate(0, "mods", variation == "neoforge" ? QStringList{"neoforge"} : QStringList{"fabric"});
+        mr["version_number"] = unpinned ? "2.6.5.2" : "2.0";
+        if (variation == "wrong-game")
+            mr["game_versions"] = QJsonArray{"1.21.2"};
+        if (variation == "wrong-loader")
+            mr["loaders"] = QJsonArray{"forge"};
+        if (variation.startsWith("beta"))
+            mr["version_type"] = "beta";
+        if (variation == "same-version")
+            mr["version_number"] = "1.0";
+        if (variation == "older-version")
+            mr["version_number"] = "0.9";
+        if (variation == "older-date-higher-version")
+            mr["date_published"] = "2025-01-01T00:00:00Z";
+        QJsonObject cf{
+            {"id", reverse ? 20 : 10},
+            {"modId", 123},
+            {"displayName", reverse ? "3.0" : "1.0"},
+            {"fileName", "fixture.jar"},
+            {"downloadUrl", "https://example.invalid/fixture.jar"},
+            {"fileDate", "2026-03-01T00:00:00Z"},
+            {"releaseType", 1},
+            {"gameVersions", QJsonArray{"1.21.1", variation == "neoforge" ? "NeoForge" : "Fabric"}},
+            {"hashes",
+             QJsonArray{QJsonObject{{"algo", 1}, {"value", reverse ? QString(40, 'd') : oldHash}}}}};
+        server.handler = [&](QByteArray path, QJsonObject body) {
+            if (path.startsWith("/project/project-0/version"))
+                return qMakePair(200, QJsonDocument(QJsonArray{mr}).toJson());
+            if (path.startsWith("/mods/123/files"))
+                return qMakePair(200, QJsonDocument(QJsonObject{{"data", QJsonArray{cf}}}).toJson());
+            QJsonObject response;
+            if (reverse && path == "/version_files/update")
+                for (const auto &h : body.value("hashes").toArray())
+                    response[h.toString()] = mr;
+            return qMakePair(200, QJsonDocument(response).toJson());
+        };
+        ContentCatalogue catalogue(nullptr, server.api(), server.api());
+        catalogue.setCurseforgeKey("fixture-key");
+        bool done = false;
+        QVariantMap result;
+        catalogue.checkUpdates({input}, "1.21.1", variation == "neoforge" ? "neoforge|fabric" : "fabric",
+                               variation == "beta-allowed" ? QStringList{"release", "beta"} : QStringList{},
+                               [&](QVariantList rows, QString error) {
+                                   QVERIFY(error.isEmpty());
+                                   result = rows.first().toMap();
+                                   done = true;
+                               });
+        QTRY_VERIFY(done);
+        QCOMPARE(result.value("updateAvailable").toBool(), available);
+        if (available) {
+            const auto release = result.value("updateRelease").toMap();
+            QCOMPARE(release.value("provider").toString(),
+                     reverse ? QString("curseforge") : QString("modrinth"));
+            QVERIFY(release.value("gameVersions").toStringList().contains("1.21.1"));
+            if (unpinned)
+                QCOMPARE(release.value("version").toString(), QString("2.6.5.2"));
+        }
+        for (auto it = server.headers.cbegin(); it != server.headers.cend(); ++it)
+            if (it.key().startsWith("/project/"))
+                QVERIFY(!it.value().toLower().contains("x-api-key"));
+    }
+    void repeatedKnownProjectLookupsAreBatchedAndUnknownTitlesAreNotLinked() {
+        Server server;
+        QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+        server.handler = [](QByteArray, QJsonObject) {
+            return qMakePair(200, QJsonDocument(QJsonArray{candidate(0)}).toJson());
+        };
+        auto row = installed(0);
+        row.remove("installedRelease");
+        row["sourceIds"] = QVariantMap{{"modrinth", "project-0"}};
+        row["identityResolved"] = true;
+        row["identitySha1"] = row.value("sha1");
+        row["version"] = "1.0";
+        QVariantList rows;
+        for (int i = 0; i < 100; ++i)
+            rows << row;
+        auto unknown = row;
+        unknown["sourceIds"] = QVariantMap{};
+        rows << unknown;
+        ContentCatalogue catalogue(nullptr, server.api(), server.api());
+        catalogue.setCurseforgeKey({});
+        bool done = false;
+        catalogue.checkUpdates(rows, "1.21.1", "fabric", {}, [&](QVariantList result, QString error) {
+            QVERIFY(error.isEmpty());
+            for (int i = 0; i < 100; ++i)
+                QVERIFY(result[i].toMap().value("updateAvailable").toBool());
+            QVERIFY(!result.last().toMap().value("updateAvailable").toBool());
+            done = true;
+        });
+        QTRY_VERIFY(done);
+        QCOMPARE(server.calls, 1);
+    }
+    void atmosphericsWithoutOldReleaseStillFindsItsCompatibleUpdate() {
+        Server server;
+        QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+        auto release = candidate(0, "mods", {"neoforge"});
+        release["id"] = "yJJkB7Qc";
+        release["project_id"] = "ft2cYBpB";
+        release["version_number"] = "2.6.5.2";
+        release["date_published"] = "2026-09-16T19:56:25.475418Z";
+        server.handler = [&](QByteArray path, QJsonObject) {
+            return qMakePair(200,
+                             QJsonDocument(path.startsWith("/project/ft2cYBpB/version") ? QJsonArray{release}
+                                                                                        : QJsonArray{})
+                                 .toJson());
+        };
+        const QString hash = "470c3cdd4b9ac836f83bc57342e460abf370a78a";
+        QVariantMap row{{"title", "ATMOSPHERICS"},
+                        {"category", "mods"},
+                        {"sha1", hash},
+                        {"version", "2.6.5"},
+                        {"runtimeVersion", "2.6.5"},
+                        {"identityResolved", true},
+                        {"identitySha1", hash},
+                        {"sourceIds", QVariantMap{{"modrinth", "ft2cYBpB"}}},
+                        {"loaders", QStringList{"neoforge"}}};
+        ContentCatalogue catalogue(nullptr, server.api(), server.api());
+        catalogue.setCurseforgeKey({});
+        bool done = false;
+        catalogue.checkUpdates({row}, "1.21.1", "neoforge", {}, [&](QVariantList rows, QString error) {
+            QVERIFY(error.isEmpty());
+            const auto result = rows.first().toMap();
+            QVERIFY(result.value("updateAvailable").toBool());
+            QCOMPARE(result.value("updateRelease").toMap().value("id").toString(), QString("yJJkB7Qc"));
+            QVERIFY(!result.contains("installedRelease"));
+            QCOMPARE(result.value("sha1").toString(), hash);
+            done = true;
+        });
+        QTRY_VERIFY(done);
+        QCOMPARE(server.calls, 1);
+    }
     void largeUpdateChecksHaveBoundedProcessingCost() {
         Server server;
         QVERIFY(server.listen(QHostAddress::LocalHost, 0));

@@ -179,8 +179,12 @@ void ContentInstaller::install(const QVariantMap &pack, const QVariantList &rows
                         same = true;
                 if (!same || row.value("category") != "mods")
                     continue;
-                const auto installed = row.value("installedRelease").toMap().value("loaders").toStringList();
-                if (!installed.contains(primary)) {
+                auto installed = row.value("installedRelease").toMap().value("loaders").toStringList();
+                if (installed.isEmpty())
+                    installed = row.value("loaders").toStringList();
+                if ((primary == "forge" || primary == "neoforge") && installed.contains("forge-family"))
+                    installed << primary;
+                if (!installed.isEmpty() && !installed.contains(primary)) {
                     permitted.clear();
                     for (const auto &loader : compatibleLoaders(primary, rows))
                         if (installed.contains(loader))

@@ -142,6 +142,12 @@ Updating or downloading content with an existing filename should overwrite it si
 For content with multiple authors, each author's name must be independently clickable and have its own underline hover effect. Keep each navigation target tied to that author's actual identity.
 
 
+## Dependency removal and noncritical metadata
+
+Removing content offers its installed dependencies in the same focused dependency overlay. Nothing extra is removed without an explicit action. Show which installed mods require or use each dependency, expose a dependency filter, preserve shared and locked content, and revalidate cleanup against the latest inventory before writing. Optional author/team, artwork, tag and identity metadata failures must not produce error banners or failed tasks; preserve available content and retry enrichment later. File-operation failures and problems that prevent a requested action remain visible. Instance filters must work for individual authors, stored tags and every active selection, with an available Clear action.
+
+Updates consider all verified platform identities together. A CurseForge installation may update from Modrinth and vice versa, while preserving Minecraft, installed-loader, release-stage and content-lock rules. Missing old release records do not prevent comparison of a verified installed version with a strictly newer numbered version. Never link projects by title alone. These requirements were stated by the owner on 24 October 2026.
+
 ## Catalogue usability and verification
 
 The owner requests a polished, responsive Discover catalogue at 1920x1080, rounded viewport corners without square card edges, predictable Hide installed / Show hidden interactions, more integration tests and 100% coverage. Keep the content list usable at smaller sizes and supported interface/filter scales; controls must stay inside their containers. Use compact filter access when a sidebar would crowd the results. Hidden-only mode must let users find and restore hidden installed content; the saved Hide installed preference resumes when leaving that mode. Preserve per-instance/type compatibility, exact provider identities and page/scroll restoration without stale asynchronous replies replacing current intent. Measure coverage and retain uncovered paths honestly; a passing suite does not establish 100% coverage.

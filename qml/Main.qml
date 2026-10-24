@@ -202,6 +202,7 @@ ApplicationWindow {
         }
     }
     CreatePackDialog { id: newPack; app: window.app; catalogue: window.session.catalogue }
-    OptionalDependenciesDialog { suggestions: window.session.optionalDependencies }
+    OptionalDependenciesDialog { suggestions: window.session.optionalDependencies; presentationEnabled: !window.session.dependencyRemovals.visible }
+    DependenciesDialog { objectName: "dependencyRemovalDialog"; suggestions: window.session.dependencyRemovals; removalMode: true }
     }
 }

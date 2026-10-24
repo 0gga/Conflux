@@ -96,6 +96,8 @@ target_sources(conflux_desktop PRIVATE
     src/features/content/ContentOperationExecutor.h src/features/content/ContentOperationExecutor.cpp
     src/features/content/ContentListModel.h src/features/content/ContentListModel.cpp
     src/features/content/ContentViewIndex.h src/features/content/ContentViewIndex.cpp
+    src/features/content/ContentDependencyGraph.h src/features/content/ContentDependencyGraph.cpp
+    src/features/content/DependencyRemovals.h src/features/content/DependencyRemovals.cpp
     src/features/content/ContentOperationState.h src/features/content/ContentOperationState.cpp
     src/features/content/ContentOperationReservations.h src/features/content/ContentOperationReservations.cpp
     src/features/content/ContentTargetIndex.h src/features/content/ContentTargetIndex.cpp
@@ -163,7 +165,7 @@ qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     qml/components/ContentListView.qml qml/components/ContentGridView.qml qml/components/ContentScrollBar.qml qml/components/ScrollViewportCorners.qml qml/components/ContentStatistic.qml
     qml/showcase/DescriptionView.qml qml/showcase/GalleryView.qml qml/showcase/GalleryViewer.qml
     qml/components/FocusPopup.qml qml/components/FocusDialog.qml
-    qml/components/OptionalDependenciesDialog.qml qml/settings/InstallationSettings.qml
+    qml/components/OptionalDependenciesDialog.qml qml/components/DependenciesDialog.qml qml/settings/InstallationSettings.qml
     qml/components/OperationHud.qml qml/components/RoundedToolTip.qml qml/components/PopupButton.qml qml/components/ChoiceFilter.qml qml/components/FilterChip.qml
     qml/explore/ActiveBrowseFilters.qml
     qml/components/ContentIcon.qml
@@ -204,6 +206,17 @@ if(BUILD_TESTING)
     qt_add_executable(content-dependency-tests tests/ContentDependencyTests.cpp)
     target_link_libraries(content-dependency-tests PRIVATE conflux_desktop miniz Qt6::Test)
     add_test(NAME content-dependencies COMMAND content-dependency-tests -o "${CMAKE_CURRENT_BINARY_DIR}/content-dependency-results.txt,txt")
+    qt_add_executable(content-dependency-graph-tests tests/ContentDependencyGraphTests.cpp)
+    target_link_libraries(content-dependency-graph-tests PRIVATE conflux_desktop Qt6::Test)
+    add_test(NAME content-dependency-graph COMMAND content-dependency-graph-tests -o "${CMAKE_CURRENT_BINARY_DIR}/content-dependency-graph-results.txt,txt")
+    qt_add_executable(dependency-removal-tests tests/DependencyRemovalTests.cpp)
+    target_link_libraries(dependency-removal-tests PRIVATE conflux_desktop Qt6::Test)
+    add_test(NAME dependency-removals COMMAND dependency-removal-tests -o "${CMAKE_CURRENT_BINARY_DIR}/dependency-removal-results.txt,txt")
+    qt_add_executable(dependency-removal-interaction-tests tests/DependencyRemovalInteractionTests.cpp)
+    target_link_libraries(dependency-removal-interaction-tests PRIVATE conflux_desktop conflux_styleplugin Qt6::Quick Qt6::QuickControls2 Qt6::Test)
+    target_compile_definitions(dependency-removal-interaction-tests PRIVATE CONFLUX_QML_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml" CONFLUX_TEST_ARTIFACT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts")
+    add_test(NAME dependency-removal-interaction COMMAND dependency-removal-interaction-tests -o "${CMAKE_CURRENT_BINARY_DIR}/dependency-removal-interaction-results.txt,txt")
+    set_tests_properties(dependency-removal-interaction PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     qt_add_executable(optional-dependency-tests tests/OptionalDependencyTests.cpp)
     target_link_libraries(optional-dependency-tests PRIVATE conflux_desktop miniz Qt6::Test)
     add_test(NAME optional-dependencies COMMAND optional-dependency-tests -o "${CMAKE_CURRENT_BINARY_DIR}/optional-dependency-results.txt,txt")

@@ -38,7 +38,7 @@ Item {
                     model: [{key:"all",label:"All"},{key:"mods",label:"Mods"},{key:"resourcepacks",label:"Resource Packs"},{key:"shaderpacks",label:"Shaders"},{key:"datapacks",label:"Data Packs"}]
                     delegate: ActionButton { required property var modelData; text: modelData.label; compact: true; pill: true; subtle: true; selectionOutlineOnly: true; selected: root.controller.category === modelData.key; onClicked: root.controller.category = modelData.key }
                 }
-                ActionButton { text: "Clear"; compact: true; subtle: true; visible: !!root.controller.filters.author || !!root.controller.filters.environment || !!root.controller.filters.state || root.controller.filters.openSource || root.controller.filters.external || root.controller.filters.locked || root.controller.filters.recent; onClicked: root.controller.clearFilters() }
+                ActionButton { objectName: "clearContentFilters"; text: "Clear"; compact: true; subtle: true; visible: !!root.controller.filters.author || !!root.controller.filters.environment || !!root.controller.filters.state || root.controller.filters.openSource || root.controller.filters.external || root.controller.filters.locked || root.controller.filters.recent || root.controller.filters.hidden || root.controller.filters.updates || root.controller.filters.dependencies; onClicked: root.controller.clearFilters() }
                 ReleaseStagePicker { policy: root.releasePolicy; packPath: root.packPath }
                 PopupButton { id: filterButton; popup: filters; text: "Filter"; iconName: "plus"; compact: true }
             }
@@ -92,7 +92,11 @@ Item {
                                 ContentIcon { size: Math.min(44,entry.height-24); source: entry.modelData.icon || ""; kind: entry.modelData.category === "mods" ? "mod" : entry.modelData.category === "shaderpacks" ? "shader" : "resource" }
                                 ColumnLayout {
                                     Layout.fillWidth: true; Layout.minimumWidth: 40; spacing: 7
-                                    ContentLink { objectName: "contentNameLink"; Layout.fillWidth: true; text: entry.modelData.title; enabled: !!entry.modelData.projectId; onClicked: root.showcaseRequested(entry.modelData.relativePath,"description"); color: Theme.colors.text; font.pixelSize: 13; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
+                                    RowLayout {
+                                        Layout.fillWidth: true; spacing: 6
+                                        ContentLink { objectName: "contentNameLink"; Layout.fillWidth: true; text: entry.modelData.title; enabled: !!entry.modelData.projectId; onClicked: root.showcaseRequested(entry.modelData.relativePath,"description"); color: Theme.colors.text; font.pixelSize: 13; font.weight: Font.DemiBold; elide: Text.ElideRight; textFormat: Text.PlainText }
+                                        ActionButton { objectName: "contentDependencyBadge"; visible: !!entry.modelData.isDependency; iconName: "content"; hint: entry.modelData.dependencyHint || "Dependency"; compact: true; subtle: true; Layout.preferredWidth: 26; Layout.preferredHeight: 24; Accessible.name: hint; onClicked: root.controller.setFilter("dependencies",true) }
+                                    }
                                     RowLayout {
                                         Layout.fillWidth: true; spacing: 6
                                         ContentIcon { visible: !!entry.modelData.authorIcon; source: entry.modelData.authorIcon || ""; size: 18; radius: 9; kind: "mod" }
@@ -150,7 +154,7 @@ Item {
         header: Text { text: "Remove content?"; color: Theme.colors.text; font.pixelSize: 21; padding: 24; bottomPadding: 8 }
         ColumnLayout {
             width: parent.width; spacing: 20
-            Text { Layout.fillWidth: true; text: "Remove " + removeDialog.modTitle + " from this pack? The original files will be backed up. Required dependencies are kept."; color: Theme.colors.muted; font.pixelSize: 13; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
+            Text { Layout.fillWidth: true; text: "Remove " + removeDialog.modTitle + "?"; color: Theme.colors.muted; font.pixelSize: 13; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
             RowLayout { Layout.alignment: Qt.AlignRight
                 ActionButton { text: "Cancel"; subtle: true; onClicked: removeDialog.close() }
                 ActionButton { text: "Remove"; iconName: "trash"; onClicked: { if(removeDialog.path.length) root.controller.remove(removeDialog.path); else root.controller.removeSelected(); removeDialog.close() } }

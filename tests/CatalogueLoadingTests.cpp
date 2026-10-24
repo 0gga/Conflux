@@ -7,6 +7,49 @@ using namespace dependency_test;
 class CatalogueLoadingTests final : public QObject {
     Q_OBJECT
   private slots:
+    void optionalMetadataFailuresStayQuietButUnavailableActionsRemainVisible_data() {
+        QTest::addColumn<QString>("fault");
+        for (const auto &name :
+             {"gallery", "optional-connection", "missing-only-connection", "version-failure"})
+            QTest::newRow(name) << QString(name);
+    }
+    void optionalMetadataFailuresStayQuietButUnavailableActionsRemainVisible() {
+        QFETCH(QString, fault);
+        Server server;
+        CatalogueClient client(nullptr, server.base(), server.base());
+        const bool merged = fault == "optional-connection";
+        const bool connected = fault == "gallery" || fault == "version-failure";
+        client.setCurseforgeKey(connected ? QByteArray("fixture-key") : QByteArray{});
+        Project project;
+        project.provider = "curseforge";
+        project.id = "11";
+        project.sourceIds["curseforge"] = "11";
+        if (merged)
+            project.sourceIds["modrinth"] = "root";
+        server.json("/mods/11/description", QJsonObject{{"data", "Description"}});
+        server.statuses["/mods/11"] = 503;
+        server.json("/mods/11/files", QJsonObject{{"data", QJsonArray{server.curseforge(11, 101, "bytes")}}});
+        if (fault == "version-failure")
+            server.statuses["/mods/11/files"] = 503;
+        server.json("/project/root", QJsonObject{{"body", "Description"}});
+        server.json("/project/root/version", QJsonArray{server.modrinth("root", "v1", "bytes")});
+        bool done = false;
+        ProjectDetail detail;
+        connect(&client, &CatalogueClient::detailFinished, &client, [&](int, ProjectDetail result) {
+            detail = std::move(result);
+            done = true;
+        });
+        client.loadProject(project, "1.21.1", "fabric", 1);
+        QTRY_VERIFY(done);
+        QCOMPARE(detail.errors.isEmpty(), fault == "gallery" || merged);
+        if (fault == "gallery" || merged) {
+            QCOMPARE(detail.releases.size(), 1);
+            QCOMPARE(detail.description, QString("Description"));
+        }
+        if (!connected)
+            for (const auto &path : server.requests)
+                QVERIFY(!path.startsWith("/mods/"));
+    }
     void dependencySelectionKeepsExactCompatibilityAndPolicy_data() {
         QTest::addColumn<QString>("fault");
         for (const auto &fault :

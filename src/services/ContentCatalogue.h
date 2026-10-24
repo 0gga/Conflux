@@ -28,8 +28,8 @@ class ContentCatalogue final : public QObject, public IContentCatalogue {
   private:
     using JsonCallback = std::function<void(QJsonDocument, QString)>;
     void request(const QString &path, const QJsonObject *body, JsonCallback);
-    void refreshCurseforge(QVariantList, const QString &, const QString &, IndexCallback, const QString &,
-                           const QStringList &);
+    void refreshKnownProjects(QVariantList, const QString &, const QString &, IndexCallback, const QString &,
+                              const QStringList &);
     QNetworkAccessManager m_network;
     QUrl m_api;
     ContentMetadataSource m_metadata;

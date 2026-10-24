@@ -5,12 +5,46 @@
 #include "domain/LicensePolicy.h"
 #include "domain/ReleaseStages.h"
 #include "platform/ProjectAuthors.h"
+#include <QDebug>
 #include <QJsonArray>
 #include <QNetworkReply>
 #include <QPointer>
+#include <QQueue>
 #include <QUrlQuery>
 #include <memory>
 namespace studio {
+namespace {
+Release installedForComparison(const QVariantMap &row) {
+    auto release = releaseFromVariant(row.value("installedRelease").toMap());
+    const auto hash = row.value("sha1").toString();
+    if (!release.id.isEmpty() && !release.projectId.isEmpty() &&
+        release.sha1.compare(hash, Qt::CaseInsensitive) == 0) {
+        if (!row.value("runtimeVersion").toString().isEmpty())
+            release.version = row.value("runtimeVersion").toString();
+        return release;
+    }
+    const bool identity = row.value("identityResolved").toBool() &&
+                          row.value("identitySha1").toString().compare(hash, Qt::CaseInsensitive) == 0;
+    const bool metadata = row.value("metadataResolved").toBool() &&
+                          row.value("metadataSha1").toString().compare(hash, Qt::CaseInsensitive) == 0;
+    if (hash.size() != 40 || (!identity && !metadata))
+        return {};
+    const auto ids = row.value("sourceIds").toMap();
+    const auto provider =
+        !ids.value("modrinth").toString().isEmpty() ? QString("modrinth") : QString("curseforge");
+    const auto version = row.value("runtimeVersion", row.value("version")).toString();
+    if (ids.value(provider).toString().isEmpty() || version.isEmpty())
+        return {};
+    release = {};
+    release.provider = provider;
+    release.projectId = ids.value(provider).toString();
+    release.id = "file:" + hash;
+    release.sha1 = hash;
+    release.version = version;
+    release.loaders = row.value("loaders").toStringList();
+    return release;
+}
+} // namespace
 
 ContentCatalogue::ContentCatalogue(QObject *parent, QUrl api, QUrl curseforgeApi,
                                    std::shared_ptr<const IContentIndex> index,
@@ -131,8 +165,8 @@ void ContentCatalogue::checkUpdates(const QVariantList &input, const QString &ga
     const QPointer<ContentCatalogue> guard(this);
     auto finish = [guard, batch, game, loader, selection, callback] {
         if (guard)
-            guard->refreshCurseforge(batch->rows, game, loader, callback, batch->errors.join('\n'),
-                                     selection);
+            guard->refreshKnownProjects(batch->rows, game, loader, callback, batch->errors.join('\n'),
+                                        selection);
     };
     if (groups.isEmpty()) {
         finish();
@@ -182,80 +216,142 @@ void ContentCatalogue::checkUpdates(const QVariantList &input, const QString &ga
                     });
         }
 }
-void ContentCatalogue::refreshCurseforge(QVariantList rows, const QString &game, const QString &loader,
-                                         IndexCallback callback, const QString &previousError,
-                                         const QStringList &selection) {
+void ContentCatalogue::refreshKnownProjects(QVariantList rows, const QString &game, const QString &loader,
+                                            IndexCallback callback, const QString &previousError,
+                                            const QStringList &selection) {
+    struct Job {
+        QString provider, project, category;
+        QStringList loaders;
+        QList<int> positions;
+    };
     struct Batch {
         QVariantList rows;
-        QList<int> pending;
+        QQueue<Job> pending;
         int active = 0;
+        bool pumping = false, settled = false;
         QStringList errors;
     };
     auto batch = std::make_shared<Batch>();
     batch->rows = std::move(rows);
     if (!previousError.isEmpty())
         batch->errors << previousError;
-    if (m_client.hasCurseforgeKey())
-        for (int i = 0; i < batch->rows.size(); ++i) {
-            const auto row = batch->rows[i].toMap();
-            const auto installed = releaseFromVariant(row.value("installedRelease").toMap());
-            if (installed.provider == "curseforge" && !installed.projectId.isEmpty() &&
-                installed.sha1.compare(row.value("sha1").toString(), Qt::CaseInsensitive) == 0)
-                batch->pending << i;
+    QMap<QString, Job> jobs;
+    for (int i = 0; i < batch->rows.size(); ++i) {
+        auto row = batch->rows[i].toMap();
+        const auto installed = installedForComparison(row);
+        if ((installed.provider != "modrinth" && installed.provider != "curseforge") ||
+            installed.projectId.isEmpty() || installed.sha1.isEmpty() ||
+            installed.sha1.compare(row.value("sha1").toString(), Qt::CaseInsensitive) ||
+            row.value("directory").toBool())
+            continue;
+        auto ids = row.value("sourceIds").toMap();
+        if (!ids.value(installed.provider).toString().isEmpty() &&
+            ids.value(installed.provider).toString() != installed.projectId)
+            continue;
+        ids[installed.provider] = installed.projectId;
+        row["sourceIds"] = ids;
+        batch->rows[i] = row;
+        const auto category = row.value("category").toString();
+        QStringList loaders;
+        if (category == "mods") {
+            const auto permitted = loader.split('|', Qt::SkipEmptyParts);
+            for (const auto &value : permitted)
+                if (installed.loaders.isEmpty() || installed.loaders.contains(value) ||
+                    ((value == "forge" || value == "neoforge") && installed.loaders.contains("forge-family")))
+                    loaders << value;
+            if (!permitted.isEmpty() && loaders.contains(permitted.first()))
+                loaders = {permitted.first()};
+            if (loaders.isEmpty())
+                continue;
+        } else if (category == "resourcepacks")
+            loaders = {"minecraft"};
+        else if (category == "datapacks")
+            loaders = {"datapack"};
+        else
+            loaders = installed.loaders;
+        for (const auto &provider : {QString("modrinth"), QString("curseforge")}) {
+            const auto project = ids.value(provider).toString();
+            if (project.isEmpty() || (provider == "curseforge" && !m_client.hasCurseforgeKey()) ||
+                (provider == "modrinth" && installed.provider == "modrinth" &&
+                 !installed.id.startsWith("file:")))
+                continue;
+            const auto key = provider + ':' + project + '|' + category + '|' + loaders.join('|');
+            auto &job = jobs[key];
+            job.provider = provider;
+            job.project = project;
+            job.category = category;
+            job.loaders = loaders;
+            job.positions << i;
         }
+    }
+    for (const auto &job : jobs)
+        batch->pending.enqueue(job);
     auto pump = std::make_shared<std::function<void()>>();
     std::weak_ptr<std::function<void()>> weak = pump;
-    QPointer<ContentCatalogue> guard(this);
-    *pump = [guard, batch, game, loader, callback, weak, selection] {
-        if (!guard)
+    const QPointer<ContentCatalogue> guard(this);
+    *pump = [guard, batch, game, selection, callback, weak] {
+        if (!guard || batch->settled || batch->pumping)
             return;
+        batch->pumping = true;
         while (batch->active < 2 && !batch->pending.isEmpty()) {
-            const int index = batch->pending.takeFirst();
-            auto row = batch->rows[index].toMap();
-            const auto installed = releaseFromVariant(row.value("installedRelease").toMap());
-            QStringList loaders = categoryType(row.value("category").toString()) == "mod"
-                                      ? loader.split('|', Qt::SkipEmptyParts)
-                                      : QStringList{};
-            if (!installed.loaders.isEmpty()) {
-                QStringList shared;
-                for (const auto &value : loaders)
-                    if (installed.loaders.contains(value))
-                        shared << value;
-                loaders = shared;
-                if (categoryType(row.value("category").toString()) == "mod" && loaders.isEmpty())
-                    continue;
-            }
+            const auto job = batch->pending.dequeue();
             ++batch->active;
             auto next = weak.lock();
-            guard->m_client.curseforgeVersions(
-                installed.projectId, game, loaders,
-                [guard, batch, index, installed, next, selection](QVector<Release> releases, QString error) {
-                    if (!guard)
-                        return;
+            auto complete = [guard, batch, job, next, game, selection](QVector<Release> releases,
+                                                                       QString error) {
+                if (!guard || batch->settled)
+                    return;
+                const auto channels = effectiveReleaseStages(selection);
+                for (const int index : job.positions) {
                     auto row = batch->rows[index].toMap();
-                    row["updateAvailable"] = false;
-                    row.remove("updateRelease");
-                    Release newest;
-                    const auto allowedChannels = effectiveReleaseStages(selection);
-                    for (const auto &release : releases)
-                        if (allowedChannels.contains(release.channel) && !release.url.isEmpty() &&
-                            !release.sha1.isEmpty() && isNewerRelease(installed, release) &&
-                            (newest.id.isEmpty() || isNewerRelease(newest, release)))
-                            newest = release;
-                    if (!newest.id.isEmpty()) {
+                    const auto installed = installedForComparison(row);
+                    const auto ids = row.value("sourceIds").toMap();
+                    auto best = releaseFromVariant(row.value("updateRelease").toMap());
+                    for (auto release : releases) {
+                        if (release.provider != job.provider || release.projectId != job.project ||
+                            !release.gameVersions.contains(game) ||
+                            (job.category == "mods" && !sharesLoader(release.loaders, job.loaders)) ||
+                            !channels.contains(release.channel) || release.url.isEmpty() ||
+                            release.sha1.isEmpty() ||
+                            !release.filename.endsWith(job.category == "mods" ? ".jar" : ".zip",
+                                                       Qt::CaseInsensitive) ||
+                            !isNewerLinkedRelease(installed, release, ids))
+                            continue;
+                        if (best.id.isEmpty() || isNewerLinkedRelease(best, release, ids) ||
+                            (release.provider == "modrinth" && best.provider != "modrinth" &&
+                             release.version.trimmed().compare(best.version.trimmed(), Qt::CaseInsensitive) ==
+                                 0)) {
+                            for (auto it = ids.cbegin(); it != ids.cend(); ++it)
+                                release.sourceIds[it.key()] = it.value().toString();
+                            best = std::move(release);
+                        }
+                    }
+                    if (!best.id.isEmpty()) {
                         row["updateAvailable"] = true;
-                        row["updateRelease"] = newest.toVariant();
+                        row["updateRelease"] = best.toVariant();
                     }
                     batch->rows[index] = row;
-                    if (!error.isEmpty())
-                        batch->errors << "CurseForge updates: " + error;
-                    --batch->active;
-                    if (next)
-                        (*next)();
-                });
+                }
+                if (!error.isEmpty())
+                    qInfo().noquote() << "Update lookup:" << job.provider << error;
+                --batch->active;
+                if (next)
+                    (*next)();
+            };
+            if (job.provider == "modrinth")
+                guard->m_client.modrinthVersions(job.project, game, job.loaders, std::move(complete));
+            else
+                guard->m_client.curseforgeVersions(job.project, game,
+                                                   job.category == "mods" ? job.loaders : QStringList{},
+                                                   std::move(complete));
+            if (!guard)
+                return;
         }
-        if (!batch->active && batch->pending.isEmpty())
+        batch->pumping = false;
+        if (!batch->active && batch->pending.isEmpty() && !batch->settled) {
+            batch->settled = true;
             callback(batch->rows, batch->errors.join('\n'));
+        }
     };
     (*pump)();
 }

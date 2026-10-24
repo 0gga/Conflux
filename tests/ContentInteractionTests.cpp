@@ -1746,6 +1746,29 @@ Item {
         panel->setHeight(700);
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
+        model.setFilter("updates", true);
+        QTRY_VERIFY(findItem(window.contentItem(), "clearContentFilters"));
+        QSignalSpy frames(&window, &QQuickWindow::frameSwapped);
+        window.update();
+        QTRY_VERIFY(!frames.isEmpty());
+        auto *clearFilters = findItem(window.contentItem(), "clearContentFilters");
+        QTest::mouseClick(
+            &window, Qt::LeftButton, Qt::NoModifier,
+            clearFilters->mapToScene(QPointF(clearFilters->width() / 2, clearFilters->height() / 2))
+                .toPoint());
+        QTRY_VERIFY(!model.filters().value("updates").toBool());
+        model.setFilter("hidden", true);
+        QTRY_VERIFY(findItem(window.contentItem(), "clearContentFilters"));
+        frames.clear();
+        window.update();
+        QTRY_VERIFY(!frames.isEmpty());
+        clearFilters = findItem(window.contentItem(), "clearContentFilters");
+        QTest::mouseClick(
+            &window, Qt::LeftButton, Qt::NoModifier,
+            clearFilters->mapToScene(QPointF(clearFilters->width() / 2, clearFilters->height() / 2))
+                .toPoint());
+        QTRY_VERIFY(!model.filters().value("hidden").toBool());
+        QTRY_VERIFY(findItem(window.contentItem(), "contentRow"));
         QSignalSpy showcase(panel, SIGNAL(showcaseRequested(QString, QString)));
         auto *hidden = findItem(window.contentItem(), "contentHiddenFilter");
         auto *updates = findItem(window.contentItem(), "contentUpdatesFilter");

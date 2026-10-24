@@ -1,4 +1,5 @@
 #include "ContentOperationExecutor.h"
+#include "ContentDependencyGraph.h"
 #include <QFutureWatcher>
 #include <QPointer>
 #include <QtConcurrent>
@@ -7,6 +8,14 @@ namespace studio {
 void ContentOperationExecutor::execute(ContentOperation operation, ContentFileState before,
                                        Callback callback) {
     auto targets = resolveContentTargets(before.rows, operation.targets);
+    if (operation.dependencyCleanup && before.error.isEmpty()) {
+        operation.targets = ContentDependencyGraph(before.rows).unused(operation.targets);
+        targets = resolveContentTargets(before.rows, operation.targets);
+        if (targets.isEmpty()) {
+            callback({true, {}}, before);
+            return;
+        }
+    }
     QString blocked = before.error;
     if (operation.kind == ContentOperation::Lock && !operation.sourceLock.isEmpty())
         targets = {operation.sourceLock};

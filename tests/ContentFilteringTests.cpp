@@ -33,6 +33,40 @@ QVariantList inventory(int count) {
 class ContentFilteringTests final : public QObject {
     Q_OBJECT
   private slots:
+    void individualAuthorsTagsAndUnknownEnvironmentRemainFilterable() {
+        auto item = inventory(1).first().toMap();
+        item["author"] = "Alice, Bob";
+        item["authors"] = QVariantList{QVariantMap{{"name", "Alice"}}, QVariantMap{{"name", "Bob"}}};
+        item["categories"] = QStringList{"Optimization"};
+        item["tags"] = QStringList{"mr:performance"};
+        item["environment"] = "";
+        ContentViewIndex view;
+        view.remember({item}, "fixture", 0, {});
+        QCOMPARE(view.authors(), QStringList({"Alice", "Bob"}));
+        QCOMPARE(view.filter({}, "all", "name-asc", {{"author", "Bob"}}).size(), 1);
+        QCOMPARE(
+            view.filter("performance", "all", "name-asc", {{"author", "bob"}, {"environment", "unknown"}})
+                .size(),
+            1);
+        QCOMPARE(view.filter("Optimization", "all", "name-asc", {}).size(), 1);
+        QVERIFY(view.filter({}, "all", "name-asc", {{"author", "Carol"}}).isEmpty());
+    }
+    void dependencyFiltersReflectCurrentInstalledRelationships() {
+        auto rows = inventory(2);
+        auto a = rows[0].toMap(), b = rows[1].toMap();
+        a["category"] = "mods";
+        a["runtimeDependencies"] = QVariantList{QVariantMap{{"id", "child"}, {"required", true}}};
+        b["modId"] = "child";
+        rows = {a, b};
+        ContentViewIndex view;
+        view.remember(rows, "fixture", 0, {});
+        const auto dependencies = view.filter({}, "all", "name-asc", {{"dependencies", true}});
+        QCOMPARE(dependencies.size(), 1);
+        QCOMPARE(dependencies.first().toMap().value("requiredBy").toStringList(),
+                 QStringList{a.value("title").toString()});
+        view.remember({b}, "fixture", 0, {});
+        QVERIFY(view.filter({}, "all", "name-asc", {{"dependencies", true}}).isEmpty());
+    }
     void filteringLoadedContentHasNoAdditionalIoAndBoundedCpu_data() {
         QTest::addColumn<int>("count");
         QTest::newRow("owner-sized-310") << 310;

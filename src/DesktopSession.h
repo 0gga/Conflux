@@ -3,6 +3,7 @@
 #include "features/config/ConfigLibrary.h"
 #include "features/content/ContentActions.h"
 #include "features/content/ContentIndex.h"
+#include "features/content/DependencyRemovals.h"
 #include "features/content/OptionalDependencies.h"
 #include "features/explore/BrowseCatalogue.h"
 #include "features/explore/BrowseInstalls.h"
@@ -47,6 +48,7 @@ class DesktopSession final : public QObject {
     Q_PROPERTY(studio::BrowsePreferences *browsePreferences READ browsePreferences CONSTANT)
     Q_PROPERTY(studio::InstallationPreferences *installationPreferences READ installationPreferences CONSTANT)
     Q_PROPERTY(studio::OptionalDependencies *optionalDependencies READ optionalDependencies CONSTANT)
+    Q_PROPERTY(studio::DependencyRemovals *dependencyRemovals READ dependencyRemovals CONSTANT)
   public:
     explicit DesktopSession(QObject *parent = nullptr, QString settingsFile = {}, QString backupRoot = {});
     RunningInstances *running() {
@@ -106,6 +108,9 @@ class DesktopSession final : public QObject {
     OptionalDependencies *optionalDependencies() {
         return &m_optionalDependencies;
     }
+    DependencyRemovals *dependencyRemovals() {
+        return &m_dependencyRemovals;
+    }
     void setCurseforgeKey(const QByteArray &key) {
         m_catalogue.setKey(key);
         m_showcase.setCurseforgeKey(key);
@@ -151,6 +156,7 @@ class DesktopSession final : public QObject {
     BrowseInstalls m_browse;
     BrowsePreferences m_browsePreferences;
     OptionalDependencies m_optionalDependencies;
+    DependencyRemovals m_dependencyRemovals;
     BrowseCatalogue m_catalogue;
     PackChangeMonitor m_changes;
     bool m_pendingScan = false;

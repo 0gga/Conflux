@@ -18,9 +18,9 @@ class ContentViewIndex final {
     struct Entry {
         QVariant value;
         QString text, category, title, author, filename, environment;
-        QStringList words;
+        QStringList words, authors;
         bool hidden = false, enabled = false, updates = false, locked = false;
-        bool openSource = false, external = false;
+        bool openSource = false, external = false, dependency = false;
         qint64 updatedAt = 0;
     };
     QVariantList m_snapshot;

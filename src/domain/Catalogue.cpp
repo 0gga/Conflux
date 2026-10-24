@@ -152,6 +152,42 @@ bool isNewerRelease(const Release &installed, const Release &candidate) {
     return installed.projectId == candidate.projectId && installed.id != candidate.id && before.isValid() &&
            after.isValid() && after > before;
 }
+bool isNewerLinkedRelease(const Release &installed, const Release &candidate, const QVariantMap &ids) {
+    const bool cross = installed.provider != candidate.provider;
+    if (installed.projectId.isEmpty() || candidate.projectId.isEmpty() ||
+        (!cross && installed.projectId != candidate.projectId) ||
+        (cross && (ids.value(installed.provider).toString() != installed.projectId ||
+                   ids.value(candidate.provider).toString() != candidate.projectId)))
+        return false;
+    if (!installed.sha1.isEmpty() && installed.sha1.compare(candidate.sha1, Qt::CaseInsensitive) == 0)
+        return false;
+    const auto oldVersion = QVersionNumber::fromString(installed.version),
+               newVersion = QVersionNumber::fromString(candidate.version);
+    if (cross && !oldVersion.isNull() && !newVersion.isNull()) {
+        const auto compared = QVersionNumber::compare(newVersion, oldVersion);
+        if (compared != 0)
+            return compared > 0;
+        const auto stage = [](const QString &channel) {
+            return channel == "release" ? 3 : channel == "beta" ? 2 : channel == "alpha" ? 1 : 0;
+        };
+        return stage(candidate.channel) > stage(installed.channel);
+    }
+    if (!cross && installed.id.startsWith("file:") && installed.sha1.size() == 40 && !oldVersion.isNull() &&
+        !newVersion.isNull())
+        return QVersionNumber::compare(newVersion, oldVersion) > 0;
+    if (!cross)
+        return isNewerRelease(installed, candidate);
+    if (ids.value(installed.provider).toString() != installed.projectId ||
+        ids.value(candidate.provider).toString() != candidate.projectId || installed.projectId.isEmpty() ||
+        candidate.projectId.isEmpty() ||
+        installed.version.trimmed().compare(candidate.version.trimmed(), Qt::CaseInsensitive) == 0)
+        return false;
+    auto before = installed, after = candidate;
+    before.projectId = after.projectId;
+    before.id = installed.provider + ':' + installed.id;
+    after.id = candidate.provider + ':' + candidate.id;
+    return isNewerRelease(before, after);
+}
 QVariantList groupReleaseVariants(const QVector<Release> &releases) {
     struct Group {
         QString label;

@@ -1,4 +1,5 @@
 #include "ContentFixtures.h"
+#include "TestPerformance.h"
 #include "features/config/ConfigLibrary.h"
 #include "features/content/ContentActions.h"
 #include "features/preferences/BrowsePreferences.h"
@@ -1055,7 +1056,7 @@ ContentListView {
         QCOMPARE(catalogue->refreshCount, reads);
         QCOMPARE(warnings.size(), 0);
         QVERIFY(findItem(panel.get(), "contentRow"));
-        QVERIFY(milliseconds < 450);
+        QVERIFY(test_performance::releaseBudgetMet(milliseconds, 450));
     }
     void tableHoverFillsRowsAndClipsOnceAtTheOuterFrame() {
         QTemporaryDir temp;

@@ -1,3 +1,4 @@
+#include "TestPerformance.h"
 #include "domain/ContentTypes.h"
 #include "features/content/ContentOperationState.h"
 #include <QElapsedTimer>
@@ -100,7 +101,8 @@ class ContentReadBudgetTests final : public QObject {
         const auto milliseconds = elapsed.elapsed();
         QCOMPARE(length, qint64(5500000));
         qInfo() << "500000 stable content-key reads ms" << milliseconds;
-        QVERIFY2(milliseconds < 100, "Stable keys calculate unnecessary fallback state.");
+        QVERIFY2(test_performance::releaseBudgetMet(milliseconds, 100),
+                 "Stable keys calculate unnecessary fallback state.");
     }
     void smallTypeMappingsHaveBoundedCpuCost() {
         const QStringList types{"mod", "resourcepack", "shader", "datapack"},
@@ -115,7 +117,8 @@ class ContentReadBudgetTests final : public QObject {
         const auto milliseconds = elapsed.elapsed();
         QCOMPARE(length, qint64(6600000));
         qInfo() << "800000 content type/category reads ms" << milliseconds;
-        QVERIFY2(milliseconds < 150, "Type reads reconstruct small mapping containers.");
+        QVERIFY2(test_performance::releaseBudgetMet(milliseconds, 150),
+                 "Type reads reconstruct small mapping containers.");
     }
     void repeatedLabelsHaveBoundedCpuCost() {
         const QStringList inputs{"neoforge", "Fabric-0.16.0", "forge-52.1.1", "quilt-loader-0.26",
@@ -133,7 +136,8 @@ class ContentReadBudgetTests final : public QObject {
         const auto milliseconds = elapsed.elapsed();
         QCOMPARE(length, expected);
         qInfo() << "350000 content label reads ms" << milliseconds;
-        QVERIFY2(milliseconds < 125, "Label reads reconstruct temporary loader lists/prefixes.");
+        QVERIFY2(test_performance::releaseBudgetMet(milliseconds, 125),
+                 "Label reads reconstruct temporary loader lists/prefixes.");
     }
     void emptyTargetReadsDoNotScanLargeInventories() {
         const auto rows = inventory(5000);
@@ -145,7 +149,8 @@ class ContentReadBudgetTests final : public QObject {
         const auto milliseconds = elapsed.elapsed();
         QCOMPARE(selected, qsizetype(0));
         qInfo() << "1000 empty target reads over 5000 rows ms" << milliseconds;
-        QVERIFY2(milliseconds < 150, "An empty selection scans unrelated content rows.");
+        QVERIFY2(test_performance::releaseBudgetMet(milliseconds, 150),
+                 "An empty selection scans unrelated content rows.");
     }
 };
 QTEST_GUILESS_MAIN(ContentReadBudgetTests)

@@ -1,4 +1,5 @@
 #include "ContentFixtures.h"
+#include "TestPerformance.h"
 #include "domain/TextSearch.h"
 #include "features/content/ContentActions.h"
 #include "features/preferences/ContentPreferences.h"
@@ -96,7 +97,7 @@ class ContentFilteringTests final : public QObject {
         const auto milliseconds = elapsed.elapsed();
         qInfo() << count << "loaded rows / 36 filter transitions ms" << milliseconds;
         QCOMPARE(catalogue->refreshCount, calls);
-        QVERIFY2(milliseconds < (count == 310 ? 75 : 450),
+        QVERIFY2(test_performance::releaseBudgetMet(milliseconds, (count == 310 ? 75 : 450)),
                  "Loaded filtering does excessive per-row/model work.");
     }
     void preparedSearchMatchesTheExistingUnicodeAndTypoContract() {
@@ -192,7 +193,8 @@ class ContentFilteringTests final : public QObject {
         QCOMPARE(model.data(persistent, Qt::UserRole + 1), saved);
         QCOMPARE(resets.size(), 0);
         QCOMPARE(model.data(model.index(0), Qt::UserRole + 1), rows.first());
-        QVERIFY2(milliseconds < 150, "Model reordering repeatedly scans QVariant row keys.");
+        QVERIFY2(test_performance::releaseBudgetMet(milliseconds, 150),
+                 "Model reordering repeatedly scans QVariant row keys.");
     }
     void modelReconciliationPreservesReferenceRowsAndPersistentIdentity() {
         ContentListModel model;

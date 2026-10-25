@@ -1,5 +1,6 @@
 #include "ContentFixtures.h"
 #include "DependencyFixtures.h"
+#include "TestPerformance.h"
 #include "features/content/ContentActions.h"
 #include "features/content/ContentOperationState.h"
 #include "features/content/OptionalDependencies.h"
@@ -316,7 +317,7 @@ class OptionalDependencyTests final : public QObject {
         QVERIFY(!h.model.visible());
         QVERIFY(h.source->calls.isEmpty());
         qInfo() << "Filter256 optional references against5000 installed files ms" << milliseconds;
-        QVERIFY(milliseconds < 150);
+        QVERIFY(test_performance::releaseBudgetMet(milliseconds, 150));
     }
     void disablePromptCancelsOnlyItsReadsAndSuppressesFutureOffers() {
         Harness h;

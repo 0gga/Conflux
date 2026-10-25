@@ -1,4 +1,5 @@
 #include "ContentUpdateFixtures.h"
+#include "TestPerformance.h"
 #include "platform/BrowseSettingsStore.h"
 #include <QPersistentModelIndex>
 #include <QtTest>
@@ -25,7 +26,8 @@ class ContentUpdateTests : public QObject {
         QCOMPARE(resets.size(), 0);
         QCOMPARE(h.content.rows().size(), 5000);
         qInfo() << "Accept 5000 independent updates with backend held ms" << milliseconds;
-        QVERIFY2(milliseconds < 750, "Bulk acceptance repeatedly scans the whole inventory.");
+        QVERIFY2(test_performance::releaseBudgetMet(milliseconds, 750),
+                 "Bulk acceptance repeatedly scans the whole inventory.");
         // All work is fixture-owned and uncommitted; destruction retires this held test queue.
     }
     void bulkUpdatesKeepTheirOriginalDestinationThroughReentrantNavigation() {

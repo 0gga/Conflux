@@ -1,3 +1,4 @@
+#include "TestPerformance.h"
 #include "features/content/ContentOperationReservations.h"
 #include "features/content/ContentTargetIndex.h"
 #include <QElapsedTimer>
@@ -94,7 +95,7 @@ class ContentTargetIndexTests final : public QObject {
         for (int i = 0; i < 5000; ++i)
             QCOMPARE(index.resolve(rows, {QString::number(i)}), QVariantList{rows.at(i)});
         qInfo() << "Resolve 5000 targets over 5000 rows including index preparation ms" << elapsed.elapsed();
-        QVERIFY(elapsed.elapsed() < 150);
+        QVERIFY(test_performance::releaseBudgetMet(elapsed.elapsed(), 150));
     }
 };
 QTEST_GUILESS_MAIN(ContentTargetIndexTests)

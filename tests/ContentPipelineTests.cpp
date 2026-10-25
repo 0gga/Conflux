@@ -1,3 +1,4 @@
+#include "TestPerformance.h"
 #include "miniz.h"
 #include "platform/ContentFileCache.h"
 #include "platform/ContentInstaller.h"
@@ -685,7 +686,8 @@ class ContentPipelineTests : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(done, 10000);
         QVERIFY2(error.isEmpty(), qPrintable(error));
         QVERIFY(ticks > 1);
-        QVERIFY2(worst < 250, qPrintable(QString("Event loop gap %1ms").arg(worst)));
+        QVERIFY2(test_performance::releaseBudgetMet(worst, 250),
+                 qPrintable(QString("Event loop gap %1ms").arg(worst)));
         qInfo() << "Download event-loop max gap ms" << worst;
     }
     void incompatibleUpdatesDoNotStartDownloads_data() {

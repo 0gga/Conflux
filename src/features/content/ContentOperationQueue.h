@@ -3,6 +3,8 @@
 #include <QQueue>
 #include <functional>
 namespace studio {
+// Serial owner-thread dispatch. Tasks and their completion callbacks run on the
+// queue's thread; completion is idempotent and schedules the next task asynchronously.
 class ContentOperationQueue final : public QObject {
     Q_OBJECT
   public:

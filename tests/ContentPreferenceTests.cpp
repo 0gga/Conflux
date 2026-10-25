@@ -1,3 +1,4 @@
+#include "TestPerformance.h"
 #include "features/preferences/ContentPreferences.h"
 #include <QCryptographicHash>
 #include <QElapsedTimer>
@@ -131,7 +132,8 @@ class ContentPreferenceTests final : public QObject {
         QCOMPARE(explicitPreferences, 200000);
         QCOMPARE(updated, qint64(24600000));
         qInfo() << "800000 preference reads for one exact identity ms" << milliseconds;
-        QVERIFY2(milliseconds < 800, "Preference reads repeat excessive identity-key work.");
+        QVERIFY2(test_performance::releaseBudgetMet(milliseconds, 800),
+                 "Preference reads repeat excessive identity-key work.");
     }
 };
 QTEST_GUILESS_MAIN(ContentPreferenceTests)

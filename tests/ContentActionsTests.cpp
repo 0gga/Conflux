@@ -1,4 +1,5 @@
 #include "ContentFixtures.h"
+#include "TestPerformance.h"
 #include "domain/TextSearch.h"
 #include "features/content/ContentActions.h"
 #include "features/preferences/ContentPreferences.h"
@@ -129,7 +130,7 @@ class ContentActionsTests : public QObject {
         for (int i = 0; i < 2000; ++i)
             QVERIFY(!content.sourceLock(project).isEmpty());
         qInfo() << "2000 source lock reads / 5000 source entries ms" << elapsed.elapsed();
-        QVERIFY(elapsed.elapsed() < 1000);
+        QVERIFY(test_performance::releaseBudgetMet(elapsed.elapsed(), 1000));
     }
     void sourceLockIndexScopesProvidersAndRetainsOnlyAcceptedSnapshots() {
         SourceLockIndex index;

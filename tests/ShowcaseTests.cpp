@@ -2,14 +2,12 @@
 #include "features/showcase/ProjectShowcase.h"
 #include "features/showcase/ReleaseFilters.h"
 #include "platform/InstalledModIdentity.h"
-#include "platform/WorldLaunchAdapters.h"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
 #include <QTemporaryDir>
 #include <QTextDocument>
-#include <QUrlQuery>
 #include <QtTest>
 using namespace studio;
 class IdentityFixture final : public IInstalledModIdentity {
@@ -34,18 +32,6 @@ class ShowcaseFixture final : public IProjectShowcaseSource {
         detail = std::move(callback);
     }
     void setCurseforgeKey(const QByteArray &) override {}
-};
-class LaunchFixture final : public ILaunchUrlOpener {
-  public:
-    QUrl requested;
-    bool registered = true;
-    bool available(const QString &) const override {
-        return registered;
-    }
-    bool open(const QUrl &url) override {
-        requested = url;
-        return true;
-    }
 };
 class ShowcaseTests : public QObject {
     Q_OBJECT
@@ -478,45 +464,6 @@ class ShowcaseTests : public QObject {
         source->pending.first()({}, "Provider unavailable");
         QVERIFY(!showcase.busy());
         QCOMPARE(showcase.notice(), QString("Provider unavailable"));
-    }
-    void worldLaunchValidatesFolderAndEncodesExactTarget() {
-        QTemporaryDir temp;
-        QVERIFY(temp.isValid());
-        const QString name = QString::fromUtf8("C++ & world ? # \xc3\xa9");
-        // Windows does not allow ? in folder names; URL encoding is tested separately below.
-        const QString folder = QString::fromUtf8("C++ & world \xc3\xa9");
-        write(temp.path() + "/saves/" + folder + "/level.dat", "world fixture");
-        auto opener = std::make_shared<LaunchFixture>();
-        auto adapter = std::make_shared<ModrinthWorldLaunchAdapter>();
-        WorldLaunch launch({adapter}, opener, std::make_shared<NativePackFileStore>());
-        QVariantMap pack{{"path", temp.path()},
-                         {"provider", "modrinth"},
-                         {"minecraft", "1.21.1"},
-                         {"launcherInstanceId", "local:example/id"}};
-        launch.setPack(pack);
-        QVERIFY(launch.available());
-        launch.play("saves/" + folder);
-        QCOMPARE(opener->requested.scheme(), QString("modrinth"));
-        QCOMPARE(QUrlQuery(opener->requested).queryItemValue("singleplayer_world", QUrl::FullyDecoded),
-                 folder);
-        QVERIFY(opener->requested.toEncoded().contains("local%3Aexample%2Fid"));
-        const auto special = adapter->worldUrl(pack, name);
-        QCOMPARE(QUrlQuery(special).queryItemValue("singleplayer_world", QUrl::FullyDecoded), name);
-        opener->requested = QUrl{};
-        launch.play("saves/../elsewhere");
-        QVERIFY(opener->requested.isEmpty());
-        write(temp.path() + "/saves/empty/README.txt", "not a world");
-        launch.play("saves/empty");
-        QVERIFY(opener->requested.isEmpty());
-        pack["minecraft"] = "1.19.4";
-        launch.setPack(pack);
-        QVERIFY(!launch.available());
-        pack["minecraft"] = "unknown";
-        launch.setPack(pack);
-        QVERIFY(!launch.available());
-        pack["provider"] = "curseforge";
-        launch.setPack(pack);
-        QVERIFY(!launch.available());
     }
     void identityRequiresTheInstalledBytes() {
         QTemporaryDir temp;

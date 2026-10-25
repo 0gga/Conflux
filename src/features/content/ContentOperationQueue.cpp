@@ -22,8 +22,10 @@ void ContentOperationQueue::startNext() {
     }
     m_running = true;
     auto task = m_tasks.dequeue();
-    emit changed();
     const QPointer<ContentOperationQueue> guard(this);
+    emit changed();
+    if (!guard)
+        return;
     auto completed = std::make_shared<bool>(false);
     task.run([guard, completed] {
         if (!guard || *completed)

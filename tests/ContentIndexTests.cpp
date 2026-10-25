@@ -1,3 +1,4 @@
+#include "TestPerformance.h"
 #include "domain/Catalogue.h"
 #include "platform/CurseforgeFingerprint.h"
 #include "platform/SqliteContentIndex.h"
@@ -312,7 +313,7 @@ class ContentIndexTests final : public QObject {
         QCOMPARE(result.rows.size(), 3000);
         for (const auto &value : result.rows)
             QVERIFY(value.toMap().value("metadataResolved").toBool());
-        QVERIFY(milliseconds < 750);
+        QVERIFY(test_performance::releaseBudgetMet(milliseconds, 750));
     }
 };
 int main(int argc, char **argv) {

@@ -5,3 +5,4 @@
 /.qt/
 *.user
 .env
+__pycache__/

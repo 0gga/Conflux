@@ -1,0 +1,2533 @@
+{
+  "schema": 1,
+  "files": {
+    "src/ApplicationController.cpp": {
+      "phase": "ui",
+      "sha256": "c1b71ba5946c9a940e2cc3884dd9b5b283af7c80fce93a3cd6bae2a0299f5b6c",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/ApplicationController.h": {
+      "phase": "ui",
+      "sha256": "799868eac1b28e5c6379101ade4fda716f34cbd04f79ab8fdb9df11a4e1e433e",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/DesktopSession.cpp": {
+      "phase": "ui",
+      "sha256": "65992d7e2fedf7d403e38f52de532d74983c4004ead4a75490107e6922007e32",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/DesktopSession.h": {
+      "phase": "ui",
+      "sha256": "22e41af45610817e721e49e3791be6004cf056fcede9875a911de52a30492a53",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/domain/Catalogue.cpp": {
+      "phase": "non-ui",
+      "sha256": "b8ba2a30b43db9576ba47c232b297bcdfc0f70d951dddb277e5fc68587b98ed9",
+      "status": "reviewed",
+      "checks": [
+        "Qualified identities, exact-file merges, source totals, version/date ordering and serialization",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FoundationTests ContentCatalogueUpdateTests"
+      ],
+      "findings": [
+        "AUD-13",
+        "AUD-20"
+      ]
+    },
+    "src/domain/Catalogue.h": {
+      "phase": "non-ui",
+      "sha256": "4ea1bd12c3328dbb8f5b7c5a4eca0bd3ac508b083d368d5751686dc175c046e5",
+      "status": "reviewed",
+      "checks": [
+        "Qualified identities, exact-file merges, source totals, version/date ordering and serialization",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FoundationTests ContentCatalogueUpdateTests"
+      ],
+      "findings": [
+        "AUD-13",
+        "AUD-20"
+      ]
+    },
+    "src/domain/CatalogueSearch.h": {
+      "phase": "non-ui",
+      "sha256": "6a2655d1c3fb7daaadf68dcb18e9bdac259a42dd21642d895f02aef4de73e183",
+      "status": "reviewed",
+      "checks": [
+        "Injected search/settings contracts and callback ownership",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: BrowseCatalogueTests CatalogueLoadingTests"
+      ],
+      "findings": [
+        "AUD-13"
+      ]
+    },
+    "src/domain/ContentCompatibility.h": {
+      "phase": "non-ui",
+      "sha256": "b3cca5b5b436ab3484d9358403df90b75b872b3c65e6195b84a3725993e48792",
+      "status": "reviewed",
+      "checks": [
+        "Compatibility guards, Release defaults, mappings, license allowlist and bounded normalized search",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ReleasePolicyTests ContentReadBudgetTests ContentFilteringTests"
+      ],
+      "findings": []
+    },
+    "src/domain/ContentTypes.h": {
+      "phase": "non-ui",
+      "sha256": "f219ebff372a7827153b18aad4c3a7c364ff7b9305ac66401ba5337b4e82f49d",
+      "status": "reviewed",
+      "checks": [
+        "Compatibility guards, Release defaults, mappings, license allowlist and bounded normalized search",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ReleasePolicyTests ContentReadBudgetTests ContentFilteringTests"
+      ],
+      "findings": []
+    },
+    "src/domain/LicensePolicy.h": {
+      "phase": "non-ui",
+      "sha256": "39e83530356858e35f331e82012e7addaa88304ab19e4cb32ce3d9291ded31cf",
+      "status": "reviewed",
+      "checks": [
+        "Compatibility guards, Release defaults, mappings, license allowlist and bounded normalized search",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ReleasePolicyTests ContentReadBudgetTests ContentFilteringTests"
+      ],
+      "findings": []
+    },
+    "src/domain/ReleaseStages.h": {
+      "phase": "non-ui",
+      "sha256": "9d0d6827872a06fea1ff4519d50466380c93403083d721049bc7134afcabd3e2",
+      "status": "reviewed",
+      "checks": [
+        "Compatibility guards, Release defaults, mappings, license allowlist and bounded normalized search",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ReleasePolicyTests ContentReadBudgetTests ContentFilteringTests"
+      ],
+      "findings": []
+    },
+    "src/domain/TextSearch.h": {
+      "phase": "non-ui",
+      "sha256": "a6b65a8953cfedca6f6abc84629c494ab040338651fc27e8a3b1c503f324eb9e",
+      "status": "reviewed",
+      "checks": [
+        "Compatibility guards, Release defaults, mappings, license allowlist and bounded normalized search",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ReleasePolicyTests ContentReadBudgetTests ContentFilteringTests"
+      ],
+      "findings": []
+    },
+    "src/features/config/ConfigCodec.h": {
+      "phase": "non-ui",
+      "sha256": "b92d7e6f854292fca184ffa605c2b6e0dcd82a78b67ce187da9e1ca6ea77d3b5",
+      "status": "reviewed",
+      "checks": [
+        "Typed scalars/lists, preserved text, field caps and invalid input; fidelity gaps tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-14"
+      ]
+    },
+    "src/features/config/ConfigEditor.cpp": {
+      "phase": "non-ui",
+      "sha256": "813e2a8abc6f5b9401b4d4e6cbb01f9314547994b7406a45653d8c5a710b97e2",
+      "status": "reviewed",
+      "checks": [
+        "Generation ownership, pending edits, conflict/save/reload states; exception and notification lifetime gaps tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08"
+      ]
+    },
+    "src/features/config/ConfigEditor.h": {
+      "phase": "non-ui",
+      "sha256": "064177bb058bdd6cd28e0108ca3d795eda227daca14d5a8703e96ce8b7a26d57",
+      "status": "reviewed",
+      "checks": [
+        "Generation ownership, pending edits, conflict/save/reload states; exception and notification lifetime gaps tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08"
+      ]
+    },
+    "src/features/config/ConfigLibrary.cpp": {
+      "phase": "non-ui",
+      "sha256": "66b1ff7cf94bcca5044e1397a098e68aed6b85acb0001536016d8e4041130b0c",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/config/ConfigLibrary.h": {
+      "phase": "non-ui",
+      "sha256": "1f87dba3508714e936d65871b5b8e5452e8e7278aca8b61fb8aa79c8d18b3e94",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/config/ConfigRepository.cpp": {
+      "phase": "non-ui",
+      "sha256": "d3779fb01ef47e0bec4919b876cf520730440574cb939e5713e2551d778f276f",
+      "status": "reviewed",
+      "checks": [
+        "Codec strategy, identified-target authorization, bounded reads and encode-before-write flow",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-08"
+      ]
+    },
+    "src/features/config/ConfigRepository.h": {
+      "phase": "non-ui",
+      "sha256": "e115c78d3e817702b0b2524de4b3708549bca0666a962e3ccbff00eef5615db5",
+      "status": "reviewed",
+      "checks": [
+        "Codec strategy, identified-target authorization, bounded reads and encode-before-write flow",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-08"
+      ]
+    },
+    "src/features/config/JsonConfigCodec.cpp": {
+      "phase": "non-ui",
+      "sha256": "b43467916739a77746af750ecb7fed0551acec9eb754e00d7ffd3518e7d05246",
+      "status": "reviewed",
+      "checks": [
+        "Exact root-array pointers, typed replacements, unsupported-value preservation and field caps; old failures reproduced and27 focused outcomes pass",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ConfigCodecTests"
+      ],
+      "findings": [
+        "AUD-04"
+      ]
+    },
+    "src/features/config/PropertiesConfigCodec.cpp": {
+      "phase": "non-ui",
+      "sha256": "e506953b0679f97038fd4c33cc043e578dbc306fd7072b7c356e45da75892b56",
+      "status": "reviewed",
+      "checks": [
+        "Typed scalars/lists, preserved text, field caps and invalid input; fidelity gaps tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-14"
+      ]
+    },
+    "src/features/config/TomlConfigCodec.cpp": {
+      "phase": "non-ui",
+      "sha256": "38b05d8470c8ff04a94d345c1e9cb2eba7ac38591cc7034b35ce5278f2315870",
+      "status": "reviewed",
+      "checks": [
+        "Typed scalars/lists, preserved text, field caps and invalid input; fidelity gaps tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-14"
+      ]
+    },
+    "src/features/content/ArchiveReader.cpp": {
+      "phase": "non-ui",
+      "sha256": "172f8e27cf7302dc6b4ef78d309fb1d8b79ff61926008376c8a1c191b85a609f",
+      "status": "reviewed",
+      "checks": [
+        "Contained entry names, image limits and ZIP extraction; invalid signed limits need explicit guards",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests ContentPipelineTests"
+      ],
+      "findings": [
+        "AUD-18"
+      ]
+    },
+    "src/features/content/ArchiveReader.h": {
+      "phase": "non-ui",
+      "sha256": "c574f3856927540f871d04c68b1b83e17607bf7d871d0230e2f148a2aceeeb13",
+      "status": "reviewed",
+      "checks": [
+        "Contained entry names, image limits and ZIP extraction; invalid signed limits need explicit guards",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests ContentPipelineTests"
+      ],
+      "findings": [
+        "AUD-18"
+      ]
+    },
+    "src/features/content/ConfigAssociation.cpp": {
+      "phase": "non-ui",
+      "sha256": "13f33bba2d8089f21e09dafc9786b862010bcf366f558b9cdb054eddf3aeb864",
+      "status": "reviewed",
+      "checks": [
+        "Normalized filename/directory suggestions and ambiguous-owner rejection",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/ConfigAssociation.h": {
+      "phase": "non-ui",
+      "sha256": "748df604dc4e067a94c208c032869e3421317aa46e08dbe477ec19616f007e7f",
+      "status": "reviewed",
+      "checks": [
+        "Normalized filename/directory suggestions and ambiguous-owner rejection",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/ContentActions.cpp": {
+      "phase": "non-ui",
+      "sha256": "113c1ceedb8538f89023526620162eeeb013cc4159d10c3b9ea0d11c6e7f7fd6",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/content/ContentActions.h": {
+      "phase": "non-ui",
+      "sha256": "c8197c421fc4be3175e3f89229abb70223c27a5bddf63f63713634b1102eb81a",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/content/ContentDependencyGraph.cpp": {
+      "phase": "non-ui",
+      "sha256": "81b508902b9868e54f9fd2b4cb680c110af743bd3f7cb2374b65cf90042766c0",
+      "status": "reviewed",
+      "checks": [
+        "Exact provider/runtime references, ambiguity, cycles, reverse edges and closed unused subsets",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentDependencyGraphTests"
+      ],
+      "findings": [
+        "AUD-20"
+      ]
+    },
+    "src/features/content/ContentDependencyGraph.h": {
+      "phase": "non-ui",
+      "sha256": "1709181b16fd515d280821bd0c8d2974f58c3a22ad5038f24c434eef69760fca",
+      "status": "reviewed",
+      "checks": [
+        "Exact provider/runtime references, ambiguity, cycles, reverse edges and closed unused subsets",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentDependencyGraphTests"
+      ],
+      "findings": [
+        "AUD-20"
+      ]
+    },
+    "src/features/content/ContentDependencyInstaller.cpp": {
+      "phase": "non-ui",
+      "sha256": "36a0d5024a1d7c18e66295515f002935337028f3062ae571cf78ccd81df625e2",
+      "status": "reviewed",
+      "checks": [
+        "Root-first independent commits, bounded expansion, cancellation, duplicate delivery and retained choices; missing retained descendants need reproduction",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentDependencyTests OptionalDependencyTests"
+      ],
+      "findings": [
+        "AUD-16",
+        "AUD-20"
+      ]
+    },
+    "src/features/content/ContentDependencyInstaller.h": {
+      "phase": "non-ui",
+      "sha256": "b68599f9258eaf6415c23717e8bbe90edd27b8dc2211de4f08f6b1cd7c8758a6",
+      "status": "reviewed",
+      "checks": [
+        "Root-first independent commits, bounded expansion, cancellation, duplicate delivery and retained choices; missing retained descendants need reproduction",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentDependencyTests OptionalDependencyTests"
+      ],
+      "findings": [
+        "AUD-16",
+        "AUD-20"
+      ]
+    },
+    "src/features/content/ContentIndex.h": {
+      "phase": "non-ui",
+      "sha256": "af1b3fb6a8dd3cd4bd03dff003a68951f1646ae2db7e578cce405bdd3222c07a",
+      "status": "reviewed",
+      "checks": [
+        "Injected persistence/write/catalogue contracts, worker index use and explicit unsupported-capability defaults",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentActionsTests ContentIndexTests"
+      ],
+      "findings": [
+        "AUD-13"
+      ]
+    },
+    "src/features/content/ContentInventory.cpp": {
+      "phase": "non-ui",
+      "sha256": "692a5e777de0b1dd25491179c356f1d2df8af8dc622154a7c1be2e7bcdbdac8c",
+      "status": "reviewed",
+      "checks": [
+        "Canonical containment, private/link guards, category/depth caps, pins and cached metadata",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentReadBudgetTests FeatureTests"
+      ],
+      "findings": [
+        "AUD-17"
+      ]
+    },
+    "src/features/content/ContentInventory.h": {
+      "phase": "non-ui",
+      "sha256": "c25c38fccfd5f07eb507af0bc41995b36301e1fdcc835a86c36793002fd04f34",
+      "status": "reviewed",
+      "checks": [
+        "Canonical containment, private/link guards, category/depth caps, pins and cached metadata",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentReadBudgetTests FeatureTests"
+      ],
+      "findings": [
+        "AUD-17"
+      ]
+    },
+    "src/features/content/ContentListModel.cpp": {
+      "phase": "non-ui",
+      "sha256": "889959b66a7d7b8c095962c39386f519d644720de1b7966c2861e13eea077673",
+      "status": "reviewed",
+      "checks": [
+        "Occurrence identities, contiguous structural notifications and persistent-index remapping",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentFilteringTests"
+      ],
+      "findings": [
+        "AUD-07"
+      ]
+    },
+    "src/features/content/ContentListModel.h": {
+      "phase": "non-ui",
+      "sha256": "5fa8982a0fad5c2fd94f13130b975ef8bf980b1da70f9e739baf52033f040ff0",
+      "status": "reviewed",
+      "checks": [
+        "Occurrence identities, contiguous structural notifications and persistent-index remapping",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentFilteringTests"
+      ],
+      "findings": [
+        "AUD-07"
+      ]
+    },
+    "src/features/content/ContentLockIntent.cpp": {
+      "phase": "non-ui",
+      "sha256": "175706dfe265dfea528fe45e70a375cb36761f267bf5efeb3b5aa2ec1a189a32",
+      "status": "reviewed",
+      "checks": [
+        "Side-effect-free source/local/reject routing and pending protection",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentLockIntentTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/ContentLockIntent.h": {
+      "phase": "non-ui",
+      "sha256": "eeb560c7e47fa70a66beec21ce90858ce8b0a3c210df758883a9e53118bbec55",
+      "status": "reviewed",
+      "checks": [
+        "Side-effect-free source/local/reject routing and pending protection",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentLockIntentTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/ContentLockRegistry.cpp": {
+      "phase": "non-ui",
+      "sha256": "07f51a6bf6c760e0294ee0504ca55add88e39a61bb70c548143d9cd0cd8c23cc",
+      "status": "reviewed",
+      "checks": [
+        "Thread-safe path/project indexes and predicted managed-hash path protection",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentTransactionTests ContentActionsTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/ContentLockRegistry.h": {
+      "phase": "non-ui",
+      "sha256": "35de25d4966ed965ce2d330f9e82688862c0c4501185790917a83167bde82b37",
+      "status": "reviewed",
+      "checks": [
+        "Thread-safe path/project indexes and predicted managed-hash path protection",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentTransactionTests ContentActionsTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/ContentOperationExecutor.cpp": {
+      "phase": "non-ui",
+      "sha256": "14f383faf275dfa2efaa88f33aa54a16a32ecaa0f61b2b27945b21d9575df903",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed lock/hash/target revalidation, dependency cleanup recomputation, caught worker errors, once-only completion and acknowledged-write read recovery.",
+        "Source review; uncovered states remain explicit. Related regression sources: ContentUpdateTests ContentUpdateIntegrationTests ContentTransactionTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/ContentOperationExecutor.h": {
+      "phase": "non-ui",
+      "sha256": "4d1d8a12e1143a54303005dd2cd19a40b2972a91c471207523a5bb206efaa0bb",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed lock/hash/target revalidation, dependency cleanup recomputation, caught worker errors, once-only completion and acknowledged-write read recovery.",
+        "Source review; uncovered states remain explicit. Related regression sources: ContentUpdateTests ContentUpdateIntegrationTests ContentTransactionTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/ContentOperationQueue.cpp": {
+      "phase": "non-ui",
+      "sha256": "5979219c5d514dce7055de953a5b118d9054d687b62ef4203f84340ce93dda49",
+      "status": "reviewed",
+      "checks": [
+        "FIFO/group discard, owner-thread idempotent completion and guarded notification; nine focused outcomes pass",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentOperationQueueTests"
+      ],
+      "findings": [
+        "AUD-03"
+      ]
+    },
+    "src/features/content/ContentOperationQueue.h": {
+      "phase": "non-ui",
+      "sha256": "99f3468f02572ce32cee43da5b86e497e43b264bb8fc2b9c5204dfa563dcc1e4",
+      "status": "reviewed",
+      "checks": [
+        "FIFO/group discard, owner-thread idempotent completion and guarded notification; nine focused outcomes pass",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentOperationQueueTests"
+      ],
+      "findings": [
+        "AUD-03"
+      ]
+    },
+    "src/features/content/ContentOperationReservations.cpp": {
+      "phase": "non-ui",
+      "sha256": "d4d669753b4a540efbc0a27bfea0bc64ffaa8cae221c3f765a3c41ffd65ac20e",
+      "status": "reviewed",
+      "checks": [
+        "Atomic scoped acquisition, qualified claims and owner-only release",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentOperationStateTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/ContentOperationReservations.h": {
+      "phase": "non-ui",
+      "sha256": "da9209de326df269a5003eebfdd49afc0a7e408519d9bc5502405cf23063bb56",
+      "status": "reviewed",
+      "checks": [
+        "Atomic scoped acquisition, qualified claims and owner-only release",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentOperationStateTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/ContentOperationState.cpp": {
+      "phase": "non-ui",
+      "sha256": "387649b4757d7597c9e2c48c810f0a2b238a7c669ee82e33d34849cfa43ee9ef",
+      "status": "reviewed",
+      "checks": [
+        "Stable keys, hash/metadata reconciliation, ambiguity and optimistic projection; unindexed fallback remains",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentOperationStateTests"
+      ],
+      "findings": [
+        "AUD-06"
+      ]
+    },
+    "src/features/content/ContentOperationState.h": {
+      "phase": "non-ui",
+      "sha256": "96cf94b865b450e3c7a0de12c4d7e8858c40bdba11ccba95638392cb0e4e20b7",
+      "status": "reviewed",
+      "checks": [
+        "Stable keys, hash/metadata reconciliation, ambiguity and optimistic projection; unindexed fallback remains",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentOperationStateTests"
+      ],
+      "findings": [
+        "AUD-06"
+      ]
+    },
+    "src/features/content/ContentPorts.h": {
+      "phase": "non-ui",
+      "sha256": "d552caa05ab60f1169b58f4eb13bc0e686b7eb480078ef76ac9e6008c1949309",
+      "status": "reviewed",
+      "checks": [
+        "Injected persistence/write/catalogue contracts, worker index use and explicit unsupported-capability defaults",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentActionsTests ContentIndexTests"
+      ],
+      "findings": [
+        "AUD-13"
+      ]
+    },
+    "src/features/content/ContentTargetIndex.cpp": {
+      "phase": "non-ui",
+      "sha256": "faf68268335790bbd1a51f683bdf93f36fa948b91c944443756e1d6dd510143d",
+      "status": "reviewed",
+      "checks": [
+        "Immutable snapshot reuse, duplicate targets and original order",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentTargetIndexTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/ContentTargetIndex.h": {
+      "phase": "non-ui",
+      "sha256": "8fc8a4d76d7cc16a093e1a7d9c24e9bef9799b235fcbfc31df29f2e3bd1d9b1f",
+      "status": "reviewed",
+      "checks": [
+        "Immutable snapshot reuse, duplicate targets and original order",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentTargetIndexTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/ContentUpdateIntent.cpp": {
+      "phase": "non-ui",
+      "sha256": "c2b65f8eefbc6874bc0a12d4ed29ce70ce7390834912c0b2a8683f7e3d58d4a7",
+      "status": "reviewed",
+      "checks": [
+        "Known-update eligibility and one-content captured install/prediction",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentUpdateIntentTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/ContentUpdateIntent.h": {
+      "phase": "non-ui",
+      "sha256": "ac446763ab6ab9c0f43639e1c6397494c2f107de3d7d39fa677899e08a43f502",
+      "status": "reviewed",
+      "checks": [
+        "Known-update eligibility and one-content captured install/prediction",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentUpdateIntentTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/ContentUpdates.cpp": {
+      "phase": "non-ui",
+      "sha256": "f86c3be13035d5c516503536dae09e91242c9474af91b8f7c0418996e34ea0bd",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed immutable bulk destination, stage/lock checks, version request lifecycle and install routing. openVersions must capture/guard before notifications and invalidate empty targets.",
+        "Source review; uncovered states remain explicit. Related regression sources: ContentUpdateTests ContentActionsTests"
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-13"
+      ]
+    },
+    "src/features/content/ContentViewIndex.cpp": {
+      "phase": "non-ui",
+      "sha256": "b3fa1d31bde9056530a83f777eac847fab48d3f7ecd6c17c10474fa99bf42574",
+      "status": "reviewed",
+      "checks": [
+        "Prepared authors/tags/search/dependencies, visibility invalidation, sorting and local no-I/O filtering",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentFilteringTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/ContentViewIndex.h": {
+      "phase": "non-ui",
+      "sha256": "f51d1fc3542d64376bcabff9da071a00cf751550027de7e823dc03ef850bf1a2",
+      "status": "reviewed",
+      "checks": [
+        "Prepared authors/tags/search/dependencies, visibility invalidation, sorting and local no-I/O filtering",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentFilteringTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/DependencyRemovals.cpp": {
+      "phase": "non-ui",
+      "sha256": "7cc7276896a121207b1d089da5fa442c3581855f16a0e52de07c1a708a495393",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/content/DependencyRemovals.h": {
+      "phase": "non-ui",
+      "sha256": "152c7e838901a1b96289cceb12277e5ada7ec4e1e013c504e54abb29ad052009",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/content/ModMetadataReader.cpp": {
+      "phase": "non-ui",
+      "sha256": "886f5d9e4da9731514c79cb1502ff254ec7b00642d46734893238a632c8a169f",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/content/ModMetadataReader.h": {
+      "phase": "non-ui",
+      "sha256": "96dcb074cb8f7ad6021f6976f89899fd31f701e04ce1199bb142bcca5476e833",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/content/OptionalDependencies.cpp": {
+      "phase": "non-ui",
+      "sha256": "05de3827cc298ab3a5825b9d83e09af3f5de457fb56450453bfff23cea34d9ac",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed scoped queued offers, stage revalidation, bounded identity/hash sets, inline failures and optional install intent. Dismissal/generation changes during dispatch still need explicit command preservation and error scoping.",
+        "Source review; uncovered states remain explicit. Related regression sources: OptionalDependencyTests OptionalDependencyInteractionTests"
+      ],
+      "findings": [
+        "AUD-07"
+      ]
+    },
+    "src/features/content/OptionalDependencies.h": {
+      "phase": "non-ui",
+      "sha256": "41b932d32a4e393abfd139e9c91789976743278705d3bcdccdbc3c93319867de",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed scoped queued offers, stage revalidation, bounded identity/hash sets, inline failures and optional install intent. Dismissal/generation changes during dispatch still need explicit command preservation and error scoping.",
+        "Source review; uncovered states remain explicit. Related regression sources: OptionalDependencyTests OptionalDependencyInteractionTests"
+      ],
+      "findings": [
+        "AUD-07"
+      ]
+    },
+    "src/features/content/SourceLockIndex.cpp": {
+      "phase": "non-ui",
+      "sha256": "415882ec32ae114b4351394edac16e5f195cd5ce0ee4816afe6040e0b39c309f",
+      "status": "reviewed",
+      "checks": [
+        "Normalized instance scopes, authoritative snapshots and earliest qualified source lock",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentActionsTests"
+      ],
+      "findings": []
+    },
+    "src/features/content/SourceLockIndex.h": {
+      "phase": "non-ui",
+      "sha256": "0975323b8f75801c057606461f5e73fd4b6708e72ed94859c5a2bd7d892d8d57",
+      "status": "reviewed",
+      "checks": [
+        "Normalized instance scopes, authoritative snapshots and earliest qualified source lock",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentActionsTests"
+      ],
+      "findings": []
+    },
+    "src/features/diagnostics/DiagnosticRule.h": {
+      "phase": "non-ui",
+      "sha256": "4fd0c0b1dd6c794bf6a2063614e2e81188c97923dc72e775b2a01f12851c1bad",
+      "status": "reviewed",
+      "checks": [
+        "Independent duplicate/loader/pin/orphan/scan rules; qualified identities and snapshot purity need improvement",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-11",
+        "AUD-19"
+      ]
+    },
+    "src/features/diagnostics/DiagnosticRules.cpp": {
+      "phase": "non-ui",
+      "sha256": "0acd15bf2083c1d0cbc60541e99cf2262b7b72d119249318887224081a677649",
+      "status": "reviewed",
+      "checks": [
+        "Independent duplicate/loader/pin/orphan/scan rules; qualified identities and snapshot purity need improvement",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-11",
+        "AUD-19"
+      ]
+    },
+    "src/features/explore/BrowseCatalogue.cpp": {
+      "phase": "non-ui",
+      "sha256": "29e8a5e4f44a1457c7d29de1a9b6464bfa7b056a38e8b969f361e43c51dedf68",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/explore/BrowseCatalogue.h": {
+      "phase": "non-ui",
+      "sha256": "6bd1e782ea9a38d3973311fad87826f3250e540d682445038c3a15ece062f819",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/explore/BrowseInstalls.cpp": {
+      "phase": "non-ui",
+      "sha256": "e37f85eeb3ea9ea71ff844e6647e758a3b476cf484bd90032d1cb41a399d8e6e",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/explore/BrowseInstalls.h": {
+      "phase": "non-ui",
+      "sha256": "00a61afcf5a6b26c698023c73186954f7cd38c20c7afdca72326e36fdb4af1f4",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/explore/TolerantCatalogueSearch.cpp": {
+      "phase": "non-ui",
+      "sha256": "e3977b8866cd5104f1f44fe1fe139f024fbf6403ff6111f5c50687c0002bb8fc",
+      "status": "reviewed",
+      "checks": [
+        "Bounded fallback/ranking, cache expiry and credential generations; delayed decorator lifetime tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: BrowseCatalogueTests"
+      ],
+      "findings": [
+        "AUD-07"
+      ]
+    },
+    "src/features/explore/TolerantCatalogueSearch.h": {
+      "phase": "non-ui",
+      "sha256": "5e08b0a232ce56f2f0e1ea509197b43529ee8f08558bac917a41d56d080af110",
+      "status": "reviewed",
+      "checks": [
+        "Bounded fallback/ranking, cache expiry and credential generations; delayed decorator lifetime tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: BrowseCatalogueTests"
+      ],
+      "findings": [
+        "AUD-07"
+      ]
+    },
+    "src/features/launch/WorldLaunch.cpp": {
+      "phase": "non-ui",
+      "sha256": "1af767894361fc0e683bf9b57e56b7734fcfca92dd7d40d90d565c079a5c577d",
+      "status": "reviewed",
+      "checks": [
+        "Adapter/opener policy, target validation and bounded metadata probe; old failures reproduced and16 outcomes pass without game launch",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: WorldLaunchTests"
+      ],
+      "findings": [
+        "AUD-05"
+      ]
+    },
+    "src/features/launch/WorldLaunch.h": {
+      "phase": "non-ui",
+      "sha256": "3d30a79baa4bbd14c31d68a6decbad3643c8bb7fb30a7f84e05c77211a11b860",
+      "status": "reviewed",
+      "checks": [
+        "Adapter/opener policy, target validation and bounded metadata probe; old failures reproduced and16 outcomes pass without game launch",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: WorldLaunchTests"
+      ],
+      "findings": [
+        "AUD-05"
+      ]
+    },
+    "src/features/navigation/NavigationHistory.cpp": {
+      "phase": "non-ui",
+      "sha256": "fe802f9bba814620a552225ae6393e73ffd5c618f1f037cff423d199f5a98903",
+      "status": "reviewed",
+      "checks": [
+        "Bounded history, leave guards, pending routes and branch truncation; notification/resume lifetime gaps tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-07"
+      ]
+    },
+    "src/features/navigation/NavigationHistory.h": {
+      "phase": "non-ui",
+      "sha256": "7b7337deb16439c4b1b024f1d63d39005ad21b3199da8745745dc9ce682fa391",
+      "status": "reviewed",
+      "checks": [
+        "Bounded history, leave guards, pending routes and branch truncation; notification/resume lifetime gaps tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-07"
+      ]
+    },
+    "src/features/navigation/NavigationInput.cpp": {
+      "phase": "ui",
+      "sha256": "c509fcfb6bd040a62c20276039a1abd154c38ac0660e67566d7df9ec41bfed26",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/navigation/NavigationInput.h": {
+      "phase": "ui",
+      "sha256": "ce66c30beb75089b192743bbecda9e5716f132a77869b680178ac213e92046b3",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/preferences/BrowseFilterPreferences.cpp": {
+      "phase": "non-ui",
+      "sha256": "651a0c96c1c11965b5fca1a66eeb00ee15713f5db639165961d4c0462ae42d69",
+      "status": "reviewed",
+      "checks": [
+        "Schema-tagged instance/type compatibility persistence and absent-value semantics",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: BrowseCatalogueTests"
+      ],
+      "findings": []
+    },
+    "src/features/preferences/BrowseFilterPreferences.h": {
+      "phase": "non-ui",
+      "sha256": "bb587af210ac757e84dd8a8b193fa1978dcbd408796fb91e0bdabbf3699b0d83",
+      "status": "reviewed",
+      "checks": [
+        "Schema-tagged instance/type compatibility persistence and absent-value semantics",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: BrowseCatalogueTests"
+      ],
+      "findings": []
+    },
+    "src/features/preferences/BrowsePreferences.cpp": {
+      "phase": "non-ui",
+      "sha256": "24051380d70f3566c5ff65b738909579dba98ccc64d2630fe76dfd278727ea40",
+      "status": "reviewed",
+      "checks": [
+        "Shared persisted/interactive validation, no-op writes and resets",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: AppearanceTests BrowseCatalogueTests"
+      ],
+      "findings": []
+    },
+    "src/features/preferences/BrowsePreferences.h": {
+      "phase": "non-ui",
+      "sha256": "0463f37a0339349c86e600bd584835efa0a901f47fe98d26cad4f3ede7b7527f",
+      "status": "reviewed",
+      "checks": [
+        "Shared persisted/interactive validation, no-op writes and resets",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: AppearanceTests BrowseCatalogueTests"
+      ],
+      "findings": []
+    },
+    "src/features/preferences/ContentPreferences.cpp": {
+      "phase": "non-ui",
+      "sha256": "35c5730d0c4f600716cb64fe1f95006e4db3b0289c462a0ac6ac57ceb619635b",
+      "status": "reviewed",
+      "checks": [
+        "Bounded immutable key cache, current settings reads and stored-key compatibility",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentPreferenceTests"
+      ],
+      "findings": []
+    },
+    "src/features/preferences/ContentPreferences.h": {
+      "phase": "non-ui",
+      "sha256": "728966c1faba192d5602b8b018b36633ad3d4e4a0ab26f9c285654673b28881e",
+      "status": "reviewed",
+      "checks": [
+        "Bounded immutable key cache, current settings reads and stored-key compatibility",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentPreferenceTests"
+      ],
+      "findings": []
+    },
+    "src/features/preferences/ContentVisibility.cpp": {
+      "phase": "non-ui",
+      "sha256": "398d0795d4a7e139c202d520cc7801bcabf08a9839e84620d921a74f8d40e8ac",
+      "status": "reviewed",
+      "checks": [
+        "Provider/hash/path hidden identity persistence; linear membership is a measured-work candidate",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: BrowseCatalogueTests"
+      ],
+      "findings": [
+        "AUD-15"
+      ]
+    },
+    "src/features/preferences/ContentVisibility.h": {
+      "phase": "non-ui",
+      "sha256": "b459ea524910effe6dfc3d39e31a089026a919738d9aa3f569b9be6214b6fdec",
+      "status": "reviewed",
+      "checks": [
+        "Provider/hash/path hidden identity persistence; linear membership is a measured-work candidate",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: BrowseCatalogueTests"
+      ],
+      "findings": [
+        "AUD-15"
+      ]
+    },
+    "src/features/preferences/InstallationPreferences.cpp": {
+      "phase": "non-ui",
+      "sha256": "72c679cbd6333e8ef7c33042725bce9e3c458558784cb188df65220184b13e47",
+      "status": "reviewed",
+      "checks": [
+        "Persisted optional prompt and no-op notifications",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: OptionalDependencyTests"
+      ],
+      "findings": []
+    },
+    "src/features/preferences/InstallationPreferences.h": {
+      "phase": "non-ui",
+      "sha256": "a0dd3fb50c430eb041943b2c9e6b302c76d1e4c8238ca31b029bcf056bf4fa88",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed persisted optional prompt contract and isolated settings dependency.",
+        "Source review; uncovered states remain explicit. Related regression sources: OptionalDependencyTests"
+      ],
+      "findings": []
+    },
+    "src/features/preferences/PackReleasePolicy.cpp": {
+      "phase": "non-ui",
+      "sha256": "a763dd7c824b0769e705f726e693440479b20200b84dfd1a5b2d3fd9b05d5901",
+      "status": "reviewed",
+      "checks": [
+        "Normalized scope, Release migration, immutable settings cache and invalid-stage rejection",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ReleasePolicyTests"
+      ],
+      "findings": [
+        "AUD-07"
+      ]
+    },
+    "src/features/preferences/PackReleasePolicy.h": {
+      "phase": "non-ui",
+      "sha256": "24e30f1232379addf24e8657d83da19b1087b0b171b65ded969d1a609619ec49",
+      "status": "reviewed",
+      "checks": [
+        "Normalized scope, Release migration, immutable settings cache and invalid-stage rejection",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ReleasePolicyTests"
+      ],
+      "findings": [
+        "AUD-07"
+      ]
+    },
+    "src/features/preferences/WarningPreferences.cpp": {
+      "phase": "non-ui",
+      "sha256": "29452d02f4fe22625e4eba349d4363611fd6180b4e7d8b555ce177b30adb3a13",
+      "status": "reviewed",
+      "checks": [
+        "Category preference persistence, options and reset separated from diagnostics",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": []
+    },
+    "src/features/preferences/WarningPreferences.h": {
+      "phase": "non-ui",
+      "sha256": "170fcb86b9f111c17200e8f734aed55b2ac0c50c35cfd39f694c093adc9d68f5",
+      "status": "reviewed",
+      "checks": [
+        "Category preference persistence, options and reset separated from diagnostics",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": []
+    },
+    "src/features/showcase/DescriptionRenderer.cpp": {
+      "phase": "non-ui",
+      "sha256": "05e3cca261c0efe15ac288c4021e87e8a6e30d04aef2675756e4ec2a7bda31d7",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/showcase/DescriptionRenderer.h": {
+      "phase": "non-ui",
+      "sha256": "20cfe1b27a712987678df3b44e6e60998f6178a00a90284279b23bd23ad5a72b",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/showcase/ProjectShowcase.cpp": {
+      "phase": "non-ui",
+      "sha256": "5ed7c603567858124815f24e4722f4fe5a36609cc26e1bab5ba1d6b19545474f",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/showcase/ProjectShowcase.h": {
+      "phase": "non-ui",
+      "sha256": "5d4573809871a346cb3b4a73551b4e1d2bfda46ddea8c7cf8bae15e8188f6122",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/showcase/ProjectShowcaseSource.h": {
+      "phase": "non-ui",
+      "sha256": "898f6b66225e4c495dd735f4b7cead51c1f2a6af02ca97c2b59b4e143e07fa62",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed resolve/detail/progressive callback composition, cancellations and galleries. Source detail/progress callback lifetime needs explicit guards and stable callback copies.",
+        "Source review; uncovered states remain explicit. Related regression sources: ShowcaseLoadingTests ShowcaseTests"
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-13"
+      ]
+    },
+    "src/features/showcase/ReleaseFilters.cpp": {
+      "phase": "non-ui",
+      "sha256": "38d91c973910a21bf5873dc7a8f137a942cdaddfc781f58740eab8181158c737",
+      "status": "reviewed",
+      "checks": [
+        "Cached rows/options, stage/source selection, seeding and loader reconciliation",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ShowcaseTests"
+      ],
+      "findings": []
+    },
+    "src/features/showcase/ReleaseFilters.h": {
+      "phase": "non-ui",
+      "sha256": "bad0c88441d9b0fbb42a93e67e20905dadb2aefd1324b107534e482fc268b455",
+      "status": "reviewed",
+      "checks": [
+        "Cached rows/options, stage/source selection, seeding and loader reconciliation",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ShowcaseTests"
+      ],
+      "findings": []
+    },
+    "src/features/showcase/VersionChangelogs.cpp": {
+      "phase": "non-ui",
+      "sha256": "6aa803abb0ab8f9dfe93fd6897326d5115eb39bcc24fb42e18875e2807c3bc16",
+      "status": "reviewed",
+      "checks": [
+        "Grouping, aliases, lazy bounded workers and generations; notification/exception gaps tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: VersionChangelogTests"
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08"
+      ]
+    },
+    "src/features/showcase/VersionChangelogs.h": {
+      "phase": "non-ui",
+      "sha256": "5bdc23af94ae9f241feaec3b10208011bff840462392f6bd8abff44589a2bf32",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed bounded changelog model/selection API and its single state owner; implementation notification/worker gaps remain tracked.",
+        "Source review; uncovered states remain explicit. Related regression sources: VersionChangelogTests"
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08"
+      ]
+    },
+    "src/features/status/OperationHistory.cpp": {
+      "phase": "non-ui",
+      "sha256": "7d99fd3d39ea14c03f107c12a7b3ca0d344fe90a54cde423d801135ef0e73595",
+      "status": "reviewed",
+      "checks": [
+        "Ordering, cached counts, model moves, pruning and clear-finished; multi-notification lifetime gaps tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: StatusTests"
+      ],
+      "findings": [
+        "AUD-07"
+      ]
+    },
+    "src/features/status/OperationHistory.h": {
+      "phase": "non-ui",
+      "sha256": "cfa7f911ce7248f706ecad4bb12377f64af40aaa49b724294c76352be0bef120",
+      "status": "reviewed",
+      "checks": [
+        "Ordering, cached counts, model moves, pruning and clear-finished; multi-notification lifetime gaps tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: StatusTests"
+      ],
+      "findings": [
+        "AUD-07"
+      ]
+    },
+    "src/features/status/RunningInstances.cpp": {
+      "phase": "non-ui",
+      "sha256": "27c4d43510dcf900d711478c653116c0628bf554831b30e14eb797384f9c4f76",
+      "status": "reviewed",
+      "checks": [
+        "Serialized polling, caught worker exceptions, stale generations and last successful snapshot",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: StatusTests"
+      ],
+      "findings": []
+    },
+    "src/features/status/RunningInstances.h": {
+      "phase": "non-ui",
+      "sha256": "aae04ec5fbf68cff36b23ba3486127170dfd9b7ea7aff572ddeec571ec9b7ee2",
+      "status": "reviewed",
+      "checks": [
+        "Serialized polling, caught worker exceptions, stale generations and last successful snapshot",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: StatusTests"
+      ],
+      "findings": []
+    },
+    "src/features/workspace/PackFileBrowser.cpp": {
+      "phase": "non-ui",
+      "sha256": "6e4c57394dc217a385b1542d70dc0be3d07f634867cf5ed03c834e13cbea2b19",
+      "status": "reviewed",
+      "checks": [
+        "Captured roots, generations and reader ports; worker exceptions/public notification gaps tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08"
+      ]
+    },
+    "src/features/workspace/PackFileBrowser.h": {
+      "phase": "non-ui",
+      "sha256": "a844aa1994b1113bab2bab23f4e7619354a7f92234294eb12a046bfac47ffe0f",
+      "status": "reviewed",
+      "checks": [
+        "Captured roots, generations and reader ports; worker exceptions/public notification gaps tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08"
+      ]
+    },
+    "src/features/workspace/PackLogViewer.cpp": {
+      "phase": "non-ui",
+      "sha256": "4a23ec585a54ad85b05e071a5e110a9423e189fd5d88187ecb7a68b8ba27993d",
+      "status": "reviewed",
+      "checks": [
+        "Captured roots, generations and reader ports; worker exceptions/public notification gaps tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08"
+      ]
+    },
+    "src/features/workspace/PackLogViewer.h": {
+      "phase": "non-ui",
+      "sha256": "046e94ba347736695bda8bc1185c5b15a69d2a2de41f9eea1f390027b60437f4",
+      "status": "reviewed",
+      "checks": [
+        "Captured roots, generations and reader ports; worker exceptions/public notification gaps tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08"
+      ]
+    },
+    "src/features/workspace/PackWorkspace.cpp": {
+      "phase": "non-ui",
+      "sha256": "2dc5a232d1811b28051d392feccab9c197fa3720d16efe7a2aa01eeb75095747",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/workspace/PackWorkspace.h": {
+      "phase": "non-ui",
+      "sha256": "d2afcae35f0c90f4f6de3a7be0fafe6b34b0f1d65bc0c24ca49801c86933fe97",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/features/workspace/PackWorldList.cpp": {
+      "phase": "non-ui",
+      "sha256": "62dbbecdd0d808438b1101461f2221c9372e5f816f9f6e33e5c23ee20341ffa8",
+      "status": "reviewed",
+      "checks": [
+        "Captured roots, generations and reader ports; worker exceptions/public notification gaps tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08"
+      ]
+    },
+    "src/features/workspace/PackWorldList.h": {
+      "phase": "non-ui",
+      "sha256": "2dce7ff439166df460fa80d7521731dbf3b94ae2caf25a14f05b2a7141d7d940",
+      "status": "reviewed",
+      "checks": [
+        "Captured roots, generations and reader ports; worker exceptions/public notification gaps tracked",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08"
+      ]
+    },
+    "src/main.cpp": {
+      "phase": "ui",
+      "sha256": "1da9ba26b6768b4da6cd44ebe296d7277adafde023582cf3b1dff0fe8c42e6fa",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/AssetInstaller.cpp": {
+      "phase": "non-ui",
+      "sha256": "e720151de97e5c403ebd6a03ce3f4807b3c3fe898dea62912e8e188303f6d499",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/AssetInstaller.h": {
+      "phase": "non-ui",
+      "sha256": "2b7d3acc1561a570b3dceaa2b7dd44a201fcd505585139481344958309df762e",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/BrowseSettingsStore.cpp": {
+      "phase": "non-ui",
+      "sha256": "d52801474903647097d2a8e065f72ab9b881e103b34be633f0865f8e4aad7777",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/BrowseSettingsStore.h": {
+      "phase": "non-ui",
+      "sha256": "1e5b675706e8cec37600f6be81e91275ad4a0fec70fa9ad39f3c3b4a8c08a5f1",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/CatalogueShowcaseSource.cpp": {
+      "phase": "non-ui",
+      "sha256": "ef0e740bcdebdcb0fdf73d846321c1693bf3f2c2a1eebcd264f63d3378dd2c04",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed resolve/detail/progressive callback composition, cancellations and galleries. Source detail/progress callback lifetime needs explicit guards and stable callback copies.",
+        "Source review; uncovered states remain explicit. Related regression sources: ShowcaseLoadingTests ShowcaseTests"
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-13"
+      ]
+    },
+    "src/platform/CatalogueShowcaseSource.h": {
+      "phase": "non-ui",
+      "sha256": "4bad8a9adc88726b6a316167b568f4e9b09dcd47fbd68a5671c9d9309d385d40",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed resolve/detail/progressive callback composition, cancellations and galleries. Source detail/progress callback lifetime needs explicit guards and stable callback copies.",
+        "Source review; uncovered states remain explicit. Related regression sources: ShowcaseLoadingTests ShowcaseTests"
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-13"
+      ]
+    },
+    "src/platform/ConfigOwnershipStore.cpp": {
+      "phase": "non-ui",
+      "sha256": "fc29cea2f7833b745dcef03f3e966c79f43336cf5ef8a98b9100c8995255409e",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/ConfigOwnershipStore.h": {
+      "phase": "non-ui",
+      "sha256": "b3a8398a10541705f687d52a238544dfca1992adc8351f72676a225bade91299",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/ContentAccess.cpp": {
+      "phase": "non-ui",
+      "sha256": "4c239cc6a2181fab6b369faafc41d7222bd2c5c031be35771f258be5617ad5b0",
+      "status": "reviewed",
+      "checks": [
+        "Recursive thread/process instance leases and exact scopes; expired weak keys remain",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentTransactionTests"
+      ],
+      "findings": [
+        "AUD-12"
+      ]
+    },
+    "src/platform/ContentAccess.h": {
+      "phase": "non-ui",
+      "sha256": "7a300925cc2dac2ee866aad8419fe19deed18446e54db386f9706cc59d2360b0",
+      "status": "reviewed",
+      "checks": [
+        "Recursive thread/process instance leases and exact scopes; expired weak keys remain",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentTransactionTests"
+      ],
+      "findings": [
+        "AUD-12"
+      ]
+    },
+    "src/platform/ContentDependencySource.cpp": {
+      "phase": "non-ui",
+      "sha256": "c895557792aa1d702965b1379ac98be603c55e81a33f695b3713dc2dbe8412ff",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/ContentDependencySource.h": {
+      "phase": "non-ui",
+      "sha256": "16539a8aabaac0d44c609a8492e039e70e6ef77e61c17bb1477019672b7d61ef",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/ContentFileCache.cpp": {
+      "phase": "non-ui",
+      "sha256": "d105b7a70439fd9632af17d70c9368fbbecb8faceb95036383bb4aa2a4deedbc",
+      "status": "reviewed",
+      "checks": [
+        "Native file identity/change-time stamps, bounded caches, mutation retry and statistics locking",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentReadBudgetTests"
+      ],
+      "findings": []
+    },
+    "src/platform/ContentFileCache.h": {
+      "phase": "non-ui",
+      "sha256": "a71c4f14c79556a711ace2cbbc9b7fcba6acfee3c2fc0a0025d2881ac6397cbd",
+      "status": "reviewed",
+      "checks": [
+        "Native file identity/change-time stamps, bounded caches, mutation retry and statistics locking",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentReadBudgetTests"
+      ],
+      "findings": []
+    },
+    "src/platform/ContentInstaller.cpp": {
+      "phase": "non-ui",
+      "sha256": "f45d98262c5e87431c4c7e083ea0f9a5d6b5fcb949d938dc8fb358d516445746",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/ContentInstaller.h": {
+      "phase": "non-ui",
+      "sha256": "ae7106a62a50e481f6bb3c4a6cde1585ff7aeeda2fa9fca8cfbcbc7bd5bac669",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/ContentMetadataSource.cpp": {
+      "phase": "non-ui",
+      "sha256": "3f1ce307b676cca4872ec874a2d13e17095d8a79ba4be73a73bcde09c14331f9",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed hash proofs, index snapshots, fingerprints, coalesced API reads, partial metadata, author teams and quiet completion. Per-waiter auth generations, negative caching and unknown-field provenance remain tracked.",
+        "Source review; uncovered states remain explicit. Related regression sources: ContentMetadataTests"
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-24",
+        "AUD-25"
+      ]
+    },
+    "src/platform/ContentMetadataSource.h": {
+      "phase": "non-ui",
+      "sha256": "3177486c4960f4bed15723fc86d38f62b4d596ebbf8ec60d64c973bc751d7a42",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed hash proofs, index snapshots, fingerprints, coalesced API reads, partial metadata, author teams and quiet completion. Per-waiter auth generations, negative caching and unknown-field provenance remain tracked.",
+        "Source review; uncovered states remain explicit. Related regression sources: ContentMetadataTests"
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-24",
+        "AUD-25"
+      ]
+    },
+    "src/platform/CurseforgeContentState.cpp": {
+      "phase": "non-ui",
+      "sha256": "f7aaaa910adfdd26ab17aa11fef6be004a1707357375184aaec7efe6fcfbc444",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/CurseforgeContentState.h": {
+      "phase": "non-ui",
+      "sha256": "9db1133eb6426da62d6919309668afff1cb3e12eceee8bfbeba8143545e474b5",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/CurseforgeFingerprint.cpp": {
+      "phase": "non-ui",
+      "sha256": "08f1d097bc2b5ff7d8a8037cd2124b7a160c9b636c07af18ac03d5c0ea320bde",
+      "status": "reviewed",
+      "checks": [
+        "Bounded two-pass hashing, whitespace rules, exact SHA1 and file mutation checks",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentMetadataTests"
+      ],
+      "findings": []
+    },
+    "src/platform/CurseforgeFingerprint.h": {
+      "phase": "non-ui",
+      "sha256": "003dfb9691ba993a16ed569f77e7010ba66a15ea965caf566ea26f71a8263bcc",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/CurseforgeInstallSource.cpp": {
+      "phase": "non-ui",
+      "sha256": "48fe8c22a8392e6406b51594370e8412f5fe0ff38b62614a85e7ad9151609391",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/CurseforgeInstallSource.h": {
+      "phase": "non-ui",
+      "sha256": "7a3baaee8e41ade28bac9cf9086b43c610173f65c742332c4ab8273cd88e26bc",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/InstalledModIdentity.cpp": {
+      "phase": "non-ui",
+      "sha256": "889eff01d7e48bd2c3299fa89c87f0f9f733628501f3e5897b3943b30ef347c1",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed bounded JAR reads, exact-hash managed pin lookup, launcher metadata cache and HTTPS source links. Verified-input contract and duplicated identity decoder responsibilities remain audit work.",
+        "Source review; uncovered states remain explicit. Related regression sources: ShowcaseTests"
+      ],
+      "findings": [
+        "AUD-13",
+        "AUD-23"
+      ]
+    },
+    "src/platform/InstalledModIdentity.h": {
+      "phase": "non-ui",
+      "sha256": "1895ba4b9adda886a54ee9ad63b1a028dd524291744253e41806b91c6f9ebded",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed bounded JAR reads, exact-hash managed pin lookup, launcher metadata cache and HTTPS source links. Verified-input contract and duplicated identity decoder responsibilities remain audit work.",
+        "Source review; uncovered states remain explicit. Related regression sources: ShowcaseTests"
+      ],
+      "findings": [
+        "AUD-13",
+        "AUD-23"
+      ]
+    },
+    "src/platform/InstanceProcessSource.cpp": {
+      "phase": "non-ui",
+      "sha256": "87bb85d288e15c1c618300425719e32903e80ff68d75d729404d10268ca0bfe8",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/InstanceProcessSource.h": {
+      "phase": "non-ui",
+      "sha256": "d9cd8e115cbf9c5118d16704de58f81c6e40f9d46052c8e48623f3c05d88c9f6",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/LauncherContentLocks.cpp": {
+      "phase": "non-ui",
+      "sha256": "46029dfc142ce202a7f7690e55baa581f2d954798fd82ef99aa4fdc2509db2aa",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/LauncherContentLocks.h": {
+      "phase": "non-ui",
+      "sha256": "90c13c801dddfff277a58de1c2274ac7139bc75f35983ff6110b9a28a1925377",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/LauncherContentState.cpp": {
+      "phase": "non-ui",
+      "sha256": "a3594b3e66beab13252986de6d9cfbf34e3d5f2c31d3a5bf4658c14e749eb56a",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/LauncherContentState.h": {
+      "phase": "non-ui",
+      "sha256": "9a3473f9f9346afa13d414d72ffd4b2c9f4bf50d593f71da463e98bfd4af6525",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/NativeContentStore.cpp": {
+      "phase": "non-ui",
+      "sha256": "98f24a12c0c528ccc277c4e9d10db045133a4259fcb8201a5511242bac0cb984",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/NativeContentStore.h": {
+      "phase": "non-ui",
+      "sha256": "b933e4e7a0e1a0107bc9df2f04c2460ddef5dd8a125fb2041ea3db05c966db11",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/OptionalDependencySource.cpp": {
+      "phase": "non-ui",
+      "sha256": "3d8d6afe91211978ae3e24fec9f2870901ba9bdfffb33a18a6e17393bfeab434",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/OptionalDependencySource.h": {
+      "phase": "non-ui",
+      "sha256": "74877f7bf4c6c67323400d7889f6792e41a77e28e32d3de70a85d78f54ebb64b",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/PackChangeMonitor.cpp": {
+      "phase": "non-ui",
+      "sha256": "6084621f038b44e65c9aa815b20585df7a1f71dda01279521f588429ff766386",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/PackChangeMonitor.h": {
+      "phase": "non-ui",
+      "sha256": "4f0cb869cef6a4755190f0dd9447021e6f1ae04fbf90c566278663cedefebfb6",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/PackFileStore.cpp": {
+      "phase": "non-ui",
+      "sha256": "2f0690d61bcbe35b17c1cde936c8a318609055eec51423af2f1b4a45a26daa0b",
+      "status": "reviewed",
+      "checks": [
+        "Canonical paths, links/private leaves, bounded reads, backups, atomic config writes and external changes; case aliases/fault reads need expansion",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-17"
+      ]
+    },
+    "src/platform/PackFileStore.h": {
+      "phase": "non-ui",
+      "sha256": "9296eb155378b1bcecb4dd3f8bc2ec52cb37c29fe2c8cb7b680dcc8dd7b11d34",
+      "status": "reviewed",
+      "checks": [
+        "Canonical paths, links/private leaves, bounded reads, backups, atomic config writes and external changes; case aliases/fault reads need expansion",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-17"
+      ]
+    },
+    "src/platform/ProjectAuthors.cpp": {
+      "phase": "non-ui",
+      "sha256": "a13ecb34f430e3851a232b5687596c503927a66c1fbd9ccb8584504026f0261c",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed exact separate roster identities, accepted members, owner-first stable order and duplicate/missing author handling; display punctuation is not parsed as identity.",
+        "Source review; uncovered states remain explicit. Related regression sources: FoundationTests"
+      ],
+      "findings": []
+    },
+    "src/platform/ProjectAuthors.h": {
+      "phase": "non-ui",
+      "sha256": "52667c09e2fce3ba7859e54b58d1315eb4fe46cf5719d73672076a420c52d355",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed exact separate roster identities, accepted members, owner-first stable order and duplicate/missing author handling; display punctuation is not parsed as identity.",
+        "Source review; uncovered states remain explicit. Related regression sources: FoundationTests"
+      ],
+      "findings": []
+    },
+    "src/platform/ReviewedAuthorIdentities.cpp": {
+      "phase": "non-ui",
+      "sha256": "394feb946203629ba209b0c5a64d1b428da4d4984eafa6bad44b98f6107ba085",
+      "status": "reviewed",
+      "checks": [
+        "Bounded explicit author mappings, conflict rejection and unlinked preservation",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FoundationTests"
+      ],
+      "findings": []
+    },
+    "src/platform/ReviewedAuthorIdentities.h": {
+      "phase": "non-ui",
+      "sha256": "bdce247150cf7121ef81ae2d85a2902b8c145b80dca5b5e2967b88674f7e3024",
+      "status": "reviewed",
+      "checks": [
+        "Bounded explicit author mappings, conflict rejection and unlinked preservation",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FoundationTests"
+      ],
+      "findings": []
+    },
+    "src/platform/ReviewedProjectIdentities.cpp": {
+      "phase": "non-ui",
+      "sha256": "aecf068ee24fca3f1abdb9dfdc2d7960e4da56406d308c56e66a58aba8b773f7",
+      "status": "reviewed",
+      "checks": [
+        "Bounded explicit mappings, conflict rejection and no title-derived identity",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FoundationTests"
+      ],
+      "findings": []
+    },
+    "src/platform/ReviewedProjectIdentities.h": {
+      "phase": "non-ui",
+      "sha256": "a04983a34548e60d566f36992ad85d5c95deeff830e5d71b7d80a43f8b8df1f2",
+      "status": "reviewed",
+      "checks": [
+        "Bounded explicit mappings, conflict rejection and no title-derived identity",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FoundationTests"
+      ],
+      "findings": []
+    },
+    "src/platform/SqliteContentIndex.cpp": {
+      "phase": "non-ui",
+      "sha256": "3a8645ab1ee18998c30dde5984a36a6b5210e9ff7479ad2a01ae91b87d6c9a6a",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed schema/version guards, worker-owned connections, transactions/rollback, snapshot membership generations, exact-hash field selection, project metadata and delayed provider save scope.",
+        "Source review; uncovered states remain explicit. Related regression sources: ContentIndexTests"
+      ],
+      "findings": [
+        "AUD-25"
+      ]
+    },
+    "src/platform/SqliteContentIndex.h": {
+      "phase": "non-ui",
+      "sha256": "77b550997328080e8da24ad64032dc3a8c282e9ed55022156b3c1a27505b9768",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed schema/version guards, worker-owned connections, transactions/rollback, snapshot membership generations, exact-hash field selection, project metadata and delayed provider save scope.",
+        "Source review; uncovered states remain explicit. Related regression sources: ContentIndexTests"
+      ],
+      "findings": [
+        "AUD-25"
+      ]
+    },
+    "src/platform/VerifiedDownload.cpp": {
+      "phase": "non-ui",
+      "sha256": "a9232f17b109b871be5fe9f79348a2ec60753f159194387e6c912a8cfc434fbc",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/VerifiedDownload.h": {
+      "phase": "non-ui",
+      "sha256": "b90251b008698f54ec10174637194357cfb9b8db50e30e0e1f13d9ce66af6a39",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/WindowFrame.cpp": {
+      "phase": "ui",
+      "sha256": "6bf167b602e3f17de1184f81146a227e409aa6910808c2363293748ba3ca9035",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/WindowFrame.h": {
+      "phase": "ui",
+      "sha256": "faa94082eb4983605161f6284dd088f32fd6efb823b9241a67b2e154c35d6bcc",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/WorldLaunchAdapters.cpp": {
+      "phase": "non-ui",
+      "sha256": "6efdf64a657b2a595e88bd9676fef109b148a7d1e39720092ac451fe0d95f42e",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/platform/WorldLaunchAdapters.h": {
+      "phase": "non-ui",
+      "sha256": "b71a1167568b0688836af178fbc5e2263d07d1d2e8e7d05d48fd6a3338d68bb6",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/services/CatalogueClient.cpp": {
+      "phase": "non-ui",
+      "sha256": "3588ad251a1374ff8485d84ca284b802870afe682db3ac0dfb71908dd7a0fa93",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed full search/facets/resolve/detail/version flow, request coalescing, bounded caches, generation/terminal callback policy and provider scoping. Found optional-link error policy, first50-only version reads and inconsistent response identity/type validation.",
+        "Source review; uncovered states remain explicit. Related regression sources: CatalogueLoadingTests CatalogueInteractionTests FoundationTests"
+      ],
+      "findings": [
+        "AUD-13",
+        "AUD-21",
+        "AUD-22",
+        "AUD-23"
+      ]
+    },
+    "src/services/CatalogueClient.h": {
+      "phase": "non-ui",
+      "sha256": "f6e4caf6edcb041bcafa4ae1ff7eee569838f2f1434e378ddeef0ee834950416",
+      "status": "reviewed",
+      "checks": [
+        "Reviewed full search/facets/resolve/detail/version flow, request coalescing, bounded caches, generation/terminal callback policy and provider scoping. Found optional-link error policy, first50-only version reads and inconsistent response identity/type validation.",
+        "Source review; uncovered states remain explicit. Related regression sources: CatalogueLoadingTests CatalogueInteractionTests FoundationTests"
+      ],
+      "findings": [
+        "AUD-13",
+        "AUD-21",
+        "AUD-22",
+        "AUD-23"
+      ]
+    },
+    "src/services/ContentCatalogue.cpp": {
+      "phase": "non-ui",
+      "sha256": "a8c4481569a5b7a930f1e639c55906d29868915e2c9e18540337b8ef488408b4",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/services/ContentCatalogue.h": {
+      "phase": "non-ui",
+      "sha256": "96f0d9bf065415942ab9ad792627f955576a890764b23bfc29370a85b831ed1f",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/services/GalleryImages.cpp": {
+      "phase": "non-ui",
+      "sha256": "fe2c07654cb39f1946602258e1633edd360a03588ce625f4948eb92a5f53545e",
+      "status": "reviewed",
+      "checks": [
+        "Capped image retrieval/concurrency, pixel/size limits, cancellation, fingerprints and bounded cache",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ShowcaseLoadingTests"
+      ],
+      "findings": []
+    },
+    "src/services/GalleryImages.h": {
+      "phase": "non-ui",
+      "sha256": "202a8b66d898a1f172f3a9c6e69f85323c1c73e0473d8140b675ae01e8785e79",
+      "status": "reviewed",
+      "checks": [
+        "Capped image retrieval/concurrency, pixel/size limits, cancellation, fingerprints and bounded cache",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ShowcaseLoadingTests"
+      ],
+      "findings": []
+    },
+    "src/services/InstallationDiscovery.cpp": {
+      "phase": "non-ui",
+      "sha256": "9324086cc1f748ea549f5d414ba02c01d2dddd361c308f6cddec3fa749243a32",
+      "status": "reviewed",
+      "checks": [
+        "Read-only public launcher fields, schema fallbacks and canonical deduplication",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FoundationTests"
+      ],
+      "findings": []
+    },
+    "src/services/InstallationDiscovery.h": {
+      "phase": "non-ui",
+      "sha256": "ec654500c329cf1f0d6c6839ef7f9b23cf257e07e21f8df282a5e4d8d6904f2a",
+      "status": "reviewed",
+      "checks": [
+        "Read-only public launcher fields, schema fallbacks and canonical deduplication",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FoundationTests"
+      ],
+      "findings": []
+    },
+    "src/services/JsonResponse.cpp": {
+      "phase": "non-ui",
+      "sha256": "0d5adbb915db225edd4463e765c0b398a18c5755078f504b50093e640c617cc3",
+      "status": "reviewed",
+      "checks": [
+        "Bounded reply consumption, failure classification, worker parse and terminal callback retirement",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: JsonResponseTests"
+      ],
+      "findings": []
+    },
+    "src/services/JsonResponse.h": {
+      "phase": "non-ui",
+      "sha256": "9e14a2a586d0c1b1797e978c05f1193dfb6f9f96e1d1af11691c3053030ce03a",
+      "status": "reviewed",
+      "checks": [
+        "Bounded reply consumption, failure classification, worker parse and terminal callback retirement",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: JsonResponseTests"
+      ],
+      "findings": []
+    },
+    "src/services/ModInstaller.cpp": {
+      "phase": "non-ui",
+      "sha256": "79c6a48ff3d28ec5c987b3604dacf8ada85b4d7108b3a6b768b5925f4956e95a",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/services/ModInstaller.h": {
+      "phase": "non-ui",
+      "sha256": "084b4e451285cde8b7629c936af214cc8c08360921cce82861f398b10adac788",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/services/PackContent.cpp": {
+      "phase": "non-ui",
+      "sha256": "07c111e9824ec75b4c695e37a4628d6eef4a3f37ae9d56043fc2e24e964a784c",
+      "status": "reviewed",
+      "checks": [
+        "Inventory/rule composition and row diagnostics; nested issue matching and filesystem rules remain",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-19"
+      ]
+    },
+    "src/services/PackContent.h": {
+      "phase": "non-ui",
+      "sha256": "3a3c74e397cc14767de155715bf5d2647c38c01351581376ffeaa42aacd69aee",
+      "status": "reviewed",
+      "checks": [
+        "Inventory/rule composition and row diagnostics; nested issue matching and filesystem rules remain",
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+      ],
+      "findings": [
+        "AUD-19"
+      ]
+    },
+    "src/services/PackRepository.cpp": {
+      "phase": "non-ui",
+      "sha256": "56e128782db39be234f4c307077b726f31ca501f217c43855e681a2dfde4e764",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/services/PackRepository.h": {
+      "phase": "non-ui",
+      "sha256": "885d419a0eef6dff5d77817efd548a6052e7614bcf24bd893ceed71bef470afc",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/theme/Appearance.cpp": {
+      "phase": "ui",
+      "sha256": "2d7c70ee168e8c6710e75c4faae72c42f43dcbc78548f235308c07ee0837148d",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/theme/Appearance.h": {
+      "phase": "ui",
+      "sha256": "588ea31de6c72c32eb03ff5604709316e8e3029b9a0e0a1c81bc65130556910a",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/theme/AppearanceStore.cpp": {
+      "phase": "ui",
+      "sha256": "33320aaeb1a29487f496412fb34fa1aff65ec843a8e0b209ad5c9f8ad4ac2c14",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/theme/AppearanceStore.h": {
+      "phase": "ui",
+      "sha256": "2303c670b7ebd4a1c5d579e9e56a01304466114f7715beebe003b55f04fb8f76",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/theme/Branding.cpp": {
+      "phase": "ui",
+      "sha256": "9b06f8fd452639addca615a4ff27406e2cf27d0ca84fe9b7c1f27c76a51e70af",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/theme/Branding.h": {
+      "phase": "ui",
+      "sha256": "967db79f2b71695c290576e77a8d4bd0b1acab7710215ede951544063dd7de02",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/theme/ContentTime.cpp": {
+      "phase": "ui",
+      "sha256": "39b24f05022054cbbd8aebb8dbe40eb6e5fc0b38ed4b6a777409f45e073dae6e",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/theme/ContentTime.h": {
+      "phase": "ui",
+      "sha256": "2e8639a033114e7b7b6955734182e060fb3a4ce3b02b4d9ae6f715bca7731857",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/theme/ControlStyle.h": {
+      "phase": "ui",
+      "sha256": "a85cb6e6c647e718a3673140f7486d10cfca003dba422e78b0a9d1b275b57fee",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/theme/TextSearch.h": {
+      "phase": "ui",
+      "sha256": "e47bae4d9739debfc152df35cb19bd39a028d97150bd53bf8351a5152b5430eb",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/theme/Theme.cpp": {
+      "phase": "ui",
+      "sha256": "890823d0120c9427aa16b40902b9f46b83b47657a68c4dcfcab3aff440dd9210",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/theme/Theme.h": {
+      "phase": "ui",
+      "sha256": "526e671490fdcf955db4ab7dc5fdb6f793f40dc081210abec21dd3b75e864e6a",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/theme/ThemePalette.cpp": {
+      "phase": "ui",
+      "sha256": "e75b9bea70f5f095d687aad3810951dae04d94bf82f3a709f21f77d7f8e0e3d7",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/theme/ThemePalette.h": {
+      "phase": "ui",
+      "sha256": "9a401ab29d5c5c0a34c8d74ecf7d7cf3586f3d5473740ec517c4f88c71984170",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/theme/ThemeStore.cpp": {
+      "phase": "ui",
+      "sha256": "25b4107d82bf43706dcbc0a4bbf6d9047cdfd4ebeaf974792d03c4bded490e88",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/theme/ThemeStore.h": {
+      "phase": "ui",
+      "sha256": "846f5fc88651e30e0702b50a527d5616d62f2c9215f3c504fe204b00aef6b1f1",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/verification/DesktopSmokeTest.cpp": {
+      "phase": "verification",
+      "sha256": "af3cabd3ed1f32292b5ac6b8380d79f80a4744de7e0933ed6a634d73b2682b73",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "src/verification/DesktopSmokeTest.h": {
+      "phase": "verification",
+      "sha256": "3772fab0c45539f0f9b2e28900e50867ff46767ed915c39ea36f0fd3bbf0f70e",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/ActionButton.qml": {
+      "phase": "ui",
+      "sha256": "f934a7cc4801435a73b4858f97b3644413c46d3f96f50162e55e212b5904a6ab",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/AuthorLinks.qml": {
+      "phase": "ui",
+      "sha256": "ed1c3be7c88c1548ad3f1f891dcdaaa6d50dff8b5d52c1e7117dbb877d2db39c",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/BoundedScrollView.qml": {
+      "phase": "ui",
+      "sha256": "d4eaf476cfcd6a4fce5ed88bc771ab3b28693418bf7ad4084a8dfd933ad42d46",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/BrandBadge.qml": {
+      "phase": "ui",
+      "sha256": "e586e358ed5ce9626e1d221336eee4e23ed206dbde773dcf4060586f717b293f",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/ChangelogView.qml": {
+      "phase": "ui",
+      "sha256": "cd722d34c8cabf51fecc724fd46bca65d43d3fde4b6b0f752ef1d328319568ca",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/ChoiceFilter.qml": {
+      "phase": "ui",
+      "sha256": "82f0921ff51e3c73f17b614e6b3ef7f4a02be54e8bd37056d180e5bf45b2f0ec",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/CompatibilityBadges.qml": {
+      "phase": "ui",
+      "sha256": "c9dfb7b09681f907d88d05c0c0a5e6ad875ec1f43e62e9d0acb327c0db7267f4",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/ContentFilter.qml": {
+      "phase": "ui",
+      "sha256": "a48e2de7532f2af12d5defc064cee4659b39a0c882a9e9b423a56b51c42eea8c",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/ContentGridView.qml": {
+      "phase": "ui",
+      "sha256": "a93ed8ff8ff3c73087eaab9da8e03414c2e785b1fd63f2942ec0c5377a232be7",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/ContentIcon.qml": {
+      "phase": "ui",
+      "sha256": "6cf1cb654608309ad6901a915348a07b06cadf5ea887fd2953c390beda01c40c",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/ContentLink.qml": {
+      "phase": "ui",
+      "sha256": "b29a55d98cfc527ee089890dd016d76b9b4a7356ede70b8e4876910ccb2770ba",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/ContentListView.qml": {
+      "phase": "ui",
+      "sha256": "665d3de712e9b96841d178413a6929178ee270fa71aa042521cd5d0b781a4f4b",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/ContentScrollBar.qml": {
+      "phase": "ui",
+      "sha256": "f70e071b7ef5b712bd246cd25e074a71200b154943192be655b85b1ab1310b09",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/ContentStatistic.qml": {
+      "phase": "ui",
+      "sha256": "f1738a7f7e7f4f9cf34077f720e55cabc9b0a2c3f39d82824d0cb3015ec94e17",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/CreatePackDialog.qml": {
+      "phase": "ui",
+      "sha256": "2ecf3d78b1a4ba55d5c9a40615249a8b373f768896fe6b99a8264c9ec8f569c0",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/DependenciesDialog.qml": {
+      "phase": "ui",
+      "sha256": "624959f38ed6612403daa2508e9bcd5563a64330a159fe5fc0e67ace8c39a35b",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/EmptyState.qml": {
+      "phase": "ui",
+      "sha256": "171c54f5d36cf480ed9af532e2b6af96a3103ec47511a8aa38df83bbf7ac9e0d",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/FilterChip.qml": {
+      "phase": "ui",
+      "sha256": "75e2707334c448fee4ba484bddb30223161670fb28c5bbf25f183b4be0b7d347",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/FocusDialog.qml": {
+      "phase": "ui",
+      "sha256": "f1e1885f26e50e95a56b1f1ff6f6c05e868a155e168cad45dab5b00bddf0ae68",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/FocusPopup.qml": {
+      "phase": "ui",
+      "sha256": "4a9f479723991c66b53f034ae529444185849e36641affb42400b9615d9b3db1",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/Icon.qml": {
+      "phase": "ui",
+      "sha256": "c3fc4dbc312d99fb2466d5bb0229a1044899d9fb776da2bf63109bf7705003c7",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/IconPaths.js": {
+      "phase": "ui",
+      "sha256": "efc1e7ee54afd84270d5f191e70454f5e3a7a995595f1b246d60d0b4bd24e769",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/LibraryRow.qml": {
+      "phase": "ui",
+      "sha256": "c88e9be06f0a435de09ead263c18af43877bf1ec4e19d31d80cda1e6ab76d744",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/MenuList.qml": {
+      "phase": "ui",
+      "sha256": "1bdec049054512cf75e50a72fc449886b53a451a40697685c9faddc6dee6b992",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/MenuOption.qml": {
+      "phase": "ui",
+      "sha256": "b5fb459fbac291171a9a75810c7f6ebfd56c05532451260ca8d902fb5b0932e8",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/NavigationButton.qml": {
+      "phase": "ui",
+      "sha256": "80ff50e48589e4bb0033e450b27ebff746e5e9906ab052b05ceaf02a77c7fd3a",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/NotificationBanner.qml": {
+      "phase": "ui",
+      "sha256": "e4c0beb770509aec59ed102423f9f58e3b1c58d620f640ddf4328f2b32368881",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/OperationHud.qml": {
+      "phase": "ui",
+      "sha256": "95184f71d243eacde52b0784089ed5bf8bd5c3a7b62f2b2920eb0eef7f8262a0",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/OptionalDependenciesDialog.qml": {
+      "phase": "ui",
+      "sha256": "5933631850e5dae1c7220ad233b28f115ce7dbe7f5f0d7e2273e7fc24667c746",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/PopupButton.qml": {
+      "phase": "ui",
+      "sha256": "7eb3cfd3fb0e5e5c840992d6a67ea413828b97223b7e0accf0f6861fcdb3ecb2",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/ProjectCard.qml": {
+      "phase": "ui",
+      "sha256": "6d59d5aa7213c7054324f57cb5ca55247f6913b8bfb7c43c0a59c8d7b4bcfa7c",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/ReleaseStagePicker.qml": {
+      "phase": "ui",
+      "sha256": "b6406a446d0da6675cc1f1118287a0778ac04ff3e0572ea01aa9184537573950",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/RoundedToolTip.qml": {
+      "phase": "ui",
+      "sha256": "4cc8c359e2a1123e516d8a33098042202db8dd6d3e884a986a907af298ae6b51",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/ScrollViewportCorners.qml": {
+      "phase": "ui",
+      "sha256": "1a566df9153ed82e2c60d6a192ec40e33cb03e78aa9e77754c80320a5a603544",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/SearchableSelect.qml": {
+      "phase": "ui",
+      "sha256": "eb248473c08fb0e715161f0ce0700923d20963486d462423b623d64598dce2fa",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/SearchField.qml": {
+      "phase": "ui",
+      "sha256": "93f4ec60b5194385c96b6c254a989a21dd7d5504bc90fc594b43de1c00752591",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/SectionTabs.qml": {
+      "phase": "ui",
+      "sha256": "5ad8dd8bfadd5823c6f99ae733fa8f5ca8b70ae23658b5ea489e05fe366d84fa",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/SelectBox.qml": {
+      "phase": "ui",
+      "sha256": "44a136afcad1dd70430622e050dd39a9a8b54a78f5224940f3112d0665ab73dc",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/SelectionBox.qml": {
+      "phase": "ui",
+      "sha256": "4c3aa12bede5b446f477e67258fc4f6289de6a0aed688c5c7976874393833e4a",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/SmoothListView.qml": {
+      "phase": "ui",
+      "sha256": "1a7f186460c336d0dba88a0cac2c7a2ae8f14b7a735a6109617226a7cfeef1b5",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/SmoothScroll.qml": {
+      "phase": "ui",
+      "sha256": "406421ac9a13d3649ec670815b3efbad855ce161ffb2d6358b8df390608fbec5",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/SourceBadge.qml": {
+      "phase": "ui",
+      "sha256": "ece2e41663297bc7ab479c1d6c80cd66f2bdc656e2f4a770f6260a367a671b3d",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/ToggleSwitch.qml": {
+      "phase": "ui",
+      "sha256": "602bc56e8df07dc20edd8c619dc57af38a2cc6f75e92a75c2f7a535f364a2dfa",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/WindowControls.qml": {
+      "phase": "ui",
+      "sha256": "11e8fe0783481a24ec3b80cc8c72010c55b1702e04405d3a19ed8ca06073d100",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/WindowDragArea.qml": {
+      "phase": "ui",
+      "sha256": "eb48afd7d3fc4a63d92a3256f97b50d08f37134ab6e8f8c2cada45fffce4aae9",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/components/WindowResizeEdges.qml": {
+      "phase": "ui",
+      "sha256": "82a99042ee97407deaeb01cd7833d4d818f4f855b5af26775de3377bf7f50e99",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/explore/ActiveBrowseFilters.qml": {
+      "phase": "ui",
+      "sha256": "f95feeb9ef9ffc88766a1176e81549eb29b59652c6732ca26c655a448d4b0df6",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/explore/BrowseFilters.qml": {
+      "phase": "ui",
+      "sha256": "a8c7310ef108aa76503fb65f5dbcac61aaffe2165da86a0caef1bb902308dc70",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/explore/PageNavigation.qml": {
+      "phase": "ui",
+      "sha256": "8f3da72fac35cd1c74ff9863da9ff5202bedbaac8b8c0f3da32ff57a564d7928",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/explore/PaginationBar.qml": {
+      "phase": "ui",
+      "sha256": "8768596661d05ad4e7f3a30b5d765a6b706bcff7b8d8a70539013341f28802d4",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/Main.qml": {
+      "phase": "ui",
+      "sha256": "4477d0111677e0c64a12130afe9e571e0796dbf3189e189d9c01e366ca3a7a4d",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pack/ConfigEditorPanel.qml": {
+      "phase": "ui",
+      "sha256": "1060ce4bbf56f5d16c99257b92956c2fa3d7c23c0fd8a8550af8f4600d28ba97",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pack/ConfigField.qml": {
+      "phase": "ui",
+      "sha256": "a51ae2969dace27a1c67876df6d751ad82f3d62ccc0d086389c7df19eb16df75",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pack/ConfigPanel.qml": {
+      "phase": "ui",
+      "sha256": "43d061aa1233e8678186af61e47d61ebc2fc6c7557b1eff673b8fead6be673df",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pack/ContentActivity.qml": {
+      "phase": "ui",
+      "sha256": "871706ec11671fbf8047608d9ce403810f657cc6da8ed1d27554de1add6fc527",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pack/ContentPanel.qml": {
+      "phase": "ui",
+      "sha256": "69c2fb095aea6f50cf072a1a6ada0661c6674d7f3287ea7cfca4e83ff6d1d255",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pack/ContentSelectionBar.qml": {
+      "phase": "ui",
+      "sha256": "8af33c5cf4d3c8d0151f3933440ae84ee570a20b31eccc818ef788a197176290",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pack/DiagnosticsBanner.qml": {
+      "phase": "ui",
+      "sha256": "9b17c7ed267ffbb2c9088e0e56adc6efef67a8dcb9075f1c03f5065bb089f2d7",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pack/FilePanel.qml": {
+      "phase": "ui",
+      "sha256": "8f29c54ed3b8313018b62fc85d8c09e051372555c7777aaeb55a5e508c728ff4",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pack/GitPanel.qml": {
+      "phase": "ui",
+      "sha256": "0c1ab938d7fd3cfb7ede0ecc6ac9c90686da209e53b909cfed8f0b216dc968ff",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pack/LogPanel.qml": {
+      "phase": "ui",
+      "sha256": "3dbdd0fd3ccd53bb6550bafb66bfaa9568468b8a86fe197973854cdc3ee62460",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pack/VersionPicker.qml": {
+      "phase": "ui",
+      "sha256": "e0a4be92c2a67b4f742715452b21f3adbef2100025741777a824e17b50614a6f",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pack/WorldPanel.qml": {
+      "phase": "ui",
+      "sha256": "6844b65d48d2a6326e87ff9963ac0315305db9b000541008ffd01399ff05418b",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pages/DiscoverPage.qml": {
+      "phase": "ui",
+      "sha256": "2bf80240ad1f711f894aa7997df7236729eff018149209ab4b0eae26cba54dca",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pages/LibraryPage.qml": {
+      "phase": "ui",
+      "sha256": "456008c94b6f19e556c04b8f5726c99496c43918ff162b3d0d2007fd107de5f0",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pages/PackPage.qml": {
+      "phase": "ui",
+      "sha256": "a32fdb9f63c549fa6335fd61eff60631ef7810dd9cdc016096106cd0491a2197",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pages/SettingsPage.qml": {
+      "phase": "ui",
+      "sha256": "73810566f93ebb82e18dc5c9e41ec763b133e48c3667cb6209324b46c8f5dcc2",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/pages/ShowcasePage.qml": {
+      "phase": "ui",
+      "sha256": "99be8fb85fca4d9a78cc29988d77010434bc6ddf58ec78109dec196297353876",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/settings/AppearanceField.qml": {
+      "phase": "ui",
+      "sha256": "0892c88b91e556dda16e9632dbcc674a6845bf8d49dac37d472443befb6708ea",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/settings/AppearanceMetric.qml": {
+      "phase": "ui",
+      "sha256": "7e3f0a2d0e2121a4ab6192cdc6a82459010ecd91ec476d488aadeaef9330f976",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/settings/AppearancePreview.qml": {
+      "phase": "ui",
+      "sha256": "2ddfbad4b5c5aac51353c5bfdb0e646a2f4f5d752a32ff7d4db5a01e728ce566",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/settings/AppearanceSettings.qml": {
+      "phase": "ui",
+      "sha256": "0721cfcc90a146263eb5fff551ce3e5a88b8f6525d309ab1888602f741599e65",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/settings/BrowseSettings.qml": {
+      "phase": "ui",
+      "sha256": "3e8e15fb6a9e19b2656751e78138e1f3d215d848cb21c637cd613a7c1f767dea",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/settings/ConnectionSettings.qml": {
+      "phase": "ui",
+      "sha256": "f041cf4ff6e74f21f30a77b38bd1e34b75a9c3fc9f36d04373d997aeacab1df1",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/settings/GitSettings.qml": {
+      "phase": "ui",
+      "sha256": "c5f7fb42612b5818a2b4d90a3356377b90bf7d314c2b1d3705593faceac6b09a",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/settings/InstallationSettings.qml": {
+      "phase": "ui",
+      "sha256": "d17d9f77b61d20c2158ce3325f2accab9b9a46ac357761011d64b6ffcb8f375e",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/settings/ThemeColorGroup.qml": {
+      "phase": "ui",
+      "sha256": "57e31f40a3e49c83175ec3276ca55215debcafeca279f3241b286d2095436485",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/settings/ThemeSettings.qml": {
+      "phase": "ui",
+      "sha256": "ce9d5b1e58b64a7cd05430b6ecd2da65333bc3907f5aba390fd32e53b9217163",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/settings/WarningSettings.qml": {
+      "phase": "ui",
+      "sha256": "31f88922f9bf49525ed72463ec11f28657d4991e72f3c4f4216f1d0909225cc4",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/showcase/DescriptionView.qml": {
+      "phase": "ui",
+      "sha256": "99e62f230338bf799fc3f83ecec927158ba75ce763a534cfea639f7dabbfa83c",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/showcase/GalleryView.qml": {
+      "phase": "ui",
+      "sha256": "6a15a8a2fd4ba45e22940eff1bb2b04cb99265fbe6710da98321de58e4dccdc7",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    },
+    "qml/showcase/GalleryViewer.qml": {
+      "phase": "ui",
+      "sha256": "8ba85d928f90af636effa757bdd43981652029e331f8a99e8f25690d95960125",
+      "status": "pending",
+      "checks": [],
+      "findings": []
+    }
+  }
+}

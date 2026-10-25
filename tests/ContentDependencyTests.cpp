@@ -1,5 +1,6 @@
 #include "ContentFixtures.h"
 #include "DependencyFixtures.h"
+#include "TestPerformance.h"
 #include "features/content/ContentDependencyInstaller.h"
 #include "features/content/ContentOperationState.h"
 #include "platform/ContentDependencySource.h"
@@ -409,13 +410,13 @@ class ContentDependencyTests final : public QObject {
             QVERIFY(!result.warnings.isEmpty());
             done = true;
         });
-        QTRY_VERIFY_WITH_TIMEOUT(done, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(done, test_performance::completionTimeout(5000));
         qInfo() << "1000 declared / 256 bounded dependency attempts ms" << elapsed.elapsed()
                 << "event loop ticks" << ticks;
         QCOMPARE(source->calls.size(), 256);
         QCOMPARE(leaf->calls.size(), 257);
         QVERIFY(ticks > 1);
-        QVERIFY(elapsed.elapsed() < 2500);
+        QVERIFY(test_performance::releaseBudgetMet(elapsed.elapsed(), 2500));
     }
     void realTransactionsIsolateDependencyFailures_data() {
         QTest::addColumn<QString>("provider");

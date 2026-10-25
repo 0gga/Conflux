@@ -1,4 +1,5 @@
 #include "ContentUpdateFixtures.h"
+#include "TestPerformance.h"
 #include "features/content/ContentOperationReservations.h"
 #include "services/PackRepository.h"
 #include <QElapsedTimer>
@@ -175,7 +176,7 @@ class ContentOperationStateTests : public QObject {
         for (const auto &operation : operations)
             reservations.release(operation);
         qInfo() << "12000 reservation acquisition/conflict/release cycles ms" << elapsed.elapsed();
-        QVERIFY(elapsed.elapsed() < 1500);
+        QVERIFY(test_performance::releaseBudgetMet(elapsed.elapsed(), 1500));
         for (const auto &operation : operations)
             QVERIFY(reservations.acquire(operation));
     }

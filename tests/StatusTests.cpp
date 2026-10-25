@@ -1,3 +1,4 @@
+#include "TestPerformance.h"
 #include "features/content/ContentOperationQueue.h"
 #include "features/status/OperationHistory.h"
 #include "features/status/RunningInstances.h"
@@ -66,7 +67,8 @@ class StatusTests : public QObject {
         QCOMPARE(failed, qint64(2000000));
         QCOMPARE(changes.size(), 0);
         qInfo() << "40000 HUD count reads over 900 tasks ms" << milliseconds;
-        QVERIFY2(milliseconds < 250, "HUD count reads rescan the task inventory.");
+        QVERIFY2(test_performance::releaseBudgetMet(milliseconds, 250),
+                 "HUD count reads rescan the task inventory.");
     }
     void modelObserversSeeConsistentCountsAcrossEveryTransition() {
         OperationHistory history;
@@ -125,7 +127,8 @@ class StatusTests : public QObject {
         QCOMPARE(history.entries().last().toMap().value("id").toULongLong(), quint64(5000));
         QCOMPARE(resets.size(), 0);
         qInfo() << "5000 task insertions ms" << milliseconds;
-        QVERIFY2(milliseconds < 500, "Bulk task insertion rescans earlier tasks.");
+        QVERIFY2(test_performance::releaseBudgetMet(milliseconds, 500),
+                 "Bulk task insertion rescans earlier tasks.");
     }
     void mixedTaskOrderingMatchesAnIndependentReference() {
         OperationHistory history;

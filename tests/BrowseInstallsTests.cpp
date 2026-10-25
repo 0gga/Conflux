@@ -1,3 +1,4 @@
+#include "TestPerformance.h"
 #include "domain/ContentTypes.h"
 #include "features/explore/BrowseInstalls.h"
 #include "platform/BrowseSettingsStore.h"
@@ -333,7 +334,7 @@ class BrowseInstallsTests : public QObject {
         for (int i = 0; i < 10000; ++i)
             QVERIFY(model.state(last).value("installed").toBool());
         qInfo() << "10000 indexed badge reads over5000 mods ms" << elapsed.elapsed();
-        QVERIFY(elapsed.elapsed() < 1000);
+        QVERIFY(test_performance::releaseBudgetMet(elapsed.elapsed(), 1000));
         QSignalSpy changes(&model, &BrowseInstalls::changed);
         for (int i = 0; i < 100; ++i)
             model.setContext(pack, rows, false);

@@ -59,7 +59,7 @@ void WorldLaunch::play(const QString &relative) {
             relative.contains('\\') || relative.mid(6) == "..")
             m_status = "This world is no longer available in the selected pack. Refresh Worlds.";
         else {
-            const auto level = m_files->read(root, relative + "/level.dat", 16);
+            const auto level = m_files->read(root, relative + "/level.dat", 16, true);
             if (!level.error.isEmpty() || level.bytes.isEmpty())
                 m_status = "This folder has no readable level.dat and cannot be launched as a world.";
             else if (!m_opener->open(adapter()->worldUrl(m_pack, relative.mid(6))))

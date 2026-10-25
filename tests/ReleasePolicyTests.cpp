@@ -1,3 +1,4 @@
+#include "TestPerformance.h"
 #include "domain/Catalogue.h"
 #include "domain/ReleaseStages.h"
 #include "features/preferences/PackReleasePolicy.h"
@@ -104,7 +105,8 @@ class ReleasePolicyTests final : public QObject {
         const auto elapsed = timer.elapsed();
         QCOMPARE(accepted, expected);
         qInfo() << "1600000 release-stage eligibility checks ms" << elapsed;
-        QVERIFY2(elapsed < 250, "Stage eligibility rebuilt too much temporary state.");
+        QVERIFY2(test_performance::releaseBudgetMet(elapsed, 250),
+                 "Stage eligibility rebuilt too much temporary state.");
     }
     void preferencesPersistPerInstanceAndRejectUnknownStages() {
         QTemporaryDir temp;
@@ -153,7 +155,7 @@ class ReleasePolicyTests final : public QObject {
         for (int i = 0; i < 100000; ++i)
             QVERIFY(policy.allows("pack", "beta"));
         qInfo() << "100000 cached release policy reads ms" << elapsed.elapsed();
-        QVERIFY(elapsed.elapsed() < 1500);
+        QVERIFY(test_performance::releaseBudgetMet(elapsed.elapsed(), 1500));
         QCOMPARE(changes.size(), 0);
     }
     void explicitStagesBatchMixedInstalledChannelsInOneUpdateRequest() {

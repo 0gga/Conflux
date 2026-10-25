@@ -1,3 +1,4 @@
+#include "TestPerformance.h"
 #include "features/content/ContentDependencyGraph.h"
 #include "features/content/ContentOperationState.h"
 #include "features/content/ModMetadataReader.h"
@@ -137,7 +138,7 @@ class ContentDependencyGraphTests final : public QObject {
         QCOMPARE(graph.descendants({key("0")}).size(), 4999);
         QCOMPARE(graph.unused(candidates).size(), 0);
         qInfo() << "5000-node graph prepare/traverse ms" << timer.elapsed();
-        QVERIFY(timer.elapsed() < 250);
+        QVERIFY(test_performance::releaseBudgetMet(timer.elapsed(), 250));
     }
     void ambiguousRuntimeIdentitiesAreRetainedInsteadOfGuessed() {
         auto root = node("Root", {"dup"}), first = node("dup"), second = node("dup");

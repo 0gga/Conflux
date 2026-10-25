@@ -1,4 +1,5 @@
 #include "ContentFixtures.h"
+#include "TestPerformance.h"
 #include "features/content/ContentActions.h"
 #include "features/explore/BrowseCatalogue.h"
 #include "features/explore/TolerantCatalogueSearch.h"
@@ -130,7 +131,7 @@ class BrowseCatalogueTests final : public QObject {
         qInfo() << "Discover50 paired projects requests" << requests << "elapsed ms" << elapsed.elapsed();
         QVERIFY2(requests <= 3, qPrintable(QString("Expected batched reads, got %1 requests").arg(requests)));
         QVERIFY(responsiveWhilePending); // Metadata latency must not block the event loop.
-        QVERIFY(elapsed.elapsed() < 1000);
+        QVERIFY(test_performance::releaseBudgetMet(elapsed.elapsed(), 1000));
         QCOMPARE(model.projects().size(), 20);
         QCOMPARE(model.projects().first().toMap().value("downloadsRaw").toLongLong(), qint64(2000));
         const int warm = api->calls.size();
@@ -308,7 +309,8 @@ class BrowseCatalogueTests final : public QObject {
         QTRY_VERIFY(!model.busy());
         QCOMPARE(model.projects().size(), 20);
         QCOMPARE(model.projects().first().toMap().value("id").toString(), QString("1200"));
-        QVERIFY2(elapsed.elapsed() < 5000, "Installed filtering exceeded its UI responsiveness budget");
+        QVERIFY2(test_performance::releaseBudgetMet(elapsed.elapsed(), 5000),
+                 "Installed filtering exceeded its UI responsiveness budget");
     }
     void providerFailuresAreVisibleAndAnExplicitRefreshRecovers() {
         auto fixture = source(3);

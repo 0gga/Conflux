@@ -109,8 +109,10 @@ ConfigDecodeResult JsonConfigCodec::decode(const QByteArray &bytes) const {
         visit(document.object(), {}, {}, {});
     else {
         int index = 0;
-        for (const auto &value : document.array())
-            visit(value, "/" + QString::number(index), QString::number(index++), "General");
+        for (const auto &value : document.array()) {
+            const auto position = QString::number(index++);
+            visit(value, "/" + position, position, "General");
+        }
     }
     return result;
 }

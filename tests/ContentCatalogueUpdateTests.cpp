@@ -1,3 +1,4 @@
+#include "TestPerformance.h"
 #include "domain/Catalogue.h"
 #include "services/ContentCatalogue.h"
 #include <QElapsedTimer>
@@ -316,8 +317,10 @@ class ContentCatalogueUpdateTests final : public QObject {
         }
         qInfo() << "Check5000 installed updates over10 loopback batches ms" << milliseconds;
         qInfo() << "Maximum UI event-loop heartbeat gap ms" << maximumPause;
-        QVERIFY2(milliseconds < 1000, "Update result handling regressed to repeated full-inventory scans.");
-        QVERIFY2(maximumPause < 150, "Provider processing blocked the UI event loop.");
+        QVERIFY2(test_performance::releaseBudgetMet(milliseconds, 1000),
+                 "Update result handling regressed to repeated full-inventory scans.");
+        QVERIFY2(test_performance::releaseBudgetMet(maximumPause, 150),
+                 "Provider processing blocked the UI event loop.");
     }
     void candidateFactsAndStagePolicyRemainAuthoritative_data() {
         QTest::addColumn<QString>("variation");

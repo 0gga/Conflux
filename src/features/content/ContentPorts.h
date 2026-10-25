@@ -1,5 +1,5 @@
 #pragma once
-#include "domain/Catalogue.h"
+#include "ContentVersionSource.h"
 #include <QUrl>
 #include <functional>
 namespace studio {
@@ -42,11 +42,10 @@ class IContentFileStore {
     virtual ContentWriteResult importFiles(const QVariantMap &, const QList<QUrl> &,
                                            const QString &category) const = 0;
 };
-class IContentCatalogue {
+class IContentCatalogue : public IContentVersionSource {
   public:
     using IndexCallback = std::function<void(QVariantList, QString)>;
     using IndexProgress = std::function<void(QVariantList)>;
-    using VersionsCallback = std::function<void(QVector<Release>, QString)>;
     virtual ~IContentCatalogue() = default;
     virtual void identify(const QVariantMap &, const QVariantList &rows, IndexCallback callback,
                           IndexProgress = {}) {
@@ -61,8 +60,6 @@ class IContentCatalogue {
                               const QStringList &channels, IndexCallback callback) {
         refreshWithChannels(rows, game, loader, channels, std::move(callback));
     }
-    virtual void versions(const QVariantMap &, const QString &, const QString &, VersionsCallback) = 0;
-    virtual void cancelVersions() {}
     virtual void setCurseforgeKey(const QByteArray &) = 0;
 };
 class IContentInstaller {

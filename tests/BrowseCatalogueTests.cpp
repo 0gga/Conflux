@@ -2,7 +2,6 @@
 #include "TestPerformance.h"
 #include "features/content/ContentActions.h"
 #include "features/explore/BrowseCatalogue.h"
-#include "features/explore/TolerantCatalogueSearch.h"
 #include "features/preferences/BrowsePreferences.h"
 #include "features/preferences/ContentPreferences.h"
 #include "platform/BrowseSettingsStore.h"
@@ -145,6 +144,7 @@ class BrowseCatalogueTests final : public QObject {
     }
     void batchRepliesFromOldFiltersCannotReleaseNewRequests() {
         auto api = source(1);
+        api->rows["modrinth"][0].title = "New mod";
         api->rows["curseforge"] = {project(0, "curseforge")};
         const QHash<QString, QString> identities{{"modrinth:0", "pair"}, {"curseforge:0", "pair"}};
         BrowseCatalogue model(
@@ -594,6 +594,8 @@ class BrowseCatalogueTests final : public QObject {
     }
     void queuedPumpCannotDuplicateNewGenerationRequest() {
         auto fixture = source(5);
+        for (auto &row : fixture->rows["modrinth"])
+            row.title = "New " + row.id;
         fixture->delayed = true;
         auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
         BrowseCatalogue model(fixture, visibility);
@@ -681,58 +683,107 @@ class BrowseCatalogueTests final : public QObject {
         visibility.setHidden(project(1).toVariant(), false);
         QCOMPARE(changed.size(), 2);
     }
-    void typoFallbackIsBoundedKeepsFiltersCachesAndNeverMasksProviderErrors() {
-        auto source = std::make_shared<SearchFixture>();
-        source->delayed = true;
-        TolerantCatalogueSearch search(source);
-        CatalogueQuery query;
-        query.text = "ModXample";
-        query.versions = {"1.21.1"};
-        query.loaders = {"neoforge"};
-        query.tags = {"mr:optimization"};
-        CataloguePage result;
-        bool done = false;
-        search.fetch(query, 0, 20, [&](CataloguePage page) {
-            result = page;
-            done = true;
-        });
-        QCOMPARE(source->calls.size(), 1);
-        source->calls[0].callback({{}, 0, {}});
-        QCOMPARE(source->calls.size(), 2);
-        QCOMPARE(source->calls[1].limit, 100);
-        QCOMPARE(source->calls[1].query.text, QString("mod"));
-        QCOMPARE(source->calls[1].query.versions, query.versions);
-        QCOMPARE(source->calls[1].query.loaders, query.loaders);
-        QCOMPARE(source->calls[1].query.tags, query.tags);
-        auto matching = project(1);
-        matching.title = "ModExample";
-        auto other = project(2);
-        other.title = "Unrelated";
-        source->calls[1].callback({{matching, other}, 10000, {}});
-        QVERIFY(done);
-        QCOMPARE(result.total, 1);
-        QCOMPARE(result.projects.first().id, matching.id);
-        done = false;
-        search.fetch(query, 0, 20, [&](CataloguePage page) {
-            result = page;
-            done = true;
-        });
-        QVERIFY(done);
-        QCOMPARE(source->calls.size(), 2);
-        auto otherAuthor = query;
-        otherAuthor.authorIds = {{"modrinth", "different-author"}};
-        search.fetch(otherAuthor, 0, 20, [](CataloguePage) {});
-        QCOMPARE(source->calls.size(), 3);
-        search.setKey({});
-        done = false;
-        search.fetch(query, 0, 20, [&](CataloguePage page) {
-            result = page;
-            done = true;
-        });
-        source->calls[3].callback({{}, 0, "Provider rate limit"});
-        QVERIFY(done);
-        QCOMPARE(result.error, QString("Provider rate limit"));
-        QCOMPARE(source->calls.size(), 4);
+    void literalTitleMatchesPrecedeMetadataAndRejectScatteredLetters() {
+        auto api = source(7);
+        const QStringList titles{"Compact",       "Metadata only", "Incompatible",  "Compatibility",
+                                 "Better Compat", "Compat",        "Another Compat"};
+        for (int i = 0; i < titles.size(); ++i)
+            api->rows["modrinth"][i].title = titles[i];
+        api->rows["modrinth"][1].summary = "Provides compat with other mods";
+        BrowseCatalogue model(api,
+                              std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()));
+        model.configure({{"query", "compat"}});
+        QTRY_VERIFY(!model.busy());
+        QStringList actual;
+        for (const auto &value : model.projects())
+            actual << value.toMap().value("title").toString();
+        QCOMPARE(actual, (QStringList{"Compat", "Better Compat", "Another Compat", "Compatibility",
+                                      "Incompatible", "Metadata only"}));
+        QCOMPARE(api->calls.size(), 1);
+        QCOMPARE(api->calls.first().query.text, QString("compat"));
+        model.configure({{"sort", "downloads"}});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().first().toMap().value("title").toString(), QString("Metadata only"));
+        QCOMPARE(model.projects().size(), 6);
+    }
+    void literalFilteringKeepsNativeOffsetsAndFilteredPageNavigation() {
+        auto api = source(85);
+        for (int i = 0; i < 85; ++i)
+            api->rows["modrinth"][i].title = i < 50 ? "Compact" : "Compat " + QString::number(i);
+        BrowseCatalogue model(api,
+                              std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()));
+        model.configure({{"query", "compat"}, {"size", 10}});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(api->calls.size(), 2);
+        QCOMPARE(api->calls[1].offset, 50);
+        QCOMPARE(model.projects().size(), 10);
+        QCOMPARE(model.projects().first().toMap().value("id").toString(), QString("50"));
+        model.goToPage(4);
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.page(), 4);
+        QCOMPARE(model.projects().size(), 5);
+        QCOMPARE(model.projects().first().toMap().value("id").toString(), QString("80"));
+        QCOMPARE(model.pageCount(), 4);
+        QVERIFY(!model.hasNext());
+        model.goToPage(1);
+        QCOMPARE(model.projects().first().toMap().value("id").toString(), QString("50"));
+        for (const auto &call : api->calls)
+            QCOMPARE(call.query.text, QString("compat"));
+    }
+    void emptyLiteralSearchDoesNotRetryWithABroaderQueryOrHideErrors() {
+        auto api = source(0);
+        BrowseCatalogue model(api,
+                              std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()));
+        model.configure({{"query", "ModXample"}});
+        QTRY_VERIFY(!model.busy());
+        QVERIFY(model.projects().isEmpty());
+        QCOMPARE(api->calls.size(), 1);
+        api->delayed = true;
+        model.refresh();
+        QCOMPARE(api->calls.size(), 2);
+        api->calls.last().callback({{}, 0, "Provider rate limit"});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.notice(), QString("Provider rate limit"));
+        QCOMPARE(api->calls.size(), 2);
+        QCOMPARE(api->calls.last().query.text, QString("ModXample"));
+    }
+    void relevanceComparesLiteralRanksAcrossProvidersAndRestoredContexts() {
+        auto api = source(1);
+        api->rows["modrinth"][0].title = "Compatibility";
+        auto exact = project(1, "curseforge");
+        exact.title = "Compat";
+        api->rows["curseforge"] = {exact};
+        BrowseCatalogue model(api,
+                              std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()));
+        model.setKey("fixture");
+        QTRY_VERIFY(!model.busy());
+        model.setContext("a", {}, {});
+        QTRY_VERIFY(!model.busy());
+        model.configure({{"query", "compat"}});
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(model.projects().first().toMap().value("provider").toString(), QString("curseforge"));
+        model.setContext("b", {}, {});
+        QTRY_VERIFY(!model.busy());
+        model.configure({{"query", "absent"}});
+        QTRY_VERIFY(!model.busy());
+        model.setContext("a", {}, {});
+        QVERIFY(!model.busy());
+        QCOMPARE(model.projects().size(), 2);
+        model.next();
+        QVERIFY(!model.hasNext());
+    }
+    void literalCandidateScanningRemainsBoundedWhenProviderReturnsOnlyFuzzyRows() {
+        auto api = source(1500);
+        for (auto &row : api->rows["modrinth"])
+            row.title = "Compact";
+        BrowseCatalogue model(api,
+                              std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>()));
+        model.configure({{"query", "compat"}});
+        QTRY_VERIFY(!model.busy());
+        QVERIFY(model.projects().isEmpty());
+        QVERIFY(api->calls.size() <= 24);
+        QVERIFY(model.hasNext());
+        QVERIFY(model.notice().contains("partial"));
     }
 
     void directPageEntryUsesNativeOffsetsAndKeepsEarlierPagesReachable() {
@@ -1017,6 +1068,8 @@ class BrowseCatalogueTests final : public QObject {
     }
     void oldResponsesCannotReplaceNewFilters() {
         auto api = source();
+        for (auto &row : api->rows["modrinth"])
+            row.title = "New query " + row.id;
         api->delayed = true;
         auto visibility = std::make_shared<ContentVisibility>(std::make_shared<MemoryBrowseSettings>());
         BrowseCatalogue model(api, visibility);

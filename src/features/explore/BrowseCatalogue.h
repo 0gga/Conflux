@@ -1,5 +1,6 @@
 #pragma once
 #include "domain/CatalogueSearch.h"
+#include "domain/TextSearch.h"
 #include "features/preferences/BrowseFilterPreferences.h"
 #include "features/preferences/ContentVisibility.h"
 #include <QObject>
@@ -100,6 +101,7 @@ class BrowseCatalogue final : public QObject {
     QSet<QString> m_installed, m_seen, m_downloadLookups;
     QHash<QString, Project> m_known;
     QVariantMap m_filters, m_options, m_defaults, m_author;
+    TextQuery m_textQuery{QString{}};
     QMap<QString, QString> m_contextTypes;
     QMap<QString, Stream> m_streams;
     QVector<QVariantList> m_pages;
@@ -118,6 +120,7 @@ class BrowseCatalogue final : public QObject {
     CatalogueQuery request(const QString &) const;
     QString identity(const Project &) const;
     bool accepted(const Project &) const;
+    int searchRank(const Project &) const;
     void reset();
     void pump();
     void fetchMore(const QString &);

@@ -3,7 +3,6 @@
 #include "domain/ContentCompatibility.h"
 #include "domain/ContentTypes.h"
 #include "domain/ReleaseStages.h"
-#include <QPointer>
 namespace studio {
 int ContentActions::updateCount() const {
     int count = 0;
@@ -60,35 +59,20 @@ void ContentActions::updateSelected() {
 }
 
 void ContentActions::openVersions(const QString &path) {
-    m_versionTarget = find(path);
-    m_versions.clear();
-    m_versionError.clear();
-    if (m_versionTarget.isEmpty())
-        return;
-    const int generation = ++m_versionGeneration;
-    m_versionsBusy = true;
-    emit changed();
-    const QPointer<ContentActions> guard(this);
-    m_catalogue->versions(m_versionTarget, m_pack.value("minecraft").toString(),
-                          compatibleLoaders(m_pack.value("loader").toString(), m_rows).join('|'),
-                          [guard, generation](QVector<Release> releases, QString error) {
-                              if (!guard || generation != guard->m_versionGeneration)
-                                  return;
-                              guard->m_versions.clear();
-                              for (const auto &release : releases)
-                                  guard->m_versions << release.toVariant();
-                              guard->m_versionError = error;
-                              guard->m_versionsBusy = false;
-                              emit guard->changed();
-                          });
+    const auto target = find(path);
+    const auto game = m_pack.value("minecraft").toString();
+    const auto loaders = compatibleLoaders(m_pack.value("loader").toString(), m_rows).join('|');
+    m_contentVersions.open(target, game, loaders);
 }
 void ContentActions::installVersion(int index) {
-    if (index < 0 || index >= m_versions.size() || m_versionTarget.value("frozen").toBool() ||
-        find(m_versionTarget.value("relativePath").toString()).value("locked").toBool())
+    const auto versions = m_contentVersions.versions();
+    auto project = m_contentVersions.target();
+    const auto current = find(project.value("relativePath").toString());
+    if (index < 0 || index >= versions.size() || project.value("frozen").toBool() ||
+        current.value("frozen").toBool() || current.value("locked").toBool())
         return;
-    auto project = m_versionTarget;
-    project["type"] = categoryType(m_versionTarget.value("category").toString());
-    installRelease(m_versions.at(index).toMap(), project);
+    project["type"] = categoryType(project.value("category").toString());
+    installRelease(versions.at(index).toMap(), project);
 }
 bool ContentActions::releaseAllowed(const QVariantMap &release) const {
     return releaseStageAllowed(release.value("channel", "release").toString(),

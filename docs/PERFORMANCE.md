@@ -109,7 +109,7 @@ Deterministic fixtures improved500,000 stable-key reads from171ms to11ms,800,000
 
 ### Indexed loaded-content presentation
 
-ContentViewIndex retains one immutable inventory snapshot and caches normalized search strings/words, author choices, filter fields and lazy sort orders. Changing a query or filter reads those prepared entries without consulting visibility preferences or reconstructing metadata. Inventory allocation identity, instance path and explicit visibility revision invalidate the presentation snapshot. Compact version and omitted-letter matching preserve the original TextQuery behavior, including Unicode normalization.
+ContentViewIndex retains one immutable inventory snapshot and caches normalized search strings, author choices, filter fields and lazy sort orders. Changing a query or filter reads those prepared entries without consulting visibility preferences or reconstructing metadata. Inventory allocation identity, instance path and explicit visibility revision invalidate the presentation snapshot. Literal substring matching retains Unicode normalization and compact versions; the owner removed omitted-letter/typo tolerance on25 October2026. Prepared entries no longer allocate a per-row word list. Provider search no longer issues the broader prefix fallback request.
 
 ContentListModel removes obsolete rows in contiguous groups, builds a keyed survivor order, remaps persistent indices in one layout change for actual reordering, inserts contiguous new runs and emits grouped data changes. Duplicate/empty keys retain occurrence order. It avoids scanning QVariant row maps once for every target; persistent identities survive filtering and sorting without a model reset.
 

@@ -74,6 +74,8 @@ target_sources(conflux_desktop PRIVATE
     src/platform/OptionalDependencySource.h src/platform/OptionalDependencySource.cpp
     src/platform/ContentDependencySource.h src/platform/ContentDependencySource.cpp
     src/features/content/ContentPorts.h
+    src/features/content/ContentVersionSource.h
+    src/features/content/InstalledContentVersions.h src/features/content/InstalledContentVersions.cpp
     src/features/content/ContentIndex.h
     src/platform/SqliteContentIndex.h src/platform/SqliteContentIndex.cpp
     src/platform/ContentMetadataSource.h src/platform/ContentMetadataSource.cpp
@@ -81,7 +83,6 @@ target_sources(conflux_desktop PRIVATE
     src/features/content/SourceLockIndex.h src/features/content/SourceLockIndex.cpp
     src/features/preferences/PackReleasePolicy.h src/features/preferences/PackReleasePolicy.cpp
     src/features/explore/BrowseInstalls.h src/features/explore/BrowseInstalls.cpp
-    src/features/explore/TolerantCatalogueSearch.h src/features/explore/TolerantCatalogueSearch.cpp
     src/features/explore/BrowseCatalogue.h src/features/explore/BrowseCatalogue.cpp
     src/features/preferences/BrowsePreferences.h src/features/preferences/BrowsePreferences.cpp
     src/features/preferences/BrowseFilterPreferences.h src/features/preferences/BrowseFilterPreferences.cpp
@@ -190,6 +191,9 @@ if(BUILD_TESTING)
     qt_add_executable(config-codec-tests tests/ConfigCodecTests.cpp)
     target_link_libraries(config-codec-tests PRIVATE conflux_config Qt6::Test)
     conflux_add_test(config-codecs config-codec-tests)
+    qt_add_executable(content-version-tests tests/ContentVersionTests.cpp)
+    target_link_libraries(content-version-tests PRIVATE conflux_desktop Qt6::Test)
+    conflux_add_test(content-versions content-version-tests)
     qt_add_executable(world-launch-tests tests/WorldLaunchTests.cpp)
     target_link_libraries(world-launch-tests PRIVATE conflux_desktop Qt6::Test)
     conflux_add_test(world-launch world-launch-tests)

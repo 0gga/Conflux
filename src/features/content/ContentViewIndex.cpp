@@ -58,17 +58,6 @@ void ContentViewIndex::remember(const QVariantList &rows, const QString &instanc
                           row.value("categories").toStringList().join(' ') + ' ' +
                           row.value("tags").toStringList().join(' ');
         entry.text = normalizedSearch(text);
-        QString word;
-        for (const auto ch : text) {
-            if (ch.isLetterOrNumber())
-                word += ch;
-            else if (!word.isEmpty()) {
-                entry.words << normalizedSearch(word);
-                word.clear();
-            }
-        }
-        if (!word.isEmpty())
-            entry.words << normalizedSearch(word);
         for (const auto &name : entry.authors)
             if (!authors.contains(name)) {
                 authors.insert(name);
@@ -118,7 +107,7 @@ QVariantList ContentViewIndex::filter(const QString &query, const QString &categ
             (updates && !entry.updates) || (locked && !entry.locked) ||
             (recent && entry.updatedAt < cutoff) || (openSource && !entry.openSource) ||
             (external && !entry.external) || (dependency && !entry.dependency) ||
-            !search.matchesPrepared(entry.text, entry.words))
+            !search.matchesPrepared(entry.text))
             continue;
         result << entry.value;
     }

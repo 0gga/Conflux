@@ -109,11 +109,11 @@
     },
     "src/domain/TextSearch.h": {
       "phase": "non-ui",
-      "sha256": "a6b65a8953cfedca6f6abc84629c494ab040338651fc27e8a3b1c503f324eb9e",
+      "sha256": "afff2fd69057095275bb36569af0398f45569170c03b93a1376a7876fc0d32d9",
       "status": "reviewed",
       "checks": [
-        "Compatibility guards, Release defaults, mappings, license allowlist and bounded normalized search",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: ReleasePolicyTests ContentReadBudgetTests ContentFilteringTests"
+        "Literal normalized matching; exact/word/prefix/substring ranking; no typo/subsequence fallback. ContentActionsTests and shared QML bridge regressions.",
+        "Source review is separate from measured line/function/branch coverage; remaining states stay explicit."
       ],
       "findings": []
     },
@@ -158,16 +158,26 @@
     "src/features/config/ConfigLibrary.cpp": {
       "phase": "non-ui",
       "sha256": "66b1ff7cf94bcca5044e1397a098e68aed6b85acb0001536016d8e4041130b0c",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Full source review of ownership port, explicit Identify validation, supported-format metadata, current context and derived file/mod ordering. FeatureTests and ContentInteractionTests exercise persistent mapping; repeated getter cost is an unmeasured candidate.",
+        "Review completion does not imply full measured test coverage."
+      ],
+      "findings": [
+        "AUD-29"
+      ]
     },
     "src/features/config/ConfigLibrary.h": {
       "phase": "non-ui",
       "sha256": "1f87dba3508714e936d65871b5b8e5452e8e7278aca8b61fb8aa79c8d18b3e94",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Full source review of ownership port, explicit Identify validation, supported-format metadata, current context and derived file/mod ordering. FeatureTests and ContentInteractionTests exercise persistent mapping; repeated getter cost is an unmeasured candidate.",
+        "Review completion does not imply full measured test coverage."
+      ],
+      "findings": [
+        "AUD-29"
+      ]
     },
     "src/features/config/ConfigRepository.cpp": {
       "phase": "non-ui",
@@ -282,10 +292,16 @@
     },
     "src/features/content/ContentActions.h": {
       "phase": "non-ui",
-      "sha256": "c8197c421fc4be3175e3f89229abb70223c27a5bddf63f63713634b1102eb81a",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "sha256": "6f061c3ea98e197df0c677ec754be084934d83b9ede29ec76c40214feaf562ee",
+      "status": "reviewed",
+      "checks": [
+        "Facade contracts, state ownership and new narrow version reader boundary reviewed; broader command lifecycle findings remain explicit. ContentVersionTests.",
+        "Source review is separate from measured line/function/branch coverage; remaining states stay explicit."
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-13"
+      ]
     },
     "src/features/content/ContentDependencyGraph.cpp": {
       "phase": "non-ui",
@@ -527,11 +543,11 @@
     },
     "src/features/content/ContentPorts.h": {
       "phase": "non-ui",
-      "sha256": "d552caa05ab60f1169b58f4eb13bc0e686b7eb480078ef76ac9e6008c1949309",
+      "sha256": "14d2f54093958efa173fbd53b489801dcfcab7410f20c0301177bde893c65550",
       "status": "reviewed",
       "checks": [
-        "Injected persistence/write/catalogue contracts, worker index use and explicit unsupported-capability defaults",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentActionsTests ContentIndexTests"
+        "Narrow IContentVersionSource inheritance retains catalogue metadata and mutation contracts and defaults. Adapter and version regression suites.",
+        "Source review is separate from measured line/function/branch coverage; remaining states stay explicit."
       ],
       "findings": [
         "AUD-13"
@@ -579,34 +595,44 @@
     },
     "src/features/content/ContentUpdates.cpp": {
       "phase": "non-ui",
-      "sha256": "f86c3be13035d5c516503536dae09e91242c9474af91b8f7c0418996e34ea0bd",
+      "sha256": "2bcb2ca8db7943485dfb66406c5b437f402db9987796419c60eef77018f70139",
       "status": "reviewed",
       "checks": [
-        "Reviewed immutable bulk destination, stage/lock checks, version request lifecycle and install routing. openVersions must capture/guard before notifications and invalidate empty targets.",
-        "Source review; uncovered states remain explicit. Related regression sources: ContentUpdateTests ContentActionsTests"
+        "Selected update intent, locks/freeze, scoped version read and original-index installation routing. Version lookup defects fixed and25 focused outcomes pass; remaining mutation notification reentrancy stays open.",
+        "Source review is separate from measured line/function/branch coverage; remaining states stay explicit."
       ],
       "findings": [
         "AUD-07",
         "AUD-13"
       ]
     },
-    "src/features/content/ContentViewIndex.cpp": {
+    "src/features/content/ContentVersionSource.h": {
       "phase": "non-ui",
-      "sha256": "b3fa1d31bde9056530a83f777eac847fab48d3f7ecd6c17c10474fa99bf42574",
+      "sha256": "18ba898ddff1c2a01a35f29909cf764f46b7f06694215213d43eb9f4f103dfb0",
       "status": "reviewed",
       "checks": [
-        "Prepared authors/tags/search/dependencies, visibility invalidation, sorting and local no-I/O filtering",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentFilteringTests"
+        "Independent version read/cancellation contract; cancellation may still deliver stale callbacks. Tested with a source implementing only this port.",
+        "Source review is separate from measured line/function/branch coverage; remaining states stay explicit."
+      ],
+      "findings": []
+    },
+    "src/features/content/ContentViewIndex.cpp": {
+      "phase": "non-ui",
+      "sha256": "89d9b7c91fe304eb53db2083de1ba4d9608acdb3d8843671a722ce83c40f1b81",
+      "status": "reviewed",
+      "checks": [
+        "Prepared literal filters retain no-I/O inventory filtering, authors, state and visibility invalidation. ContentFilteringTests.",
+        "Source review is separate from measured line/function/branch coverage; remaining states stay explicit."
       ],
       "findings": []
     },
     "src/features/content/ContentViewIndex.h": {
       "phase": "non-ui",
-      "sha256": "f51d1fc3542d64376bcabff9da071a00cf751550027de7e823dc03ef850bf1a2",
+      "sha256": "bfd202700eb3878422d4f816eb1c2dcf8a2dc244e03d7a0402c15595536ad200",
       "status": "reviewed",
       "checks": [
-        "Prepared authors/tags/search/dependencies, visibility invalidation, sorting and local no-I/O filtering",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentFilteringTests"
+        "Prepared immutable search/filter/sort snapshot; per-row fuzzy word lists removed. ContentFilteringTests.",
+        "Source review is separate from measured line/function/branch coverage; remaining states stay explicit."
       ],
       "findings": []
     },
@@ -622,6 +648,26 @@
       "sha256": "152c7e838901a1b96289cceb12277e5ada7ec4e1e013c504e54abb29ad052009",
       "status": "pending",
       "checks": [],
+      "findings": []
+    },
+    "src/features/content/InstalledContentVersions.cpp": {
+      "phase": "non-ui",
+      "sha256": "ed4b869278989ebf331d7053f14a8a49147626a51a9979465ddd8524e200339f",
+      "status": "reviewed",
+      "checks": [
+        "Invalidate before cancellation, capture target/context, guard reentrant/deleted owners, one terminal publication, read/cancel exceptions, stale/duplicate replies, constant-time cached group getters;25 focused outcomes pass.",
+        "Source review is separate from measured line/function/branch coverage; remaining states stay explicit."
+      ],
+      "findings": []
+    },
+    "src/features/content/InstalledContentVersions.h": {
+      "phase": "non-ui",
+      "sha256": "69eef4a53d9d642a770e7d1ab978645ddf5974b58ba69ae7ee2d8ff85459e8b9",
+      "status": "reviewed",
+      "checks": [
+        "Dedicated version target/result/error ownership and cached groups, no mutation/provider-metadata dependency. ContentVersionTests.",
+        "Source review is separate from measured line/function/branch coverage; remaining states stay explicit."
+      ],
       "findings": []
     },
     "src/features/content/ModMetadataReader.cpp": {
@@ -710,17 +756,29 @@
     },
     "src/features/explore/BrowseCatalogue.cpp": {
       "phase": "non-ui",
-      "sha256": "29e8a5e4f44a1457c7d29de1a9b6464bfa7b056a38e8b969f361e43c51dedf68",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "sha256": "9acf427037f16f52a0f0985c00c2f33d6f6084966ae0293022e2f8d208105fbd",
+      "status": "reviewed",
+      "checks": [
+        "Full source review: typed filter changes, snapshot restoration, native offsets, bounded buffered merging/pagination, literal ranking/filtering and alternate sorts. New literal cases pass; post-notification lifetime audit remains open.",
+        "Source review is separate from measured line/function/branch coverage; remaining states stay explicit."
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-13"
+      ]
     },
     "src/features/explore/BrowseCatalogue.h": {
       "phase": "non-ui",
-      "sha256": "6bd1e782ea9a38d3973311fad87826f3250e540d682445038c3a15ece062f819",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "sha256": "61e83bff2d761ff55f4776fc8ec513dff88158a5ed165d19a18215cbc18974bf",
+      "status": "reviewed",
+      "checks": [
+        "Per-context filter/query snapshots, provider cursors, metadata cache and generations. Source review plus BrowseCatalogueTests.",
+        "Source review is separate from measured line/function/branch coverage; remaining states stay explicit."
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-13"
+      ]
     },
     "src/features/explore/BrowseInstalls.cpp": {
       "phase": "non-ui",
@@ -735,30 +793,6 @@
       "status": "pending",
       "checks": [],
       "findings": []
-    },
-    "src/features/explore/TolerantCatalogueSearch.cpp": {
-      "phase": "non-ui",
-      "sha256": "e3977b8866cd5104f1f44fe1fe139f024fbf6403ff6111f5c50687c0002bb8fc",
-      "status": "reviewed",
-      "checks": [
-        "Bounded fallback/ranking, cache expiry and credential generations; delayed decorator lifetime tracked",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: BrowseCatalogueTests"
-      ],
-      "findings": [
-        "AUD-07"
-      ]
-    },
-    "src/features/explore/TolerantCatalogueSearch.h": {
-      "phase": "non-ui",
-      "sha256": "5e08b0a232ce56f2f0e1ea509197b43529ee8f08558bac917a41d56d080af110",
-      "status": "reviewed",
-      "checks": [
-        "Bounded fallback/ranking, cache expiry and credential generations; delayed decorator lifetime tracked",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: BrowseCatalogueTests"
-      ],
-      "findings": [
-        "AUD-07"
-      ]
     },
     "src/features/launch/WorldLaunch.cpp": {
       "phase": "non-ui",
@@ -1706,16 +1740,30 @@
     "src/services/ContentCatalogue.cpp": {
       "phase": "non-ui",
       "sha256": "a8c4481569a5b7a930f1e639c55906d29868915e2c9e18540337b8ef488408b4",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Read full adapter flow: asynchronous metadata, versions/updates, cache identity and callbacks. No new runtime claim; lower-level provider paging/type/hash gaps stay explicit.",
+        "Source review is separate from measured line/function/branch coverage; remaining states stay explicit."
+      ],
+      "findings": [
+        "AUD-13",
+        "AUD-22",
+        "AUD-23"
+      ]
     },
     "src/services/ContentCatalogue.h": {
       "phase": "non-ui",
       "sha256": "96f0d9bf065415942ab9ad792627f955576a890764b23bfc29370a85b831ed1f",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Metadata, version/update read cancellation and auth ownership reviewed; compatible reader/pagination and exact identity gaps remain tracked.",
+        "Source review is separate from measured line/function/branch coverage; remaining states stay explicit."
+      ],
+      "findings": [
+        "AUD-13",
+        "AUD-22",
+        "AUD-23"
+      ]
     },
     "src/services/GalleryImages.cpp": {
       "phase": "non-ui",

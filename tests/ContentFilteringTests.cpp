@@ -89,7 +89,7 @@ class ContentFilteringTests final : public QObject {
         elapsed.start();
         for (int i = 0; i < 12; ++i) {
             content.setCategory(i % 2 ? "all" : "mods");
-            content.setQuery(i % 3 ? "1211" : "Exmple");
+            content.setQuery(i % 3 ? "1211" : "Example");
             content.setFilter("state", i % 2 ? "enabled" : "");
             QVERIFY(!content.rows().isEmpty());
             QCOMPARE(content.authors().size(), 73);
@@ -100,21 +100,26 @@ class ContentFilteringTests final : public QObject {
         QVERIFY2(test_performance::releaseBudgetMet(milliseconds, (count == 310 ? 75 : 450)),
                  "Loaded filtering does excessive per-row/model work.");
     }
-    void preparedSearchMatchesTheExistingUnicodeAndTypoContract() {
+    void preparedSearchMatchesLiteralUnicodeAndVersionQueries() {
         QVariantList rows;
         const QStringList titles{QString::fromUtf8("Caf\xc3\xa9 ModExample"),
                                  "ModXample",
                                  "Example-Mod",
                                  "1.21.1",
                                  "Skin Layers",
+                                 "Create Aeronautics",
+                                 "Compact",
+                                 "Compatibility",
                                  "M O D"};
         for (int i = 0; i < titles.size(); ++i)
             rows << QVariantMap{
                 {"title", titles[i]}, {"fileName", "file_" + QString::number(i)}, {"version", "1.21.1"}};
+        QVERIFY(!textMatches(titles.first(), "ModXample"));
+        QVERIFY(!textMatches("Skin Layers", "SkLayers"));
         ContentViewIndex view;
         view.remember(rows, "a", 0, {});
-        for (const auto &query :
-             {"", "1211", "ModXample", "cafe", "skinlayers", "SkLayers", "1.20.1", "zzzz", "MOD"}) {
+        for (const auto &query : {"", "1211", "ModXample", "cafe", "skinlayers", "SkLayers", "aero", "compat",
+                                  "1.20.1", "zzzz", "MOD"}) {
             QSet<QString> expected, actual;
             for (const auto &value : rows) {
                 const auto row = value.toMap();

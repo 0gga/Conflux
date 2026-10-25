@@ -20,12 +20,14 @@ ContentActions::ContentActions(std::shared_ptr<const IContentFileStore> files,
                                std::shared_ptr<IContentInstaller> installer,
                                std::shared_ptr<IContentPreferences> preferences, QObject *parent)
     : QObject(parent), m_files(std::move(files)), m_catalogue(std::move(catalogue)),
-      m_installer(std::move(installer)), m_preferences(std::move(preferences)) {
+      m_contentVersions(m_catalogue, this), m_installer(std::move(installer)),
+      m_preferences(std::move(preferences)) {
     connect(&m_operations, &OperationHistory::retryRequested, this, &ContentActions::retryOperation);
     connect(&m_operations, &OperationHistory::dismissed, this,
             [this](quint64 id) { m_failedOperations.remove(id); });
     m_executor = std::make_unique<ContentOperationExecutor>(m_files, m_installer, this);
     connect(this, &ContentActions::changed, this, &ContentActions::syncVisibleRows);
+    connect(&m_contentVersions, &InstalledContentVersions::changed, this, &ContentActions::changed);
     connect(&m_queue, &ContentOperationQueue::changed, this, [this] {
         emit operationsChanged();
         if (!m_batchingUpdates)
@@ -84,17 +86,26 @@ void ContentActions::setContext(const QVariantMap &pack, const QVariantList &fil
     if (pack == m_pack && files == m_inventory && !forceRefresh)
         return;
     const bool changedPack = pack.value("path") != m_pack.value("path");
+    const bool changedVersionContext = changedPack || pack.value("minecraft") != m_pack.value("minecraft") ||
+                                       pack.value("loader") != m_pack.value("loader");
+    if (changedVersionContext)
+        ++m_generation;
     m_pack = pack;
     m_sourceLocks.remember(pack);
     m_inventory = files;
+    if (changedVersionContext) {
+        const auto generation = m_generation;
+        const QPointer<ContentActions> guard(this);
+        m_contentVersions.reset();
+        if (!guard || generation != m_generation)
+            return;
+    }
     if (changedPack) {
         m_policyRefresh.stop();
         m_selected.clear();
         m_query.clear();
         m_category = "all";
         m_rows.clear();
-        m_versions.clear();
-        ++m_versionGeneration;
         clearFilters();
     }
     if (changedPack || m_rows.isEmpty()) {
@@ -123,7 +134,7 @@ void ContentActions::setContext(const QVariantMap &pack, const QVariantList &fil
         return;
     }
     m_rows = reconcileContentRows(m_rows, m_rows);
-    refresh(changedPack);
+    refresh(changedVersionContext);
 }
 void ContentActions::refresh(bool checkUpdates) {
     m_policyRefresh.stop();
@@ -280,10 +291,7 @@ QStringList ContentActions::authors() const {
     return m_view.authors();
 }
 QVariantList ContentActions::versionGroups() const {
-    QVector<Release> releases;
-    for (const auto &value : m_versions)
-        releases << releaseFromVariant(value.toMap());
-    return groupReleaseVariants(releases);
+    return m_contentVersions.groups();
 }
 void ContentActions::prepareView() const {
     const auto path = m_pack.value("path").toString();

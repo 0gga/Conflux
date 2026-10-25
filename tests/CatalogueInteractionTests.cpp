@@ -4,6 +4,7 @@
 #include "features/explore/BrowseInstalls.h"
 #include "features/preferences/ContentVisibility.h"
 #include "theme/Appearance.h"
+#include "theme/TextSearch.h"
 #include <QFontDatabase>
 #include <QQmlComponent>
 #include <QQmlEngine>
@@ -80,6 +81,20 @@ Item {
         return root;
     }
   private slots:
+    void sharedQmlSearchRanksLiteralChoicesWithoutTypoMatches() {
+        TextSearch search;
+        const QStringList choices{"Compact", "Incompatible", "Compatibility", "Another Compat", "Compat"};
+        QCOMPARE(search.filter(choices, "compat"),
+                 (QStringList{"Compat", "Another Compat", "Compatibility", "Incompatible"}));
+        QCOMPARE(search.filter({"Create Aeronautics", "Aerodynamic", "Aero"}, "aero"),
+                 (QStringList{"Aero", "Create Aeronautics", "Aerodynamic"}));
+        QCOMPARE(search.filter({"1.21.4", "1.21.1", "1.21"}, "1211"), QStringList{"1.21.1"});
+        QCOMPARE(search.filter(choices, ""), choices);
+        QVERIFY(!search.matches("Compact", "compat"));
+        QVERIFY(!search.matches("ModExample", "ModXample"));
+        QVERIFY(search.filter({"ModExample", "Sodium"}, "Sodum").isEmpty());
+    }
+
     void dropdownRowsFillTheirPopupAndOnlySelectionHasAnOutline() {
 #ifndef Q_MOC_RUN
         QQmlEngine engine;

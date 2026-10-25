@@ -1,6 +1,5 @@
 #pragma once
 #include <QString>
-#include <QStringList>
 namespace studio {
 inline QString normalizedSearch(QString value) {
     value = value.normalized(QString::NormalizationForm_KD).toCaseFolded();
@@ -20,60 +19,33 @@ class TextQuery final {
         const auto haystack = normalizedSearch(text);
         if (haystack == m_needle)
             return 0;
-        if (haystack.startsWith(m_needle))
-            return 1;
-        if (haystack.contains(m_needle))
-            return 2;
-        if (m_needle.size() < 4)
+        if (!haystack.contains(m_needle))
             return -1;
-        const auto match = [&](const QString &candidate) {
-            if (candidate.size() < m_needle.size() ||
-                candidate.size() > m_needle.size() + qMax(2, m_needle.size() / 4))
-                return false;
-            int i = 0;
-            for (const auto ch : candidate)
-                if (ch == m_needle[i] && ++i == m_needle.size())
-                    return true;
-            return false;
-        };
-        if (match(haystack))
-            return 3;
+        // Whole words precede word prefixes, then other literal substrings.
+        bool prefix = haystack.startsWith(m_needle);
         QString word;
-        for (const auto ch : text) {
+        const auto folded = text.normalized(QString::NormalizationForm_KD).toCaseFolded();
+        for (const auto ch : folded) {
             if (ch.isLetterOrNumber())
                 word += ch;
+            else if (ch.isMark())
+                continue;
             else if (!word.isEmpty()) {
-                if (match(normalizedSearch(word)))
-                    return 3;
+                if (word == m_needle)
+                    return 1;
+                prefix |= word.startsWith(m_needle);
                 word.clear();
             }
         }
-        return !word.isEmpty() && match(normalizedSearch(word)) ? 3 : -1;
+        if (word == m_needle)
+            return 1;
+        return prefix || word.startsWith(m_needle) ? 2 : 3;
     }
-    bool matchesPrepared(const QString &normalized, const QStringList &words) const {
-        if (m_needle.isEmpty() || normalized.contains(m_needle))
-            return true;
-        if (m_needle.size() < 4)
-            return false;
-        const auto match = [this](const QString &candidate) {
-            if (candidate.size() < m_needle.size() ||
-                candidate.size() > m_needle.size() + qMax(2, m_needle.size() / 4))
-                return false;
-            int i = 0;
-            for (const auto ch : candidate)
-                if (ch == m_needle[i] && ++i == m_needle.size())
-                    return true;
-            return false;
-        };
-        if (match(normalized))
-            return true;
-        for (const auto &word : words)
-            if (match(word))
-                return true;
-        return false;
+    bool matchesPrepared(const QString &normalized) const {
+        return m_needle.isEmpty() || normalized.contains(m_needle);
     }
     bool matches(const QString &text) const {
-        return rank(text) >= 0;
+        return matchesPrepared(normalizedSearch(text));
     }
 
   private:

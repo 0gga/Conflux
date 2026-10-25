@@ -1045,7 +1045,7 @@ ContentListView {
         elapsed.start();
         for (int i = 0; i < 12; ++i) {
             model.setCategory(i % 2 ? "all" : "mods");
-            model.setQuery(i % 2 ? "1211" : "Exmple");
+            model.setQuery(i % 2 ? "1211" : "Example");
             QCoreApplication::processEvents();
         }
         const auto milliseconds = elapsed.elapsed();

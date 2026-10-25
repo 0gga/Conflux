@@ -274,18 +274,31 @@ class ContentActionsTests : public QObject {
         QVERIFY(!result.ok);
         QVERIFY(result.error.contains("Minecraft"));
     }
-    void forgivingSearchIgnoresSeparatorsAndSmallOmissions() {
+    void literalSearchPreservesPartialNamesAndCompactVersions() {
         QElapsedTimer benchmark;
         benchmark.start();
-        TextQuery matcher("ModXample");
+        TextQuery matcher("example");
         int matches = 0;
         for (int i = 0; i < 10000; ++i)
             if (matcher.matches("ModExample by Author 1.21.1"))
                 ++matches;
         QCOMPARE(matches, 10000);
-        qInfo() << "Forgiving matcher 10000 rows ms:" << benchmark.elapsed();
+        qInfo() << "Literal matcher 10000 rows ms:" << benchmark.elapsed();
         QVERIFY(textMatches("Minecraft 1.21.1", "1211"));
-        QVERIFY(textMatches("ModExample", "ModXample"));
+        QVERIFY(!textMatches("ModExample", "ModXample"));
+        QVERIFY(!textMatches("Compact", "compat"));
+        QVERIFY(!textMatches("Aeronautics", "aeronuatic"));
+        QVERIFY(!textMatches("Sodium", "Sodum"));
+        QVERIFY(textMatches("Create Aeronautics", "aero"));
+        const TextQuery compat("compat");
+        QCOMPARE(compat.rank("Compat"), 0);
+        QCOMPARE(compat.rank("Better Compat"), 1);
+        QCOMPARE(compat.rank("Compatibility"), 2);
+        QCOMPARE(compat.rank("Incompatible"), 3);
+        QCOMPARE(compat.rank("Compact"), -1);
+        QCOMPARE(TextQuery("cafe").rank(QString::fromUtf8("A Cafe\xcc\x81 Mod")), 1);
+        QCOMPARE(TextQuery("1211").rank("1.21.1"), 0);
+        QCOMPARE(TextQuery("...").rank("Anything"), 0);
         QVERIFY(textMatches("Mod Example", "modexample"));
         QVERIFY(textMatches("Café library", "cafe"));
         QVERIFY(!textMatches("Minecraft 1.21.4", "1211"));

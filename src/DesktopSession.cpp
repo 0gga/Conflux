@@ -1,6 +1,5 @@
 #include "DesktopSession.h"
 #include "domain/ContentTypes.h"
-#include "features/explore/TolerantCatalogueSearch.h"
 #include "features/preferences/ContentPreferences.h"
 #include "platform/BrowseSettingsStore.h"
 #include "platform/CatalogueShowcaseSource.h"
@@ -58,8 +57,7 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
       m_browsePreferences(m_browseStore, this),
       m_optionalDependencies(m_optionalSource, m_installationPreferences, m_releasePolicy, this),
       m_dependencyRemovals(this),
-      m_catalogue(std::make_shared<TolerantCatalogueSearch>(std::make_shared<CatalogueClient>()),
-                  m_visibility, m_reviewedIdentities,
+      m_catalogue(std::make_shared<CatalogueClient>(), m_visibility, m_reviewedIdentities,
                   std::make_shared<BrowseFilterPreferences>(m_browseStore), this),
       m_changes(this) {
     m_content.setReleasePolicy(m_releasePolicy);

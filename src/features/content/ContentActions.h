@@ -8,6 +8,7 @@
 #include "ContentPorts.h"
 #include "ContentTargetIndex.h"
 #include "ContentViewIndex.h"
+#include "InstalledContentVersions.h"
 #include "SourceLockIndex.h"
 #include "features/preferences/ContentVisibility.h"
 #include "features/preferences/PackReleasePolicy.h"
@@ -111,17 +112,17 @@ class ContentActions final : public QObject {
     }
     QVariantList selection() const;
     QVariantList versions() const {
-        return m_versions;
+        return m_contentVersions.versions();
     }
     QVariantList versionGroups() const;
     QVariantMap versionTarget() const {
-        return m_versionTarget;
+        return m_contentVersions.target();
     }
     bool versionsBusy() const {
-        return m_versionsBusy;
+        return m_contentVersions.busy();
     }
     QString versionError() const {
-        return m_versionError;
+        return m_contentVersions.error();
     }
     void setQuery(const QString &);
     void setCategory(const QString &);
@@ -216,6 +217,7 @@ class ContentActions final : public QObject {
     std::shared_ptr<IContentVisibility> m_visibility;
     std::shared_ptr<const IContentFileStore> m_files;
     std::shared_ptr<IContentCatalogue> m_catalogue;
+    InstalledContentVersions m_contentVersions;
     std::shared_ptr<PackReleasePolicy> m_releasePolicy;
     std::shared_ptr<IContentInstaller> m_installer;
     std::shared_ptr<IContentPreferences> m_preferences;
@@ -238,14 +240,14 @@ class ContentActions final : public QObject {
     quint64 m_visibilityRevision = 0;
     quint64 m_operationId = 0;
     bool m_anyChanged = false, m_checkUpdatesPending = false;
-    QVariantMap m_pack, m_filters, m_versionTarget;
-    QVariantList m_inventory, m_rows, m_versions;
+    QVariantMap m_pack, m_filters;
+    QVariantList m_inventory, m_rows;
     QStringList m_selected;
-    QString m_query, m_category = "all", m_sort = "name-asc", m_notice, m_versionError;
+    QString m_query, m_category = "all", m_sort = "name-asc", m_notice;
     QString m_activity = "idle", m_activityText;
     bool m_cancelRequested = false;
     bool m_batchingUpdates = false;
-    bool m_busy = false, m_versionsBusy = false;
-    int m_generation = 0, m_versionGeneration = 0;
+    bool m_busy = false;
+    int m_generation = 0;
 };
 } // namespace studio

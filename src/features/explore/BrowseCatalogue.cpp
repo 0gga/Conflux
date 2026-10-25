@@ -119,6 +119,7 @@ void BrowseCatalogue::activateView(const QVariantMap &changes) {
     if (m_contexts.contains(viewKey())) {
         const auto state = m_contexts.value(viewKey());
         m_filters = state.filters;
+        m_textQuery = TextQuery(m_filters.value("query").toString());
         m_pages = state.pages;
         m_streams = state.streams;
         m_seen = state.seen;
@@ -290,6 +291,7 @@ void BrowseCatalogue::refresh() {
 }
 void BrowseCatalogue::reset() {
     ++m_generation;
+    m_textQuery = TextQuery(m_filters.value("query").toString());
     m_streams.clear();
     m_pages.clear();
     m_building.clear();
@@ -325,6 +327,8 @@ QString BrowseCatalogue::identity(const Project &p) const {
     return projectIdentity(p, m_identities);
 }
 bool BrowseCatalogue::accepted(const Project &p) const {
+    if (searchRank(p) < 0)
+        return false;
     const auto map = p.toVariant();
     if (m_visibility->hidden(map) != m_filters.value("hidden").toBool())
         return false;
@@ -336,8 +340,27 @@ bool BrowseCatalogue::accepted(const Project &p) const {
                 return false;
     return true;
 }
+int BrowseCatalogue::searchRank(const Project &p) const {
+    const auto title = m_textQuery.rank(p.title);
+    if (title >= 0)
+        return title;
+    if (m_textQuery.matches(p.summary) || m_textQuery.matches(p.author))
+        return 4;
+    for (const auto &category : p.categories)
+        if (m_textQuery.matches(category))
+            return 4;
+    for (const auto &author : p.authors)
+        if (m_textQuery.matches(author.toMap().value("name").toString()))
+            return 4;
+    return -1;
+}
 bool BrowseCatalogue::before(const Project &a, const Project &b) const {
     const auto sort = m_filters.value("sort").toString();
+    if (sort == "relevance") {
+        const int left = searchRank(a), right = searchRank(b);
+        if (left != right)
+            return left >= 0 && (right < 0 || left < right);
+    }
     if (sort == "downloads") {
         const auto left = m_known.value(identity(a), a).totalDownloads();
         const auto right = m_known.value(identity(b), b).totalDownloads();
@@ -371,6 +394,20 @@ void BrowseCatalogue::fetchMore(const QString &provider) {
             stream.total = qMax(qint64(0), result.total);
             stream.nextDownloadBound =
                 result.projects.isEmpty() ? 0 : qMax(qint64(0), result.projects.last().downloads);
+            if (guard->m_filters.value("sort") == "relevance" &&
+                !guard->m_filters.value("query").toString().trimmed().isEmpty()) {
+                // Rank this native candidate page without changing its consumed offset.
+                // Ties retain provider order; no retry or broader query is issued.
+                QHash<QString, int> ranks;
+                for (const auto &project : result.projects) {
+                    const int rank = guard->searchRank(project);
+                    ranks[project.id] = rank < 0 ? 5 : rank;
+                }
+                std::stable_sort(result.projects.begin(), result.projects.end(),
+                                 [&ranks](const Project &a, const Project &b) {
+                                     return ranks.value(a.id) < ranks.value(b.id);
+                                 });
+            }
             for (const auto &project : result.projects) {
                 const auto key = guard->identity(project);
                 if (guard->m_known.contains(key))
@@ -469,7 +506,7 @@ void BrowseCatalogue::pump() {
     for (auto it = m_streams.cbegin(); it != m_streams.cend(); ++it)
         if (it->rows.isEmpty() && !it->exhausted) {
             if (++m_reads > 24) {
-                m_notice = "Many results are hidden. This page is partial; continue to see more.";
+                m_notice = "Many results are filtered. This page is partial; continue to see more.";
                 break;
             }
             missing << it.key();
@@ -646,6 +683,7 @@ void BrowseCatalogue::goToPage(int pageNumber) {
     // every intervening page. Filtered/merged views preserve their dedup cursor.
     const bool sequential = target == m_page + 1 && target == m_pages.size();
     if (!sequential && m_streams.size() == 1 && !m_filters.value("hidden").toBool() &&
+        m_filters.value("query").toString().trimmed().isEmpty() &&
         !m_filters.value("hideInstalled").toBool() &&
         !(m_filters.value("sort") == "downloads" && m_cf && !m_identities.isEmpty())) {
         auto &stream = m_streams.first();

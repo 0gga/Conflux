@@ -1268,7 +1268,7 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                 break;
             case 87:
                 session.navigation()->go({{"page", "discover"}});
-                session.catalogue()->configure({{"query", "Sodum"},
+                session.catalogue()->configure({{"query", "Sod"},
                                                 {"type", "mod"},
                                                 {"source", "modrinth"},
                                                 {"sort", "relevance"},
@@ -1282,8 +1282,8 @@ void DesktopSmokeTest::start(QGuiApplication &application, QQuickWindow *window,
                 for (const auto &value : session.catalogue()->projects())
                     if (value.toMap().value("title").toString() == "Sodium")
                         sodium = true;
-                if (!sodium || !capture("tolerant-provider-search")) {
-                    fail("Bounded provider typo search failed");
+                if (!sodium || !capture("literal-provider-search")) {
+                    fail("Literal provider substring search failed");
                     return;
                 }
                 break;

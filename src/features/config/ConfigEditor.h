@@ -59,6 +59,7 @@ class ConfigEditor final : public QObject {
     void saved();
 
   private:
+    void load(ConfigTarget, QString status = {});
     std::shared_ptr<const IConfigRepository> m_repository;
     ConfigDocument m_document;
     QVariantMap m_changes;

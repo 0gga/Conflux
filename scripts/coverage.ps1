@@ -47,6 +47,8 @@ try {
     $resolvedBuild = (Resolve-Path -LiteralPath $buildRoot).Path
     $expectedBuild = [IO.Path]::GetFullPath((Join-Path $projectRoot 'artifacts\coverage-build'))
     if ($resolvedBuild -ne $expectedBuild) { throw 'Unexpected coverage build directory.' }
+    python scripts/coverage_notes.py --build $resolvedBuild --ninja 'C:/Qt/Tools/Ninja/ninja.exe' --quarantine (Join-Path $reportRoot 'orphaned-notes') --output (Join-Path $reportRoot 'compiler-notes.json')
+    if ($LASTEXITCODE -ne 0) { throw 'Could not verify current compiler notes; no coverage report was collected.' }
     # Reset generated counters only, so every report represents this run.
     Get-ChildItem -LiteralPath $resolvedBuild -Filter '*.gcda' -File -Recurse | ForEach-Object {
         if (!$_.FullName.StartsWith($resolvedBuild + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Counter escaped the build directory.' }

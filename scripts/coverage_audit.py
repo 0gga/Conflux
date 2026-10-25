@@ -56,9 +56,9 @@ def sync_ledger(inventory: dict, ledger: dict) -> dict:
 def build_snapshot(root: Path, inventory: dict) -> dict:
     # Old tests/build settings must not be relabelled as a new measured run either.
     inputs = {}
-    for directory in ("tests", "cmake", "themes"):
+    for directory in ("tests", "cmake", "themes", "scripts"):
         for path in sorted((root / directory).rglob("*")):
-            if path.suffix in (".cpp", ".h", ".py", ".cmake", ".json") and path.is_file():
+            if path.suffix in (".cpp", ".h", ".py", ".ps1", ".cmake", ".json", ".txt") and path.is_file():
                 inputs[path.relative_to(root).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
     for name in ("CMakeLists.txt", "CMakePresets.json"):
         path = root / name

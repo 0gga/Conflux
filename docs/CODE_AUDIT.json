@@ -131,29 +131,23 @@
     },
     "src/features/config/ConfigEditor.cpp": {
       "phase": "non-ui",
-      "sha256": "813e2a8abc6f5b9401b4d4e6cbb01f9314547994b7406a45653d8c5a710b97e2",
+      "sha256": "2bfe35203cb6ea05c1f387f4f4ff33e6329dc2da01cd9bee5f2979fa8c37db69",
       "status": "reviewed",
       "checks": [
-        "Generation ownership, pending edits, conflict/save/reload states; exception and notification lifetime gaps tracked",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+        "Full immutable accepted command and read/write exception boundary review; generation/QPointer notification guards, scoped reload/status, late replies and destroyed owners. ConfigEditorTests cover before-fix wrong-target/status failures, exceptions/retry, busy actions, draft retention and lifecycle.",
+        "Headless feature target links only conflux_config and QtTest. Backend atomic transaction policy remains separate."
       ],
-      "findings": [
-        "AUD-07",
-        "AUD-08"
-      ]
+      "findings": []
     },
     "src/features/config/ConfigEditor.h": {
       "phase": "non-ui",
-      "sha256": "064177bb058bdd6cd28e0108ca3d795eda227daca14d5a8703e96ce8b7a26d57",
+      "sha256": "014f78ab365699004de552a249553686e8b58670b024cec626742b8f80fb6dd5",
       "status": "reviewed",
       "checks": [
-        "Generation ownership, pending edits, conflict/save/reload states; exception and notification lifetime gaps tracked",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+        "Full immutable accepted command and read/write exception boundary review; generation/QPointer notification guards, scoped reload/status, late replies and destroyed owners. ConfigEditorTests cover before-fix wrong-target/status failures, exceptions/retry, busy actions, draft retention and lifecycle.",
+        "Headless feature target links only conflux_config and QtTest. Backend atomic transaction policy remains separate."
       ],
-      "findings": [
-        "AUD-07",
-        "AUD-08"
-      ]
+      "findings": []
     },
     "src/features/config/ConfigLibrary.cpp": {
       "phase": "non-ui",
@@ -639,16 +633,26 @@
     "src/features/content/DependencyRemovals.cpp": {
       "phase": "non-ui",
       "sha256": "7cc7276896a121207b1d089da5fa442c3581855f16a0e52de07c1a708a495393",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Full review: graph-derived offers, original target capture, queued/error/removed states, exception-to-retry behavior and dismissal-safe accepted commands. observe continues after publish without owner/generation checks; track before changing.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
+      "findings": [
+        "AUD-07"
+      ]
     },
     "src/features/content/DependencyRemovals.h": {
       "phase": "non-ui",
       "sha256": "152c7e838901a1b96289cceb12277e5ada7ec4e1e013c504e54abb29ad052009",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Narrow captured removal port, original-instance offer queue, current inventory/lock state and dismissal generations reviewed. DependencyRemovalTests and rendered overlay regressions cover accepted actions.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
+      "findings": [
+        "AUD-07"
+      ]
     },
     "src/features/content/InstalledContentVersions.cpp": {
       "phase": "non-ui",
@@ -673,16 +677,26 @@
     "src/features/content/ModMetadataReader.cpp": {
       "phase": "non-ui",
       "sha256": "886f5d9e4da9731514c79cb1502ff254ec7b00642d46734893238a632c8a169f",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Full native JSON/TOML review: declared owner IDs versus required/optional dependency IDs, universal loader list, malformed fallback, licenses/environment, bounded icon reading and embedded Connector detection. Secondary Fabric/Quilt owner-ID parity needs a fixture.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
+      "findings": [
+        "AUD-32"
+      ]
     },
     "src/features/content/ModMetadataReader.h": {
       "phase": "non-ui",
       "sha256": "96dcb074cb8f7ad6021f6976f89899fd31f701e04ce1199bb142bcca5476e833",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Injected bounded archive port and format-independent native metadata reader contract reviewed. Workspace/content-pipeline fixtures cover supported loaders and aliases.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
+      "findings": [
+        "AUD-32"
+      ]
     },
     "src/features/content/OptionalDependencies.cpp": {
       "phase": "non-ui",
@@ -1190,16 +1204,28 @@
     "src/features/workspace/PackWorkspace.cpp": {
       "phase": "non-ui",
       "sha256": "2dc5a232d1811b28051d392feccab9c197fa3720d16efe7a2aa01eeb75095747",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Full review: one worker, generation-scoped stale completions, current-root replacement and exception-to-last-good inventory. Public notification continuations and repeated transient-error accumulation remain open.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08"
+      ]
     },
     "src/features/workspace/PackWorkspace.h": {
       "phase": "non-ui",
       "sha256": "d2afcae35f0c90f4f6de3a7be0fafe6b34b0f1d65bc0c24ca49801c86933fe97",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Inspector injection, immutable accepted scan context, coalescing state and exposed last-good inventory reviewed. WorkspaceTests cover coalescing and worker failure.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08"
+      ]
     },
     "src/features/workspace/PackWorldList.cpp": {
       "phase": "non-ui",
@@ -1251,15 +1277,21 @@
     "src/platform/BrowseSettingsStore.cpp": {
       "phase": "non-ui",
       "sha256": "d52801474903647097d2a8e065f72ab9b881e103b34be633f0865f8e4aad7777",
-      "status": "pending",
-      "checks": [],
+      "status": "reviewed",
+      "checks": [
+        "Reviewed default versus injected INI ownership and direct value/save behavior; no provider or file-operation policy in the adapter.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
       "findings": []
     },
     "src/platform/BrowseSettingsStore.h": {
       "phase": "non-ui",
       "sha256": "1e5b675706e8cec37600f6be81e91275ad4a0fec70fa9ad39f3c3b4a8c08a5f1",
-      "status": "pending",
-      "checks": [],
+      "status": "reviewed",
+      "checks": [
+        "Feature settings contract is separated from QSettings; optional defaults remain caller-supplied. BrowseCatalogueTests exercise persistence and no-op invalid/default behavior.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
       "findings": []
     },
     "src/platform/CatalogueShowcaseSource.cpp": {
@@ -1291,16 +1323,26 @@
     "src/platform/ConfigOwnershipStore.cpp": {
       "phase": "non-ui",
       "sha256": "fc29cea2f7833b745dcef03f3e966c79f43336cf5ef8a98b9100c8995255409e",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Reviewed SHA256-scoped ownership keys, explicit writes and immutable reader API. Repeated hashing through ConfigLibrary getters remains a performance candidate.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
+      "findings": [
+        "AUD-29"
+      ]
     },
     "src/platform/ConfigOwnershipStore.h": {
       "phase": "non-ui",
       "sha256": "b3a8398a10541705f687d52a238544dfca1992adc8351f72676a225bade91299",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Narrow persisted ownership port and settings adapter; known root/path keys remain independent of format parsing. FeatureTests and ContentInteractionTests exercise explicit Identify persistence.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
+      "findings": [
+        "AUD-29"
+      ]
     },
     "src/platform/ContentAccess.cpp": {
       "phase": "non-ui",
@@ -1429,8 +1471,11 @@
     "src/platform/CurseforgeFingerprint.h": {
       "phase": "non-ui",
       "sha256": "003dfb9691ba993a16ed569f77e7010ba66a15ea965caf566ea26f71a8263bcc",
-      "status": "pending",
-      "checks": [],
+      "status": "reviewed",
+      "checks": [
+        "Read-only streaming fingerprint result/error contract and required exact SHA1 confirmation reviewed; implementation/fixtures were separately audited.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
       "findings": []
     },
     "src/platform/CurseforgeInstallSource.cpp": {
@@ -1476,15 +1521,21 @@
     "src/platform/InstanceProcessSource.cpp": {
       "phase": "non-ui",
       "sha256": "87bb85d288e15c1c618300425719e32903e80ff68d75d729404d10268ca0bfe8",
-      "status": "pending",
-      "checks": [],
+      "status": "reviewed",
+      "checks": [
+        "Full Windows review: owned handle closure, PID/creation-time fingerprints, hidden bounded helper, sanitized directory/PID output, cache invalidation, current canonical-path matching and scoped errors. No game was launched; cross-platform fallback stays explicit.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
       "findings": []
     },
     "src/platform/InstanceProcessSource.h": {
       "phase": "non-ui",
       "sha256": "d9cd8e115cbf9c5118d16704de58f81c6e40f9d46052c8e48623f3c05d88c9f6",
-      "status": "pending",
-      "checks": [],
+      "status": "reviewed",
+      "checks": [
+        "Worker process-source contract, mutex-scoped fingerprint cache and current-pack matching reviewed. StatusTests exercise bounded cached probes.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
       "findings": []
     },
     "src/platform/LauncherContentLocks.cpp": {
@@ -1546,16 +1597,26 @@
     "src/platform/PackChangeMonitor.cpp": {
       "phase": "non-ui",
       "sha256": "6084621f038b44e65c9aa815b20585df7a1f71dda01279521f588429ff766386",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Full review:450ms coalescing, stop obsolete debounce on root changes, canonical-contained roots, set-difference watch reuse and1500-file cap. Enumeration remains synchronous and nested/capped coverage needs explicit measurement.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
+      "findings": [
+        "AUD-31"
+      ]
     },
     "src/platform/PackChangeMonitor.h": {
       "phase": "non-ui",
       "sha256": "4f0cb869cef6a4755190f0dd9447021e6f1ae04fbf90c566278663cedefebfb6",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Root-scoped debounced watcher lifecycle and bounded registration model reviewed. Existing native content watcher tests cover bursts, root switches and retained watches.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
+      "findings": [
+        "AUD-31"
+      ]
     },
     "src/platform/PackFileStore.cpp": {
       "phase": "non-ui",
@@ -1566,7 +1627,8 @@
         "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
       ],
       "findings": [
-        "AUD-17"
+        "AUD-17",
+        "AUD-30"
       ]
     },
     "src/platform/PackFileStore.h": {
@@ -1578,7 +1640,8 @@
         "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
       ],
       "findings": [
-        "AUD-17"
+        "AUD-17",
+        "AUD-30"
       ]
     },
     "src/platform/ProjectAuthors.cpp": {
@@ -1696,16 +1759,26 @@
     "src/platform/WorldLaunchAdapters.cpp": {
       "phase": "non-ui",
       "sha256": "6efdf64a657b2a595e88bd9676fef109b148a7d1e39720092ac451fe0d95f42e",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Reviewed verified Modrinth instance IDs, known Minecraft minimum, percent/form query encoding, registry capability probing and Qt GUI URL dispatch. Native OS/game branches are not claimed fully exercised.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
+      "findings": [
+        "AUD-26"
+      ]
     },
     "src/platform/WorldLaunchAdapters.h": {
       "phase": "non-ui",
       "sha256": "b71a1167568b0688836af178fbc5e2263d07d1d2e8e7d05d48fd6a3338d68bb6",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Launch capability, URL construction and GUI URL opening remain separate from file validation. Consumer tests use a recording opener and never launch a real game.",
+        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+      ],
+      "findings": [
+        "AUD-26"
+      ]
     },
     "src/services/CatalogueClient.cpp": {
       "phase": "non-ui",

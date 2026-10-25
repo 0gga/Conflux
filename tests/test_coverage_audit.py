@@ -133,6 +133,19 @@ class CoverageAuditTests(unittest.TestCase):
         result = subprocess.run(command + ["--fail-under-line", "101", "--sync-ledger"], capture_output=True)
         self.assertNotEqual(result.returncode, 0)
 
+    def test_build_snapshot_includes_verification_scripts_and_tool_pins(self):
+        scripts = self.root / "scripts"
+        scripts.mkdir()
+        files = [scripts / name for name in ("collector.py", "coverage.ps1", "coverage-requirements.txt")]
+        for path in files:
+            path.write_text("original", encoding="utf-8")
+        initial = audit.build_snapshot(self.root, self.inventory)
+        for path in files:
+            path.write_text("changed", encoding="utf-8")
+            self.assertNotEqual(initial, audit.build_snapshot(self.root, self.inventory))
+            path.write_text("original", encoding="utf-8")
+            self.assertEqual(initial, audit.build_snapshot(self.root, self.inventory))
+
     def test_build_snapshot_also_invalidates_test_and_configuration_changes(self):
         tests = self.root / "tests"
         tests.mkdir()

@@ -871,7 +871,9 @@ class ContentActionsTests : public QObject {
         QVERIFY(bool(installer->completion));
         installer->completion({true, {}});
         QTRY_VERIFY(bool(catalogue->metadataCompletion));
-        QVERIFY(!content.operationsBusy());
+        // Queue completion is posted to the next event-loop turn. It must settle
+        // while metadata is still held; observing lookup start is not that barrier.
+        QTRY_VERIFY(!content.operationsBusy());
         QCOMPARE(content.operations()->failedCount(), 0);
         QCOMPARE(catalogue->identifiedPack, first);
         auto indexed = catalogue->identified;

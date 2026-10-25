@@ -61,7 +61,7 @@ flowchart TD
 | --- | --- |
 | `pack_storage` | Read/list and config-write ports plus the native filesystem adapter. Qt Core only. |
 | `conflux_content` | Archive/identity/icon adapters, indexed config ownership, inventory and independently injected diagnostic rules. Depends on storage, Qt Gui and miniz; no QML. |
-| `conflux_config` | JSON/TOML/properties codecs and a repository coordinating parse/validate/read/write. Depends on storage; no views or catalogue. |
+| `conflux_config` | JSON/TOML/properties codecs, parse/validate/read/write repository and headless ConfigEditor state. Depends on storage and QtConcurrent; no QML views or catalogue. |
 | `conflux_desktop` | Focused QObject presentation models and DesktopSession composition. Depends on content/config and Qt Concurrent; no provider APIs or repository mutations. |
 | `conflux_style` | Shared JSON theme palette. Views consume semantic roles, including SVG icon tint. |
 | `pack_foundation` | Existing provider clients, merge domain, launcher discovery, dependency installer and managed Git repository services. |
@@ -415,3 +415,6 @@ The modal OptionalDependenciesDialog uses the shared incremental ContentListMode
 
 
 InstalledContentVersions owns only an installed-content version lookup: target snapshot, request generation, busy/error, serialized versions and cached release groups. Its narrow IContentVersionSource port is independent of catalogue metadata and mutation ports. ContentActions keeps its QML-facing properties and delegates this state, while installation still validates current inventory/locks before dispatch. Silent reset permits coherent context publication; generations invalidate replies before cancellation, and captured commands plus QPointer checks protect synchronous callbacks, reentrant observers and destroyed owners. Metadata read generations advance before cancellation on context changes. Release grouping is computed once per terminal result rather than on each property read.
+
+
+ConfigEditor belongs to `conflux_config`, alongside its existing narrow `IConfigRepository` port. Worker commands capture repository, target, original document and accepted draft changes before publishing busy state. A synchronous observer may navigate or dispose the editor; that cannot redirect an accepted Save. Worker read/write exceptions become scoped error results, and failed saves retain draft edits. Generation/QPointer checks protect multi-signal publication and post-save reloads. Successful writes emit Saved independently of a later reload error, while status/reload data remain scoped to the original file; backup status reflects the repository result. The storage adapter still owns actual backup, containment, external-change and atomic-write policy.

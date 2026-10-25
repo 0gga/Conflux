@@ -51,11 +51,12 @@ qt_add_library(conflux_content STATIC
 target_include_directories(conflux_content PUBLIC src PRIVATE third_party)
 target_link_libraries(conflux_content PUBLIC pack_storage Qt6::Gui PRIVATE miniz)
 qt_add_library(conflux_config STATIC
+    src/features/config/ConfigEditor.h src/features/config/ConfigEditor.cpp
     src/features/config/ConfigCodec.h src/features/config/JsonConfigCodec.cpp
     src/features/config/TomlConfigCodec.cpp src/features/config/PropertiesConfigCodec.cpp
     src/features/config/ConfigRepository.h src/features/config/ConfigRepository.cpp)
 target_include_directories(conflux_config PUBLIC src PRIVATE third_party)
-target_link_libraries(conflux_config PUBLIC pack_storage)
+target_link_libraries(conflux_config PUBLIC pack_storage PRIVATE Qt6::Concurrent)
 qt_add_library(conflux_desktop STATIC
     src/DesktopSession.h src/DesktopSession.cpp
     src/features/content/ContentUpdates.cpp
@@ -65,8 +66,7 @@ qt_add_library(conflux_desktop STATIC
     src/features/workspace/PackWorkspace.h src/features/workspace/PackWorkspace.cpp
     src/features/workspace/PackFileBrowser.h src/features/workspace/PackFileBrowser.cpp
     src/features/workspace/PackLogViewer.h src/features/workspace/PackLogViewer.cpp
-    src/features/workspace/PackWorldList.h src/features/workspace/PackWorldList.cpp
-    src/features/config/ConfigEditor.h src/features/config/ConfigEditor.cpp)
+    src/features/workspace/PackWorldList.h src/features/workspace/PackWorldList.cpp)
 target_sources(conflux_desktop PRIVATE
     src/features/content/ContentDependencyInstaller.h src/features/content/ContentDependencyInstaller.cpp
     src/features/content/OptionalDependencies.h src/features/content/OptionalDependencies.cpp
@@ -186,11 +186,14 @@ include(CTest)
 if(BUILD_TESTING)
     include(cmake/ConfluxTesting.cmake)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
-    add_test(NAME coverage-audit-tool COMMAND ${Python3_EXECUTABLE} -m unittest discover -s tests -p test_coverage_audit.py -v)
+    add_test(NAME coverage-audit-tool COMMAND ${Python3_EXECUTABLE} -m unittest discover -s tests -p "test_coverage*.py" -v)
     set_tests_properties(coverage-audit-tool PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" TIMEOUT 30)
     qt_add_executable(config-codec-tests tests/ConfigCodecTests.cpp)
     target_link_libraries(config-codec-tests PRIVATE conflux_config Qt6::Test)
     conflux_add_test(config-codecs config-codec-tests)
+    qt_add_executable(config-editor-tests tests/ConfigEditorTests.cpp)
+    target_link_libraries(config-editor-tests PRIVATE conflux_config Qt6::Test)
+    conflux_add_test(config-editor config-editor-tests)
     qt_add_executable(content-version-tests tests/ContentVersionTests.cpp)
     target_link_libraries(content-version-tests PRIVATE conflux_desktop Qt6::Test)
     conflux_add_test(content-versions content-version-tests)

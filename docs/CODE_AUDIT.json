@@ -369,11 +369,12 @@
     },
     "src/features/content/ContentInventory.cpp": {
       "phase": "non-ui",
-      "sha256": "692a5e777de0b1dd25491179c356f1d2df8af8dc622154a7c1be2e7bcdbdac8c",
+      "sha256": "0b8a63061303769577be6cdb04dcbbf5da86056c713e42327159b03565db46ec",
       "status": "reviewed",
       "checks": [
         "Canonical containment, private/link guards, category/depth caps, pins and cached metadata",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentReadBudgetTests FeatureTests"
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentReadBudgetTests FeatureTests",
+        "Shared private component policy; actual Windows normalized final names/8.3 aliases; contained config/defaultconfigs authorization and original long save target; unchanged logical path spelling;50 feature/170 pipeline outcomes,18-case real Release-object probes and310/3000 unchanged performance/hash-I/O gates. UNC/case-sensitive Windows/non-Windows runtime not exercised."
       ],
       "findings": [
         "AUD-17"
@@ -1772,11 +1773,12 @@
     },
     "src/platform/PackFileStore.cpp": {
       "phase": "non-ui",
-      "sha256": "2f0690d61bcbe35b17c1cde936c8a318609055eec51423af2f1b4a45a26daa0b",
+      "sha256": "d110294068cdff5ab467fb6a1b2d02d50d7dde3e8e6796d12c7b221e2590a79b",
       "status": "reviewed",
       "checks": [
         "Canonical paths, links/private leaves, bounded reads, backups, atomic config writes and external changes; case aliases/fault reads need expansion",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests",
+        "Shared private component policy; actual Windows normalized final names/8.3 aliases; contained config/defaultconfigs authorization and original long save target; unchanged logical path spelling;50 feature/170 pipeline outcomes,18-case real Release-object probes and310/3000 unchanged performance/hash-I/O gates. UNC/case-sensitive Windows/non-Windows runtime not exercised."
       ],
       "findings": [
         "AUD-17",
@@ -1785,11 +1787,12 @@
     },
     "src/platform/PackFileStore.h": {
       "phase": "non-ui",
-      "sha256": "9296eb155378b1bcecb4dd3f8bc2ec52cb37c29fe2c8cb7b680dcc8dd7b11d34",
+      "sha256": "55df0987d5bb4db5a43021cd4654d0aceb8d68b68b2dba4e17ccb1a07f756add",
       "status": "reviewed",
       "checks": [
         "Canonical paths, links/private leaves, bounded reads, backups, atomic config writes and external changes; case aliases/fault reads need expansion",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests",
+        "Shared private component policy; actual Windows normalized final names/8.3 aliases; contained config/defaultconfigs authorization and original long save target; unchanged logical path spelling;50 feature/170 pipeline outcomes,18-case real Release-object probes and310/3000 unchanged performance/hash-I/O gates. UNC/case-sensitive Windows/non-Windows runtime not exercised."
       ],
       "findings": [
         "AUD-17",

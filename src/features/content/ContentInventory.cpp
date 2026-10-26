@@ -28,7 +28,8 @@ ContentSnapshot ContentInventory::collect(const QVariantMap &pack, bool includeC
         const auto relative = root.relativeFilePath(file.absoluteFilePath());
         // Callers enumerate only a freshly resolved, contained parent. Do not resolve
         // every config's entire ancestor chain again; still reject linked/private leaves.
-        if (file.isSymLink() || file.isJunction() || file.fileName() == ".git" || file.fileName() == ".env")
+        if (file.isSymLink() || file.isJunction() ||
+            !NativePackFileStore::isAllowedComponent(file.fileName()))
             return;
         QVariantMap row{{"title", file.completeBaseName()},
                         {"fileName", file.fileName()},

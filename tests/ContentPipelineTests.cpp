@@ -714,6 +714,34 @@ class ContentPipelineTests : public QObject {
         QCOMPARE(rows.first().toMap().value("relativePath").toString(), QString("config/allowed.json"));
         QCOMPARE(read(outside.path() + "/outside.jar"), bytes);
     }
+    void inventoryUsesTheSamePrivateEntryPolicyAsTheFileReader() {
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+#ifdef Q_OS_WIN
+        write(temp.path() + "/config/.GiT/private.json", "private");
+        write(temp.path() + "/config/.EnV", "private");
+#else
+        write(temp.path() + "/config/.git/private.json", "private");
+        write(temp.path() + "/config/.env", "private");
+#endif
+        write(temp.path() + "/config/.github/allowed.json", "{}");
+        write(temp.path() + "/config/.env.example", "example");
+        write(temp.path() + "/config/allowed.json", "{}");
+#ifdef Q_OS_WIN
+        const auto lookalike = QString(".g%1t").arg(QChar(0x0131));
+        write(temp.path() + "/config/" + lookalike + "/allowed.json", "{}");
+#endif
+        const auto snapshot = PackContent::scan({{"path", temp.path()}});
+        QSet<QString> paths;
+        for (const auto &value : snapshot.files)
+            paths.insert(value.toMap().value("relativePath").toString());
+#ifdef Q_OS_WIN
+        QCOMPARE(paths, QSet<QString>({"config/.github/allowed.json", "config/.env.example",
+                                       "config/allowed.json", "config/" + lookalike + "/allowed.json"}));
+#else
+        QCOMPARE(paths, QSet<QString>({"config/allowed.json"}));
+#endif
+    }
     void existingVerifiedDestinationIsReusedWithoutNetwork() {
         QTemporaryDir temp;
         auto bytes = archive(temp.path() + "/existing.jar", "mods", "fixture", 2);

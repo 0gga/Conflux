@@ -34,6 +34,8 @@ class NativePackFileStore final : public IPackFileReader, public IConfigFileWrit
     FileWriteResult writeConfig(const QString &, const QString &, const QByteArray &,
                                 const QByteArray &) const override;
     static QString resolve(const QString &root, const QString &relative);
+    // Pure entry policy; callers still validate containment and links on a worker.
+    static bool isAllowedComponent(const QString &name);
 
   private:
     QString m_backupRoot;

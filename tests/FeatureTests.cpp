@@ -10,6 +10,12 @@
 #include <QQuickWindow>
 #include <QTemporaryDir>
 #include <QtTest>
+#ifdef Q_OS_WIN
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 using namespace studio;
 class FeatureTests : public QObject {
     Q_OBJECT
@@ -19,6 +25,18 @@ class FeatureTests : public QObject {
         QVERIFY(file.open(QIODevice::WriteOnly));
         QCOMPARE(file.write(bytes), bytes.size());
     }
+#ifdef Q_OS_WIN
+    static QString shortFileName(const QString &path) {
+        auto native = QDir::toNativeSeparators(QFileInfo(path).absoluteFilePath());
+        if (!native.startsWith("\\\\?\\"))
+            native = native.startsWith("\\\\") ? "\\\\?\\UNC\\" + native.mid(2) : "\\\\?\\" + native;
+        wchar_t buffer[32768];
+        const auto length = GetShortPathNameW(native.toStdWString().c_str(), buffer, 32768);
+        return length > 0 && length < 32768
+                   ? QFileInfo(QDir::fromNativeSeparators(QString::fromWCharArray(buffer, length))).fileName()
+                   : QString{};
+    }
+#endif
   private slots:
     void globalProjectLinksOpenEvenWhenAnotherInstanceIsLoaded() {
         QTemporaryDir temp;
@@ -220,6 +238,173 @@ class FeatureTests : public QObject {
         QVERIFY(!store->writeConfig(root, "mods/example.jar", {}, "bad").ok);
         target.modId.clear();
         QVERIFY(!repository.load(target).decoded.error.isEmpty());
+    }
+    void privateEntriesCannotBeReadOrSavedThroughAliases_data() {
+        QTest::addColumn<QString>("relative");
+        QTest::addColumn<bool>("exists");
+        QTest::newRow("git-literal") << QString("config/.git/settings.json") << true;
+        QTest::newRow("env-literal") << QString("config/.env") << true;
+#ifdef Q_OS_WIN
+        for (const auto &path : {"config/.GiT/settings.json", "config/.GIT/settings.json",
+                                 "config/.gIt/settings.json", "config/.git./settings.json", "config/.EnV",
+                                 "config/.ENV", "config/.eNv", "config/.env.", "config/.EnV::$DATA"})
+            QTest::newRow(path) << QString(path) << true;
+        QTest::newRow("git-short") << QString("git-short") << true;
+        QTest::newRow("env-short") << QString("env-short") << true;
+        QTest::newRow("git-space") << QString("config/.git /settings.json") << false;
+        QTest::newRow("env-space") << QString("config/.env ") << false;
+#endif
+    }
+    void privateEntriesCannotBeReadOrSavedThroughAliases() {
+        QFETCH(QString, relative);
+        QFETCH(bool, exists);
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        const auto root = temp.path() + "/pack";
+        const auto backups = temp.path() + "/backups";
+#ifdef Q_OS_WIN
+        const QString git = "config/.GiT", env = "config/.EnV";
+#else
+        const QString git = "config/.git", env = "config/.env";
+#endif
+        const QByteArray original = "test-owned private content";
+        write(root + '/' + git + "/settings.json", original);
+        write(root + '/' + env, original);
+#ifdef Q_OS_WIN
+        if (relative == "git-short" || relative == "env-short") {
+            const bool directory = relative == "git-short";
+            const auto name = shortFileName(root + '/' + (directory ? git : env));
+            if (name.isEmpty() ||
+                name.compare(QFileInfo(directory ? git : env).fileName(), Qt::CaseInsensitive) == 0)
+                QSKIP("This temporary volume does not expose an alternate short name.");
+            relative = "config/" + name + (directory ? "/settings.json" : "");
+        }
+#endif
+        if (exists)
+            QVERIFY2(QFileInfo::exists(root + '/' + relative), qPrintable(relative));
+        NativePackFileStore store(backups);
+        const auto resolved = NativePackFileStore::resolve(root, relative);
+        const auto read = store.read(root, relative, 1024);
+        const auto saved = store.writeConfig(root, relative, original, "replacement");
+        qInfo() << relative << "resolved/read/write" << !resolved.isEmpty() << read.error.isEmpty()
+                << saved.ok;
+        QVERIFY(resolved.isEmpty());
+        QVERIFY(!read.error.isEmpty());
+        QVERIFY(!saved.ok);
+        QVERIFY(!QFileInfo::exists(backups));
+        QFile gitFile(root + '/' + git + "/settings.json"), envFile(root + '/' + env);
+        QVERIFY(gitFile.open(QIODevice::ReadOnly));
+        QVERIFY(envFile.open(QIODevice::ReadOnly));
+        QCOMPARE(gitFile.readAll(), original);
+        QCOMPARE(envFile.readAll(), original);
+        QVERIFY(store.list(root, git).isEmpty());
+    }
+    void fileBrowserKeepsPrivateEntriesHiddenAndLookalikesVisible() {
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        const auto root = temp.path() + "/pack";
+#ifdef Q_OS_WIN
+        write(root + "/config/.GiT/settings.json", "private");
+        write(root + "/config/.EnV", "private");
+#else
+        write(root + "/config/.git/settings.json", "private");
+        write(root + "/config/.env", "private");
+#endif
+        write(root + "/config/.github/allowed.json", "{}");
+        write(root + "/config/.env.example", "example");
+        write(root + "/config/allowed.json", "{}");
+#ifdef Q_OS_WIN
+        const auto lookalike = QString(".g%1t").arg(QChar(0x0131));
+        write(root + "/config/" + lookalike + "/allowed.json", "{}");
+#endif
+        auto store = std::make_shared<NativePackFileStore>(temp.path() + "/backups");
+        const auto entries = store->list(root, "config");
+        QSet<QString> names;
+        for (const auto &value : entries)
+            names.insert(value.toMap().value("title").toString());
+#ifdef Q_OS_WIN
+        const QSet<QString> expected{".github", ".env.example", "allowed.json", lookalike};
+#else
+        const QSet<QString> expected{"allowed.json"};
+#endif
+        QCOMPARE(names, expected);
+        QCOMPARE(store->read(root, "config/.github/allowed.json", 1024).bytes, QByteArray("{}"));
+        QCOMPARE(store->read(root, "config/.env.example", 1024).bytes, QByteArray("example"));
+#ifdef Q_OS_WIN
+        QCOMPARE(store->read(root, "config/" + lookalike + "/allowed.json", 1024).bytes, QByteArray("{}"));
+#endif
+        PackFileBrowser browser(store);
+        browser.setRoot(root);
+        QTRY_VERIFY(!browser.busy());
+        browser.open("config");
+        QTRY_VERIFY(!browser.busy());
+        names.clear();
+        for (const auto &value : browser.entries())
+            names.insert(value.toMap().value("title").toString());
+        QCOMPARE(names, expected);
+    }
+    void allowedConfigAliasesPreserveTheOriginalLongFilename_data() {
+        QTest::addColumn<QString>("category");
+        QTest::addColumn<QString>("alias");
+        QTest::addColumn<bool>("longRoot");
+#ifdef Q_OS_WIN
+        for (const auto &category : {QString("config"), QString("defaultconfigs")})
+            for (const auto &alias :
+                 {QString("case"), QString("short-file"), QString("short-directory"), QString("dot")})
+                for (bool longRoot : {false, true})
+                    QTest::newRow(qPrintable(category + '-' + alias + QString::number(longRoot)))
+                        << category << alias << longRoot;
+#else
+        QTest::newRow("ordinary") << QString("config") << QString("ordinary") << false;
+#endif
+    }
+    void allowedConfigAliasesPreserveTheOriginalLongFilename() {
+        QFETCH(QString, category);
+        QFETCH(QString, alias);
+        QFETCH(bool, longRoot);
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        auto root = temp.path() + "/pack";
+        if (longRoot) {
+            const auto component = QString(QChar(0x754c)).repeated(100);
+            root += '/' + component + '/' + component + "/unicode-profile";
+            QVERIFY(root.size() > 260);
+        }
+        const QString fileName = "A very long config filename.json";
+        const auto directory = alias == "short-directory" && category == "config"
+                                   ? category + "/A very long section folder"
+                                   : category;
+        const auto actual = root + '/' + directory + '/' + fileName;
+        const QByteArray original = "{\"enabled\":true}", replacement = "{\"enabled\":false}";
+        write(actual, original);
+        QString relative = directory + '/' + fileName;
+#ifdef Q_OS_WIN
+        if (alias == "case")
+            relative = relative.toUpper();
+        else if (alias == "short-file") {
+            const auto name = shortFileName(actual);
+            if (name.isEmpty() || name.compare(fileName, Qt::CaseInsensitive) == 0)
+                QSKIP("This temporary volume does not expose an alternate file short name.");
+            relative = category + '/' + name;
+        } else if (alias == "short-directory") {
+            const auto name = shortFileName(root + '/' + directory);
+            if (name.isEmpty() || name.compare(QFileInfo(directory).fileName(), Qt::CaseInsensitive) == 0)
+                QSKIP("This directory already has a short-compatible name, or short names are unavailable.");
+            relative = (category == "config" ? category + '/' : QString{}) + name + '/' + fileName;
+        } else if (alias == "dot")
+            relative = "./" + category + "/./" + fileName;
+#endif
+        QVERIFY2(QFileInfo::exists(root + '/' + relative), qPrintable(relative));
+        NativePackFileStore store(temp.path() + "/backups");
+        const auto result = store.writeConfig(root, relative, original, replacement);
+        QVERIFY2(result.ok, qPrintable(result.error));
+        QFile file(actual), backup(result.backupPath);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), replacement);
+        QVERIFY(backup.open(QIODevice::ReadOnly));
+        QCOMPARE(backup.readAll(), original);
+        QCOMPARE(QDir(root + '/' + directory).entryList(QDir::Files | QDir::NoDotAndDotDot),
+                 QStringList{fileName});
     }
     void ambiguousOwnersNeverEnableEditing() {
         const QVariantList mods{QVariantMap{{"modId", "first"}, {"title", "Shared Config"}},

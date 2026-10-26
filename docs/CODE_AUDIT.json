@@ -275,12 +275,13 @@
     },
     "src/features/content/ContentActions.cpp": {
       "phase": "non-ui",
-      "sha256": "663fd6967b1a65731eb00241b40420418eb297c771d4e99495b2b641fcd07a68",
+      "sha256": "a3f10b6e64750b95b94831356a93d00599f2bb9ae6c21433d261e270c17c3a05",
       "status": "reviewed",
       "checks": [
         "Complete1100-line coordinator reviewed: captured context, metadata/update generations, literal filtered index, lock preferences/source state, optimistic projection, claims, queue/history and per-item installation",
         "Original-instance install/cleanup/recovery and post-commit inventory guards inspected. Locked recovery captures/seeds project target before enqueue, including reentrant navigation. Remaining post-notification/metadata callback lifetime and measured coordinator/index boundaries remain backlogged.",
-        "Source path locks aggregate any locked entry using the registry logical key; duplicate order cannot erase protection.24 model data cases cover providers, case/disabled aliases, filters, unrelated locks and authoritative unlock clearing. Remaining notification reentrancy stays AUD-07."
+        "Source path locks aggregate any locked entry using the registry logical key; duplicate order cannot erase protection.24 model data cases cover providers, case/disabled aliases, filters, unrelated locks and authoritative unlock clearing. Remaining notification reentrancy stays AUD-07.",
+        "Context/filter-reset and refresh/busy notifications revalidate captured lifetime/generation before continuing publication or worker dispatch. Original2 redundant-read failures and2 disposal access violations reproduced;142 content-action outcomes pass. Remaining queue/history/metadata continuations remain AUD-07."
       ],
       "findings": [
         "AUD-07",

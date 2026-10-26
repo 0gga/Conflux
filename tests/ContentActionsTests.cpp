@@ -16,18 +16,47 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QMutex>
 #include <QPersistentModelIndex>
+#include <QPointer>
 #include <QSaveFile>
 #include <QSemaphore>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
+#include <QThreadPool>
 #include <QtTest>
 #include <atomic>
 #include <stdexcept>
 using namespace studio;
 class ContentActionsTests : public QObject {
     Q_OBJECT
+    struct RefreshFiles final : IContentFileStore {
+        mutable QMutex mutex;
+        mutable QHash<QString, int> counts;
+        int reads(const QString &path) const {
+            QMutexLocker lock(&mutex);
+            return counts.value(path);
+        }
+        QVariantList snapshot(const QVariantMap &, const QVariantList &rows) const override {
+            return rows;
+        }
+        ContentFileState reload(const QVariantMap &pack, const QVariantList &rows, bool) const override {
+            QMutexLocker lock(&mutex);
+            ++counts[pack.value("path").toString()];
+            return {pack, rows, {}};
+        }
+        ContentWriteResult setEnabled(const QVariantMap &, const QVariantMap &, bool) const override {
+            return {false, "Not used by refresh fixture"};
+        }
+        ContentWriteResult remove(const QVariantMap &, const QVariantList &) const override {
+            return {false, "Not used by refresh fixture"};
+        }
+        ContentWriteResult importFiles(const QVariantMap &, const QList<QUrl> &,
+                                       const QString &) const override {
+            return {false, "Not used by refresh fixture"};
+        }
+    };
     static void write(const QString &path, const QByteArray &bytes) {
         QDir().mkpath(QFileInfo(path).absolutePath());
         QFile f(path);
@@ -62,6 +91,84 @@ class ContentActionsTests : public QObject {
                 {"updateRelease", next.toVariant()}};
     }
   private slots:
+    void contextDispatchStopsAfterReentrantNavigation() {
+        QTemporaryDir temp;
+        auto files = std::make_shared<RefreshFiles>();
+        ContentActions content(files, std::make_shared<ContentCatalogueFixture>(),
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.filePath("prefs.ini")));
+        const QVariantMap first{{"path", temp.filePath("first")}}, second{{"path", temp.filePath("second")}};
+        bool navigated = false, obsoleteRowsPublished = false;
+        connect(&content, &ContentActions::rowsChanged, this, [&] {
+            if (navigated && !content.inventory().isEmpty() &&
+                content.inventory().first().toMap().value("title") == "Alpha")
+                obsoleteRowsPublished = true;
+        });
+        connect(&content, &ContentActions::changed, this, [&] {
+            if (!navigated) {
+                navigated = true;
+                content.setContext(second, {row("Bravo", "Author")});
+            }
+        });
+        content.setContext(first, {row("Alpha", "Author")});
+        QVERIFY(QThreadPool::globalInstance()->waitForDone(test_performance::completionTimeout(1000)));
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(content.inventory().first().toMap().value("title").toString(), QString("Bravo"));
+        QCOMPARE(files->reads(first.value("path").toString()), 0);
+        QCOMPARE(files->reads(second.value("path").toString()), 1);
+        QVERIFY(!obsoleteRowsPublished);
+    }
+    void refreshDispatchStopsAfterReentrantNavigation() {
+        QTemporaryDir temp;
+        auto files = std::make_shared<RefreshFiles>();
+        ContentActions content(files, std::make_shared<ContentCatalogueFixture>(),
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.filePath("prefs.ini")));
+        const QVariantMap first{{"path", temp.filePath("first")}}, second{{"path", temp.filePath("second")}};
+        content.setContext(first, {row("Alpha", "Author")});
+        QTRY_VERIFY(!content.busy());
+        bool navigated = false;
+        connect(&content, &ContentActions::changed, this, [&] {
+            if (!navigated && content.busy()) {
+                navigated = true;
+                content.setContext(second, {row("Bravo", "Author")});
+            }
+        });
+        content.refresh();
+        QVERIFY(QThreadPool::globalInstance()->waitForDone(test_performance::completionTimeout(1000)));
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(content.inventory().first().toMap().value("title").toString(), QString("Bravo"));
+        QCOMPARE(files->reads(first.value("path").toString()), 1);
+        QCOMPARE(files->reads(second.value("path").toString()), 1);
+    }
+    void contextDispatchStopsAfterOwnerDisposal() {
+        QTemporaryDir temp;
+        auto files = std::make_shared<RefreshFiles>();
+        auto *content = new ContentActions(
+            files, std::make_shared<ContentCatalogueFixture>(), std::make_shared<ContentInstallerFixture>(),
+            std::make_shared<SettingsContentPreferences>(temp.filePath("prefs.ini")));
+        const QPointer<ContentActions> guard(content);
+        connect(content, &ContentActions::changed, this, [content] { delete content; });
+        content->setContext({{"path", temp.path()}}, {row("Alpha", "Author")});
+        QVERIFY(guard.isNull());
+        QVERIFY(QThreadPool::globalInstance()->waitForDone(test_performance::completionTimeout(1000)));
+        QCOMPARE(files->reads(temp.path()), 0);
+    }
+    void refreshDispatchStopsAfterOwnerDisposal() {
+        QTemporaryDir temp;
+        auto files = std::make_shared<RefreshFiles>();
+        auto *content = new ContentActions(
+            files, std::make_shared<ContentCatalogueFixture>(), std::make_shared<ContentInstallerFixture>(),
+            std::make_shared<SettingsContentPreferences>(temp.filePath("prefs.ini")));
+        content->setContext({{"path", temp.path()}}, {row("Alpha", "Author")});
+        QTRY_VERIFY(!content->busy());
+        const QPointer<ContentActions> guard(content);
+        connect(content, &ContentActions::changed, this, [content] { delete content; });
+        content->refresh();
+        QVERIFY(guard.isNull());
+        QVERIFY(QThreadPool::globalInstance()->waitForDone(test_performance::completionTimeout(1000)));
+        QCOMPARE(files->reads(temp.path()), 1);
+    }
     void sourcePathLocksDoNotDependOnDuplicateOrder_data() {
         QTest::addColumn<QString>("provider");
         QTest::addColumn<QString>("state");

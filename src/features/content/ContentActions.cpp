@@ -93,9 +93,9 @@ void ContentActions::setContext(const QVariantMap &pack, const QVariantList &fil
     m_pack = pack;
     m_sourceLocks.remember(pack);
     m_inventory = files;
+    const auto generation = m_generation;
+    const QPointer<ContentActions> guard(this);
     if (changedVersionContext) {
-        const auto generation = m_generation;
-        const QPointer<ContentActions> guard(this);
         m_contentVersions.reset();
         if (!guard || generation != m_generation)
             return;
@@ -107,6 +107,8 @@ void ContentActions::setContext(const QVariantMap &pack, const QVariantList &fil
         m_category = "all";
         m_rows.clear();
         clearFilters();
+        if (!guard || generation != m_generation)
+            return;
     }
     if (changedPack || m_rows.isEmpty()) {
         m_rows.clear();
@@ -151,10 +153,12 @@ void ContentActions::refresh(bool checkUpdates) {
     m_notice.clear();
     m_activity = "checking";
     m_activityText = checkUpdates ? "Checking updates" : "Reading changes";
-    emit changed();
-    auto *watcher = new QFutureWatcher<ContentFileState>(this);
     const QPointer<ContentActions> guard(this);
-    connect(watcher, &QFutureWatcher<QVariantList>::finished, this,
+    emit changed();
+    if (!guard || generation != m_generation)
+        return;
+    auto *watcher = new QFutureWatcher<ContentFileState>(this);
+    connect(watcher, &QFutureWatcher<ContentFileState>::finished, this,
             [this, guard, watcher, generation, checkUpdates, previous] {
                 const auto state = watcher->result();
                 const auto rows = state.rows;

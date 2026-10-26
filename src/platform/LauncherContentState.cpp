@@ -9,7 +9,28 @@
 #include <QSqlQuery>
 #include <QSqlRecord>
 #include <QUuid>
+#include <filesystem>
 namespace studio {
+bool LauncherContentState::sameInstanceDirectory(const QString &left, const QString &right) {
+    if (left.isEmpty() || right.isEmpty() || left.contains(QChar::Null) || right.contains(QChar::Null))
+        return false;
+#ifdef Q_OS_WIN
+    const auto native = [](const QString &value) {
+        auto path = QDir::toNativeSeparators(QDir::cleanPath(QFileInfo(value).absoluteFilePath()));
+        if (!path.startsWith("\\\\?\\") && !path.startsWith("\\\\.\\"))
+            path = path.startsWith("\\\\") ? "\\\\?\\UNC\\" + path.mid(2) : "\\\\?\\" + path;
+        return std::filesystem::path(path.toStdWString());
+    };
+    const auto source = native(left), target = native(right);
+#else
+    const std::filesystem::path source(QFile::encodeName(left).toStdString()),
+        target(QFile::encodeName(right).toStdString());
+#endif
+    std::error_code error;
+    if (!std::filesystem::is_directory(source, error) || error)
+        return false;
+    return std::filesystem::equivalent(source, target, error) && !error;
+}
 QString LauncherContentState::databasePath(const QVariantMap &pack) {
     if (pack.contains("launcherDatabasePath")) {
         const auto path = pack.value("launcherDatabasePath").toString();
@@ -87,13 +108,8 @@ QVariantList LauncherContentState::read(const QVariantMap &pack, QString *error)
                     QFileInfo(QDir::isAbsolutePath(storedPath) ? storedPath
                                                                : QDir(profiles).filePath(storedPath))
                         .canonicalFilePath();
-#ifdef Q_OS_WIN
-                constexpr auto pathCase = Qt::CaseInsensitive;
-#else
-                constexpr auto pathCase = Qt::CaseSensitive;
-#endif
                 if (selectedId.isEmpty() || expectedPath.isEmpty() || actualPath.isEmpty() ||
-                    actualPath.compare(expectedPath, pathCase) != 0)
+                    !sameInstanceDirectory(actualPath, expectedPath))
                     fail();
                 else
                     do {

@@ -77,7 +77,7 @@ ContentWriteResult modrinth(const QVariantMap &pack, const QVariantList &rows, b
                                                           : QDir(profileRoot).filePath(instancePath))
                                                 .canonicalFilePath();
                     if ((locked && hash.compare(row.value("sha1").toString(), Qt::CaseInsensitive) != 0) ||
-                        actualPath.compare(expectedPath, Qt::CaseInsensitive) != 0) {
+                        !LauncherContentState::sameInstanceDirectory(actualPath, expectedPath)) {
                         result.error = "Modrinth content changed. Refresh before changing its lock.";
                         break;
                     }

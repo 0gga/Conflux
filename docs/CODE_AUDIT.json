@@ -1637,12 +1637,12 @@
     },
     "src/platform/LauncherContentLocks.cpp": {
       "phase": "non-ui",
-      "sha256": "46029dfc142ce202a7f7690e55baa581f2d954798fd82ef99aa4fdc2509db2aa",
+      "sha256": "0a14ba9e37fbf38ce47912244ce0cc7fceee8662c7167e8d2b6f7883f1676c0b",
       "status": "reviewed",
       "checks": [
         "Only explicit owner-authorized content lock ports write source state; ContentAccess instance lease, contained paths, exact hash check for locks and recovery unlock semantics",
         "Modrinth BEGIN IMMEDIATE/all-row verification/backups/rollback; CurseForge bounded lossless patch, sharing guard, byte comparison and atomic replacement reviewed. External non-cooperating compare/commit races are not universally prevented.",
-        "Canonical profile scope still uses Qt case-insensitive string comparison on Windows. An independent actual-file probe shows Qt-equivalent Unicode names that remain distinct to Windows; full source read/write isolation regressions and directory-identity guards remain AUD-41."
+        "Modrinth profile scope uses shared actual-directory identity with kind/empty/NUL/error checks and Windows extended-length paths.6 native read/write scope failures reproduced;59 source-lock outcomes verify valid aliases, distinct Unicode names, byte preservation, invalid directory kinds and long Unicode external profiles. Other path/cache policies remain AUD-41."
       ],
       "findings": [
         "AUD-33",
@@ -1663,12 +1663,12 @@
     },
     "src/platform/LauncherContentState.cpp": {
       "phase": "non-ui",
-      "sha256": "faea0b293a03c0bba487347a22da3ddb4c3df758a2b3cda7a157afe78e0b9c74",
+      "sha256": "a662232cffde1bdca0aebae9896138f18a334815d8c7134c4607766d3aa62000",
       "status": "reviewed",
       "checks": [
         "Read-only SQLite snapshot and canonical unique profile scope, relative/absolute paths, valid empty instances, explicit discovered database location and strict invalid-locator rejection reviewed",
         "Missing/untracked/foreign/ambiguous authority fails without partial rows; reused errors clear.48 native lock/60 transaction outcomes include real-backend model retention/recovery and external-profile lock writes; per-file identity/path normalization remains AUD-33.",
-        "Canonical profile scope still uses Qt case-insensitive string comparison on Windows. An independent actual-file probe shows Qt-equivalent Unicode names that remain distinct to Windows; full source read/write isolation regressions and directory-identity guards remain AUD-41."
+        "Modrinth profile scope uses shared actual-directory identity with kind/empty/NUL/error checks and Windows extended-length paths.6 native read/write scope failures reproduced;59 source-lock outcomes verify valid aliases, distinct Unicode names, byte preservation, invalid directory kinds and long Unicode external profiles. Other path/cache policies remain AUD-41."
       ],
       "findings": [
         "AUD-33",
@@ -1678,11 +1678,12 @@
     },
     "src/platform/LauncherContentState.h": {
       "phase": "non-ui",
-      "sha256": "9a3473f9f9346afa13d414d72ffd4b2c9f4bf50d593f71da463e98bfd4af6525",
+      "sha256": "fbbbdd8e413932e4f6f8360f6a620089b8975e3c62420f69571e907367bd736e",
       "status": "reviewed",
       "checks": [
         "Bounded CurseForge JSON and read-only Modrinth SQL with unique scoped connection, bounded ancestor resolution and normalized source rows",
-        "No source metadata writes; disabled path/missing-file mapping inspected. Missing Modrinth database currently falls back to empty locks and reused error outputs need explicit fixtures."
+        "No source metadata writes; disabled path/missing-file mapping inspected. Missing Modrinth database currently falls back to empty locks and reused error outputs need explicit fixtures.",
+        "Modrinth profile scope uses shared actual-directory identity with kind/empty/NUL/error checks and Windows extended-length paths.6 native read/write scope failures reproduced;59 source-lock outcomes verify valid aliases, distinct Unicode names, byte preservation, invalid directory kinds and long Unicode external profiles. Other path/cache policies remain AUD-41."
       ],
       "findings": [
         "AUD-33"

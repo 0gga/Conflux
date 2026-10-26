@@ -142,9 +142,99 @@ class GateLocks final : public ILauncherContentLocks {
 class LauncherContentLockTests final : public QObject {
     Q_OBJECT
   private slots:
-    void explicitDatabaseLocationSupportsExternalProfiles() {
+    void sourceDirectoryIdentityRequiresExistingDirectories() {
         Fixture fixture("modrinth");
-        const auto external = fixture.temp.path() + "/ExternalInstance";
+        const auto root = fixture.pack.value("path").toString();
+        QVERIFY(LauncherContentState::sameInstanceDirectory(root, root));
+        QVERIFY(LauncherContentState::sameInstanceDirectory(root, root + "/."));
+#ifdef Q_OS_WIN
+        const auto extended = "\\\\?\\" + QDir::toNativeSeparators(root);
+        QVERIFY(LauncherContentState::sameInstanceDirectory(root, extended));
+        QVERIFY(LauncherContentState::sameInstanceDirectory(extended, root));
+#endif
+        QVERIFY(!LauncherContentState::sameInstanceDirectory(root, fixture.file));
+        QVERIFY(!LauncherContentState::sameInstanceDirectory(fixture.file, fixture.file));
+        QVERIFY(!LauncherContentState::sameInstanceDirectory({}, root));
+        QVERIFY(!LauncherContentState::sameInstanceDirectory(root, {}));
+        QVERIFY(!LauncherContentState::sameInstanceDirectory(root + "/missing", root));
+        QVERIFY(!LauncherContentState::sameInstanceDirectory(root, root + "/missing"));
+        const auto invalid = root + QChar(QChar::Null) + "/suffix";
+        QVERIFY(!LauncherContentState::sameInstanceDirectory(invalid, root));
+        QVERIFY(!LauncherContentState::sameInstanceDirectory(root, invalid));
+    }
+    void sourceScopeUsesTheActualProfileDirectory_data() {
+        QTest::addColumn<QString>("targetName");
+        QTest::addColumn<QString>("sourceName");
+        QTest::addColumn<bool>("sameDirectory");
+        QTest::addColumn<QString>("action");
+        for (const auto &action : {"read", "lock", "unlock"}) {
+#ifdef Q_OS_WIN
+            QTest::newRow(qPrintable(QString("case-alias-%1").arg(action)))
+                << QString("Target") << QString("TARGET") << true << QString(action);
+#else
+            QTest::newRow(qPrintable(QString("same-directory-%1").arg(action)))
+                << QString("Target") << QString("Target") << true << QString(action);
+#endif
+            QTest::newRow(qPrintable(QString("distinct-sigma-%1").arg(action)))
+                << QString::fromUtf16(u"\u03a3") << QString::fromUtf16(u"\u03c2") << false << QString(action);
+            QTest::newRow(qPrintable(QString("distinct-kelvin-%1").arg(action)))
+                << QString("K") << QString::fromUtf16(u"\u212a") << false << QString(action);
+        }
+    }
+    void sourceScopeUsesTheActualProfileDirectory() {
+        QFETCH(QString, targetName);
+        QFETCH(QString, sourceName);
+        QFETCH(bool, sameDirectory);
+        QFETCH(QString, action);
+        Fixture fixture("modrinth");
+        const auto profiles = QFileInfo(fixture.database).dir().filePath("profiles");
+        QVERIFY(QDir(profiles).rename("Fixture", targetName));
+        const auto targetRoot = QDir(profiles).filePath(targetName);
+        const auto sourceRoot = QDir(profiles).filePath(sourceName);
+        const auto targetFile = targetRoot + "/mods/example.jar";
+        const auto sourceFile = sourceRoot + "/mods/example.jar";
+        if (!sameDirectory)
+            QVERIFY(write(sourceFile, "original content"));
+        fixture.pack["path"] = targetRoot;
+        fixture.file = targetFile;
+        QVERIFY(fixture.sql("UPDATE instances SET path='" + sourceName + "' WHERE id='instance'"));
+        if (action != "lock")
+            QVERIFY(fixture.sql("INSERT INTO instance_content_locks VALUES('file')"));
+        const auto originalDatabase = read(fixture.database);
+        if (action == "read") {
+            QString error;
+            const auto rows = LauncherContentState::read(fixture.pack, &error);
+            QCOMPARE(rows.size(), sameDirectory ? 1 : 0);
+            QCOMPARE(error.isEmpty(), sameDirectory);
+            QCOMPARE(read(fixture.database), originalDatabase);
+        } else {
+            LauncherContentLocks locks(fixture.temp.filePath("backups"));
+            const bool locked = action == "lock";
+            const auto result = locks.setLocked(fixture.pack, {fixture.row}, locked);
+            QCOMPARE(result.ok, sameDirectory);
+            QCOMPARE(result.error.isEmpty(), sameDirectory);
+            if (sameDirectory)
+                QCOMPARE(fixture.locked(), locked);
+            else
+                QCOMPARE(read(fixture.database), originalDatabase);
+        }
+        QCOMPARE(read(targetFile), QByteArray("original content"));
+        QCOMPARE(read(sourceFile), QByteArray("original content"));
+    }
+    void explicitDatabaseLocationSupportsExternalProfiles_data() {
+        QTest::addColumn<bool>("longUnicodePath");
+        QTest::newRow("ordinary") << false;
+        QTest::newRow("long-unicode") << true;
+    }
+    void explicitDatabaseLocationSupportsExternalProfiles() {
+        QFETCH(bool, longUnicodePath);
+        Fixture fixture("modrinth");
+        auto external = fixture.temp.path() + "/ExternalInstance";
+        if (longUnicodePath) {
+            external += QString("/long-instance-directory-component").repeated(12);
+            external += QString::fromUtf16(u"/\u03a3");
+            QVERIFY(external.size() > 260);
+        }
         QVERIFY(write(external + "/mods/example.jar", "original content"));
         auto escaped = external;
         escaped.replace("'", "''");

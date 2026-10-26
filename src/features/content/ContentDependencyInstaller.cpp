@@ -262,22 +262,31 @@ void ContentDependencyInstaller::next() {
         request.resolveDependencies = true;
         request.sourceIds[release.provider] = release.projectId;
         // Exact shared bytes establish cross-platform identity without reinstalling the same mod.
-        if (!release.sha1.isEmpty())
-            for (const auto &value : guard->m_rows) {
-                const auto row = value.toMap();
+        if (!release.sha1.isEmpty()) {
+            qsizetype retainedIndex = -1;
+            bool ambiguous = false;
+            for (qsizetype i = 0; i < guard->m_rows.size(); ++i) {
+                const auto row = guard->m_rows.at(i).toMap();
                 if (row.value("category") == "mods" &&
                     row.value("sha1").toString().compare(release.sha1, Qt::CaseInsensitive) == 0) {
-                    auto metadata = contentInstallPrediction(request, guard->m_pack, row);
-                    auto ids = row.value("sourceIds").toMap();
-                    for (auto it = request.sourceIds.begin(); it != request.sourceIds.end(); ++it)
-                        ids[it.key()] = it.value().toVariant();
-                    metadata["sourceIds"] = ids;
-                    guard->m_predictions << metadata;
-                    guard->expand(request, false);
-                    guard->later();
-                    return;
+                    ambiguous |= retainedIndex >= 0;
+                    retainedIndex = i;
                 }
             }
+            if (retainedIndex >= 0) {
+                if (!ambiguous) {
+                    const auto metadata =
+                        contentRetainedPrediction(request, guard->m_rows.at(retainedIndex).toMap());
+                    if (!metadata.isEmpty()) {
+                        guard->m_rows[retainedIndex] = metadata;
+                        guard->m_predictions << metadata;
+                    }
+                }
+                guard->expand(request, false);
+                guard->later();
+                return;
+            }
+        }
         const auto key = projectKey(release.provider, release.projectId);
         const auto existing = guard->retainedRow({release.provider, release.projectId, release.id});
         if (!existing.isEmpty()) {

@@ -1,6 +1,7 @@
 #include "ContentOperationState.h"
 #include "domain/ContentTypes.h"
 #include <QHash>
+#include <QRegularExpression>
 #include <QSet>
 #include <algorithm>
 namespace studio {
@@ -15,6 +16,133 @@ QString contentRowKey(const QVariantMap &row) {
         return key->toString();
     return row.value(QStringLiteral("category")).toString() + ':' +
            normalized(row.value(QStringLiteral("relativePath")).toString());
+}
+static bool knownHash(const QString &hash) {
+    static const QRegularExpression pattern("^[a-fA-F0-9]{40}$");
+    return hash.size() == 40 && pattern.match(hash).hasMatch();
+}
+static bool conflictingSources(const QVariantMap &left, const QVariantMap &right) {
+    const auto a = left.value("sourceIds").toMap(), b = right.value("sourceIds").toMap();
+    for (auto it = a.cbegin(); it != a.cend(); ++it) {
+        const auto other = b.value(it.key()).toString();
+        if (!it.value().toString().isEmpty() && !other.isEmpty() && it.value().toString() != other)
+            return true;
+    }
+    return false;
+}
+static bool verifiedModrinthRelease(const QVariantMap &row) {
+    const auto release = row.value("installedRelease").toMap();
+    const auto hash = row.value("sha1").toString(), project = release.value("projectId").toString();
+    return release.value("provider") == "modrinth" && !release.value("id").toString().isEmpty() &&
+           !project.isEmpty() && knownHash(hash) &&
+           release.value("sha1").toString().compare(hash, Qt::CaseInsensitive) == 0 &&
+           row.value("sourceIds").toMap().value("modrinth").toString() == project;
+}
+QVariantMap contentRetainedPrediction(const ContentInstallRequest &request, QVariantMap row) {
+    const auto &release = request.release;
+    const auto hash = row.value("sha1").toString();
+    if (row.value("category") != "mods" || row.value("relativePath").toString().isEmpty() ||
+        !knownHash(hash) || release.sha1.compare(hash, Qt::CaseInsensitive) != 0 ||
+        release.projectId.isEmpty() || release.id.isEmpty() ||
+        (release.provider != "modrinth" && release.provider != "curseforge"))
+        return {};
+    auto incoming = request.sourceIds.toVariantMap();
+    incoming[release.provider] = release.projectId;
+    if (conflictingSources(row, {{"sourceIds", incoming}}))
+        return {};
+    const bool preserveModrinth = release.provider != "modrinth" && verifiedModrinthRelease(row);
+    const auto previousProvider = row.value("provider").toString();
+    const auto previousProject = row.value("projectId").toString();
+    auto urls = row.value("sourceUrls").toMap();
+    if ((previousProvider == "modrinth" || previousProvider == "curseforge") &&
+        !row.value("projectUrl").toString().isEmpty())
+        urls[previousProvider] = row.value("projectUrl");
+    auto ids = row.value("sourceIds").toMap();
+    for (auto it = incoming.cbegin(); it != incoming.cend(); ++it)
+        if ((it.key() == "modrinth" || it.key() == "curseforge") && !it.value().toString().isEmpty())
+            ids[it.key()] = it.value();
+    row["sourceIds"] = ids;
+    if (!preserveModrinth) {
+        row["installedRelease"] = release.toVariant();
+        row["version"] = release.version;
+    }
+    if (release.provider == "modrinth" || ids.value("modrinth").toString().isEmpty()) {
+        row["provider"] = release.provider;
+        row["projectId"] = release.projectId;
+        if (!request.title.isEmpty())
+            row["title"] = request.title;
+    } else {
+        row["provider"] = "modrinth";
+        row["projectId"] = ids.value("modrinth");
+    }
+    if (row.value("provider") == "modrinth") {
+        const auto url = "https://modrinth.com/mod/" + row.value("projectId").toString();
+        row["projectUrl"] = url;
+        urls["modrinth"] = url;
+    }
+    if (!urls.isEmpty())
+        row["sourceUrls"] = urls;
+    if (row.value("provider").toString() != previousProvider ||
+        row.value("projectId").toString() != previousProject) {
+        row["metadataResolved"] = false;
+        row.remove("metadataSha1");
+        row.remove("metadataAttemptedAt");
+    }
+    row["contentKey"] = contentRowKey(row);
+    return row;
+}
+static void retainVerifiedModrinth(QVariantMap &row, const QVariantMap &previous) {
+    const auto current = row.value("installedRelease").toMap();
+    if (current.value("provider") == "modrinth" && row.value("provider") == "modrinth" &&
+        row.value("projectId") == current.value("projectId"))
+        return;
+    const bool currentVerified = verifiedModrinthRelease(row),
+               previousVerified = verifiedModrinthRelease(previous);
+    if (!currentVerified && !previousVerified)
+        return;
+    const auto release = currentVerified ? current : previous.value("installedRelease").toMap();
+    const auto project = release.value("projectId").toString();
+    if (row.value("sourceIds").toMap().value("modrinth").toString() != project)
+        return;
+    const bool currentPresentation =
+        row.value("provider") == "modrinth" && row.value("projectId").toString() == project;
+    row["provider"] = "modrinth";
+    row["projectId"] = project;
+    row["installedRelease"] = release;
+    row["version"] = release.value("version");
+    if (!currentPresentation) {
+        const bool complete = previousVerified && previous.value("provider") == "modrinth" &&
+                              previous.value("projectId").toString() == project &&
+                              previous.value("metadataResolved").toBool() &&
+                              previous.value("metadataSha1")
+                                      .toString()
+                                      .compare(row.value("sha1").toString(), Qt::CaseInsensitive) == 0;
+        row["metadataResolved"] = complete;
+        if (complete)
+            row["metadataSha1"] = row.value("sha1");
+        else {
+            row.remove("metadataSha1");
+            row.remove("metadataAttemptedAt");
+        }
+    }
+    if (currentPresentation || !previousVerified || previous.value("provider") != "modrinth" ||
+        previous.value("projectId").toString() != project)
+        return;
+    for (const auto &field : {"title", "projectUrl", "icon", "author", "authorIcon", "authorIds", "authors",
+                              "environment", "openSource", "categories", "tags"}) {
+        const auto value = previous.value(field);
+        const QLatin1StringView name(field);
+        if ((name == QLatin1StringView("categories") || name == QLatin1StringView("tags")) &&
+            value.isValid()) {
+            row[field] = value;
+            continue;
+        }
+        if (value.isValid() && !value.isNull() &&
+            !(value.typeId() == QMetaType::QString && value.toString().isEmpty()) &&
+            !(value.typeId() == QMetaType::QVariantMap && value.toMap().isEmpty()) &&
+            !(value.typeId() == QMetaType::QVariantList && value.toList().isEmpty()))
+            row[field] = value;
+    }
 }
 QVariantMap contentInstallPrediction(const ContentInstallRequest &request, const QVariantMap &pack,
                                      QVariantMap row) {
@@ -68,23 +196,10 @@ QVariantList reconcileContentRows(const QVariantList &actual, const QVariantList
         paths.insert({category, normalized(row.value("relativePath").toString())}, row);
     }
     QVariantList result;
-    const QStringList metadata{"sourceIds",
-                               "external",
-                               "provider",
-                               "projectId",
-                               "installedRelease",
-                               "updateRelease",
-                               "updateAvailable",
-                               "projectUrl",
-                               "author",
-                               "authorIcon",
-                               "authorIds",
-                               "authors",
-                               "environment",
-                               "openSource",
-                               "title",
-                               "version",
-                               "icon"};
+    const QStringList metadata{
+        "sourceIds",     "sourceUrls",      "external",   "provider", "projectId",  "installedRelease",
+        "updateRelease", "updateAvailable", "projectUrl", "author",   "authorIcon", "authorIds",
+        "authors",       "environment",     "openSource", "title",    "version",    "icon"};
     QSet<QString> keys;
     for (const auto &value : actual) {
         auto row = value.toMap();
@@ -92,14 +207,19 @@ QVariantList reconcileContentRows(const QVariantList &actual, const QVariantList
         row.remove("lockPending");
         const auto category = row.value("category").toString(), hash = row.value("sha1").toString();
         const auto path = paths.value({category, normalized(row.value("relativePath").toString())});
-        const auto same = path.value("sha1").toString() == hash        ? path
-                          : ambiguousHashes.contains({category, hash}) ? QVariantMap{}
-                                                                       : hashes.value({category, hash});
+        auto same = path.value("sha1").toString() == hash        ? path
+                    : ambiguousHashes.contains({category, hash}) ? QVariantMap{}
+                                                                 : hashes.value({category, hash});
+        if (conflictingSources(row, same))
+            same.clear();
         if (!hash.isEmpty() && !same.isEmpty()) {
+            const bool preferCurrentModrinth = row.value("provider") == "modrinth" &&
+                                               same.value("provider") != "modrinth" &&
+                                               verifiedModrinthRelease(row);
             const bool identityKnown =
                 !row.value("sourceIds").toMap().isEmpty() || !row.value("installedRelease").toMap().isEmpty();
             for (const auto &key : metadata) {
-                if (key == "sourceIds") {
+                if (key == "sourceIds" || key == "sourceUrls") {
                     auto ids = same.value(key).toMap();
                     const auto fresh = row.value(key).toMap();
                     for (auto it = fresh.cbegin(); it != fresh.cend(); ++it)
@@ -117,15 +237,17 @@ QVariantList reconcileContentRows(const QVariantList &actual, const QVariantList
                                          (row.value(key).typeId() == QMetaType::QVariantMap &&
                                           row.value(key).toMap().isEmpty());
                     // A raw filesystem refresh may borrow its unchanged file's presentation.
-                    // Fresh index results are authoritative, including explicit false update flags.
+                    // Fresh index facts remain authoritative within a provider. Verified Modrinth
+                    // presentation has priority across providers, including metadata-only aliases.
                     const bool identityField = key == "external" || key == "provider" || key == "projectId";
-                    const bool preferPrevious = !(identityField ? identityKnown : indexedMetadata) &&
-                                                key != "installedRelease" && key != "updateRelease" &&
-                                                key != "updateAvailable";
+                    const bool preferPrevious =
+                        !preferCurrentModrinth && !(identityField ? identityKnown : indexedMetadata) &&
+                        key != "installedRelease" && key != "updateRelease" && key != "updateAvailable";
                     if (same.contains(key) && (missing || preferPrevious))
                         row[key] = same.value(key);
                 }
             }
+            retainVerifiedModrinth(row, same);
         }
         auto old = path;
         if (old.isEmpty() && !same.isEmpty())

@@ -2,6 +2,7 @@
 #include "DependencyFixtures.h"
 #include "TestPerformance.h"
 #include "features/content/ContentDependencyInstaller.h"
+#include "features/content/ContentOperationExecutor.h"
 #include "features/content/ContentOperationState.h"
 #include "platform/ContentDependencySource.h"
 #include "platform/ContentInstaller.h"
@@ -513,6 +514,322 @@ class ContentDependencyTests final : public QObject {
         QCOMPARE(source->calls, QStringList({"lib", "child"}));
         QCOMPARE(leaf->calls, QStringList({"root", "child"}));
         QCOMPARE(files->rows.first().toMap(), existing);
+    }
+    void retainedIdentitySurvivesDescendantAndExecutorRefresh_data() {
+        QTest::addColumn<QString>("provider");
+        QTest::addColumn<QString>("state");
+        for (const auto &provider : {QString("modrinth"), QString("curseforge")})
+            for (const auto &state : {QString("enabled"), QString("disabled"), QString("locked")})
+                QTest::newRow(qPrintable(provider + '-' + state)) << provider << state;
+    }
+    void retainedIdentitySurvivesDescendantAndExecutorRefresh() {
+        QFETCH(QString, provider);
+        QFETCH(QString, state);
+        const QString other = provider == "modrinth" ? "curseforge" : "modrinth";
+        const auto make = [](const QString &platform, const QString &id, const QString &child = {}) {
+            auto value = selected(id);
+            value.release.provider = platform;
+            value.sourceIds = {{platform, id}};
+            if (!child.isEmpty())
+                value.release.dependencyRefs = {
+                    platform == "modrinth" ? required(child)
+                                           : QJsonObject{{"modId", child.toInt()}, {"relationType", 3}}};
+            return value;
+        };
+        auto incoming = make(provider, "22", "44");
+        incoming.title = "Incoming title";
+        incoming.release.version = "Incoming edition";
+        incoming.release.filename = "provider-filename.jar";
+        auto original = make(other, "33");
+        original.release.sha1 = incoming.release.sha1;
+        auto retained = contentInstallPrediction(original, pack(), {});
+        retained["relativePath"] = "mods/user-renamed.jar" + QString(state == "disabled" ? ".disabled" : "");
+        retained["fileName"] = "user-renamed.jar";
+        retained["contentKey"] = "mods:retained-stable-key";
+        retained["title"] = "Retained title";
+        retained["enabled"] = state != "disabled";
+        retained["locked"] = state == "locked";
+        retained["frozen"] = true;
+        retained["updateAvailable"] = true;
+        retained["metadataResolved"] = true;
+        retained["metadataSha1"] = retained.value("sha1");
+        const auto originalUrl = other == "modrinth"
+                                     ? QString("https://modrinth.com/mod/33")
+                                     : QString("https://www.curseforge.com/minecraft/mc-mods/retained");
+        retained["projectUrl"] = originalUrl;
+        auto files = std::make_shared<Files>();
+        files->rows = {retained};
+        auto leaf = std::make_shared<Leaf>(files);
+        auto source = std::make_shared<Source>();
+        source->values["22"] = incoming;
+        source->values["44"] = make(provider, "44");
+        auto installer = std::make_shared<ContentDependencyInstaller>(leaf, source, files);
+        QSignalSpy optional(installer.get(), &ContentDependencyInstaller::optionalDependencies);
+        auto root = make(provider, "11", "22");
+        root.release.dependencyRefs << (provider == "modrinth"
+                                            ? QJsonObject{{"dependency_type", "optional"},
+                                                          {"project_id", "77"}}
+                                            : QJsonObject{{"relationType", 2}, {"modId", 77}});
+        ContentOperation operation;
+        operation.kind = ContentOperation::Install;
+        operation.requests = {root};
+        operation.predictions = {contentInstallPrediction(root, pack(), {})};
+        ContentOperationExecutor executor(files, installer);
+        bool done = false;
+        ContentWriteResult result;
+        ContentFileState confirmed;
+        executor.execute(operation, {pack(), files->rows, {}}, [&](auto value, auto actual) {
+            result = value;
+            confirmed = actual;
+            done = true;
+        });
+        QTRY_VERIFY(done);
+        QVERIFY2(result.ok, qPrintable(result.error));
+        QVERIFY2(confirmed.error.isEmpty(), qPrintable(confirmed.error));
+        QVERIFY(result.warnings.isEmpty());
+        QCOMPARE(leaf->calls, QStringList({"11", "44"}));
+        QCOMPARE(source->calls, QStringList({"22", "44"}));
+        QCOMPARE(optional.size(), 1);
+        const auto expectedRelease = provider == "modrinth" ? incoming.release : original.release;
+        const auto expectedIds = QVariantMap{{provider, "22"}, {other, "33"}};
+        int predictions = 0;
+        for (const auto &value : result.installedPredictions) {
+            const auto row = value.toMap();
+            if (contentRowKey(row) != contentRowKey(retained))
+                continue;
+            ++predictions;
+            for (const auto &field : {"relativePath", "fileName", "contentKey", "sha1", "enabled", "locked",
+                                      "frozen", "updateAvailable"})
+                QCOMPARE(row.value(field), retained.value(field));
+            QCOMPARE(row.value("sourceIds").toMap(), expectedIds);
+            QCOMPARE(row.value("sourceUrls").toMap().value(other).toString(), originalUrl);
+            QCOMPARE(row.value("installedRelease").toMap(), expectedRelease.toVariant());
+            QCOMPARE(row.value("metadataResolved").toBool(), provider != "modrinth");
+            if (provider == "modrinth")
+                QVERIFY(!row.contains("metadataSha1"));
+        }
+        QCOMPARE(predictions, 1);
+        for (const auto &rows : {confirmed.rows, optional.first().at(1).toList()}) {
+            int matches = 0;
+            for (const auto &value : rows) {
+                const auto row = value.toMap();
+                if (row.value("relativePath") != retained.value("relativePath"))
+                    continue;
+                ++matches;
+                QCOMPARE(row.value("sourceIds").toMap(), expectedIds);
+                QCOMPARE(row.value("sourceUrls").toMap().value(other).toString(), originalUrl);
+                QCOMPARE(row.value("provider").toString(), QString("modrinth"));
+                QCOMPARE(row.value("installedRelease").toMap(), expectedRelease.toVariant());
+                QCOMPARE(row.value("metadataResolved").toBool(), provider != "modrinth");
+            }
+            QCOMPARE(matches, 1);
+        }
+        QCOMPARE(files->rows.first().toMap(), retained);
+    }
+    void conflictingOrAmbiguousSharedBytesNeverReassignIdentity_data() {
+        QTest::addColumn<QString>("provider");
+        QTest::addColumn<QString>("conflict");
+        for (const auto &provider : {QString("modrinth"), QString("curseforge")})
+            for (const auto &conflict : {QString("same-provider"), QString("alias"), QString("ambiguous")})
+                QTest::newRow(qPrintable(provider + '-' + conflict)) << provider << conflict;
+    }
+    void conflictingOrAmbiguousSharedBytesNeverReassignIdentity() {
+        QFETCH(QString, provider);
+        QFETCH(QString, conflict);
+        const QString other = provider == "modrinth" ? "curseforge" : "modrinth";
+        auto incoming = selected("22");
+        incoming.release.provider = provider;
+        incoming.sourceIds = {{provider, "22"}};
+        const auto retainedProvider = conflict == "same-provider" ? provider : other;
+        auto old = selected("33");
+        old.release.provider = retainedProvider;
+        old.release.sha1 = incoming.release.sha1;
+        old.sourceIds = {{retainedProvider, "33"}};
+        auto retained = contentInstallPrediction(old, pack(), {});
+        retained["contentKey"] = "mods:kept";
+        auto files = std::make_shared<Files>();
+        files->rows = {retained};
+        if (conflict == "alias")
+            incoming.sourceIds[other] = "55";
+        if (conflict == "ambiguous") {
+            auto second = retained;
+            second["relativePath"] = "mods/second.jar";
+            second["contentKey"] = "mods:second";
+            second["sourceIds"] = QVariantMap{{other, "55"}};
+            files->rows << second;
+        }
+        const auto originals = files->rows;
+        auto root = selected("11");
+        root.release.provider = provider;
+        root.sourceIds = {{provider, "11"}};
+        root.release.dependencyRefs = {
+            provider == "modrinth" ? required("22") : QJsonObject{{"relationType", 3}, {"modId", 22}}};
+        incoming.release.dependencyRefs = {
+            provider == "modrinth" ? required("44") : QJsonObject{{"relationType", 3}, {"modId", 44}}};
+        auto child = selected("44");
+        child.release.provider = provider;
+        child.sourceIds = {{provider, "44"}};
+        auto leaf = std::make_shared<Leaf>(files);
+        auto source = std::make_shared<Source>();
+        source->values["22"] = incoming;
+        source->values["44"] = child;
+        ContentDependencyInstaller installer(leaf, source, files);
+        bool done = false;
+        ContentWriteResult result;
+        installer.install(pack(), files->rows, {root}, [&](auto value) {
+            result = value;
+            done = true;
+        });
+        QTRY_VERIFY(done);
+        QVERIFY2(result.ok, qPrintable(result.error));
+        QVERIFY(result.warnings.isEmpty());
+        QCOMPARE(leaf->calls, QStringList({"11", "44"}));
+        QCOMPARE(source->calls, QStringList({"22", "44"}));
+        QCOMPARE(files->rows.mid(0, originals.size()), originals);
+        for (const auto &value : result.installedPredictions) {
+            const auto ids = value.toMap().value("sourceIds").toMap();
+            QVERIFY(ids.value(provider) != "22");
+        }
+    }
+    void nativeSourceIdentityLearnsAliasWithoutChangingFilesOrSource_data() {
+        QTest::addColumn<bool>("disabled");
+        QTest::addColumn<bool>("sourceLocked");
+        for (bool disabled : {false, true})
+            for (bool locked : {false, true})
+                QTest::newRow(qPrintable(QString::number(disabled) + QString::number(locked)))
+                    << disabled << locked;
+    }
+    void nativeSourceIdentityLearnsAliasWithoutChangingFilesOrSource() {
+        QFETCH(bool, disabled);
+        QFETCH(bool, sourceLocked);
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        Server server;
+        const auto path = temp.path() + "/instance";
+        const QVariantMap target{
+            {"path", path}, {"provider", "curseforge"}, {"minecraft", "1.21.1"}, {"loader", "fabric"}};
+        QVERIFY(QDir().mkpath(path + "/mods"));
+        const auto bytes = archive(temp.path() + "/lib.jar", "lib");
+        const auto rootBytes = archive(temp.path() + "/root.jar", "root");
+        const auto childBytes = archive(temp.path() + "/child.jar", "child");
+        QVERIFY(!bytes.isEmpty() && !rootBytes.isEmpty() && !childBytes.isEmpty());
+        const auto retained = "mods/kept.jar" + QString(disabled ? ".disabled" : "");
+        QFile kept(path + '/' + retained);
+        QVERIFY(kept.open(QIODevice::WriteOnly));
+        QCOMPARE(kept.write(bytes), bytes.size());
+        kept.close();
+        const QJsonObject publishedHash{{"algo", 1}, {"value", hash(bytes)}};
+        const QJsonObject installedFile{{"id", 333}, {"hashes", QJsonArray{publishedHash}}};
+        const QJsonObject addon{{"addonID", 33},
+                                {"isLocked", sourceLocked},
+                                {"isEnabled", !disabled},
+                                {"fileNameOnDisk", "kept.jar"},
+                                {"modFolderPath", path + "/mods"},
+                                {"installedFile", installedFile}};
+        const auto metadata = QJsonDocument(QJsonObject{{"installedAddons", QJsonArray{addon}}}).toJson();
+        QFile sourceFile(path + "/minecraftinstance.json");
+        QVERIFY(sourceFile.open(QIODevice::WriteOnly));
+        QCOMPARE(sourceFile.write(metadata), metadata.size());
+        sourceFile.close();
+        const auto root = modrinthRelease(server.modrinth("11", "root-v1", rootBytes, {required("22")}));
+        const auto incoming = modrinthRelease(server.modrinth("22", "lib-v1", bytes, {required("44")}));
+        const auto child = modrinthRelease(server.modrinth("44", "child-v1", childBytes));
+        auto files = std::make_shared<NativeContentStore>(nullptr, temp.path() + "/backups");
+        const auto before = files->reload(target, {});
+        QVERIFY2(before.error.isEmpty(), qPrintable(before.error));
+        QCOMPARE(before.rows.size(), 1);
+        QCOMPARE(before.rows.first().toMap().value("sourceIds").toMap(), QVariantMap({{"curseforge", "33"}}));
+        auto leaf = std::make_shared<ContentInstaller>(files, nullptr, true, server.base(), server.base());
+        auto source = std::make_shared<ContentDependencySource>(nullptr, server.base(), server.base());
+        auto installer = std::make_shared<ContentDependencyInstaller>(leaf, source, files);
+        ContentOperationExecutor executor(files, installer);
+        ContentOperation operation;
+        operation.kind = ContentOperation::Install;
+        operation.requests = {request(root)};
+        operation.predictions = {contentInstallPrediction(request(root), target, {})};
+        bool done = false;
+        ContentWriteResult result;
+        ContentFileState actual;
+        executor.execute(operation, before, [&](auto value, auto state) {
+            result = value;
+            actual = state;
+            done = true;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(done, test_performance::completionTimeout(15000));
+        QVERIFY2(result.ok, qPrintable(result.error));
+        QVERIFY2(actual.error.isEmpty(), qPrintable(actual.error));
+        QVERIFY2(result.warnings.isEmpty(), qPrintable(result.warnings.join('\n')));
+        QCOMPARE(read(path + '/' + retained), bytes);
+        QCOMPARE(read(path + "/minecraftinstance.json"), metadata);
+        QCOMPARE(read(path + "/mods/" + root.filename), rootBytes);
+        QCOMPARE(read(path + "/mods/" + child.filename), childBytes);
+        QVERIFY(!QFileInfo::exists(path + "/mods/" + incoming.filename));
+        for (const auto &endpoint : server.requests)
+            QVERIFY(QUrl(endpoint).path() != QUrl(incoming.url).path());
+        QCOMPARE(actual.rows.size(), 3);
+        int matches = 0;
+        for (const auto &value : actual.rows) {
+            const auto row = value.toMap();
+            if (row.value("relativePath") != retained)
+                continue;
+            ++matches;
+            QCOMPARE(row.value("provider").toString(), QString("modrinth"));
+            QCOMPARE(row.value("sourceIds").toMap(), QVariantMap({{"modrinth", "22"}, {"curseforge", "33"}}));
+            QCOMPARE(row.value("installedRelease").toMap(), incoming.toVariant());
+            QCOMPARE(row.value("enabled").toBool(), !disabled);
+            QCOMPARE(row.value("launcherLocked").toBool(), sourceLocked);
+        }
+        QCOMPARE(matches, 1);
+    }
+    void largeExactFileAssociationsStayBoundedAndResponsive_data() {
+        QTest::addColumn<int>("count");
+        QTest::newRow("310-files") << 310;
+        QTest::newRow("3000-files") << 3000;
+    }
+    void largeExactFileAssociationsStayBoundedAndResponsive() {
+        QFETCH(int, count);
+        auto files = std::make_shared<Files>();
+        auto source = std::make_shared<Source>();
+        QStringList references;
+        for (int i = 0; i < count; ++i) {
+            const auto id = QString("lib%1").arg(i);
+            auto old = selected(id);
+            old.release.provider = "curseforge";
+            old.sourceIds = {{"curseforge", id}};
+            files->rows << contentInstallPrediction(old, pack(), {});
+            if (i >= count - 256) {
+                references << id;
+                source->values[id] = selected(id);
+            }
+        }
+        auto leaf = std::make_shared<Leaf>(files);
+        ContentDependencyInstaller installer(leaf, source, files);
+        int ticks = 0;
+        QTimer timer;
+        timer.setInterval(1);
+        connect(&timer, &QTimer::timeout, this, [&] { ++ticks; });
+        timer.start();
+        QElapsedTimer elapsed;
+        elapsed.start();
+        bool done = false;
+        int learned = 0;
+        installer.install(pack(), files->rows, {selected("root", references)}, [&](auto result) {
+            for (const auto &value : result.installedPredictions) {
+                const auto row = value.toMap();
+                if (row.value("sourceIds").toMap().size() == 2)
+                    ++learned;
+            }
+            QVERIFY(result.ok);
+            QVERIFY(result.warnings.isEmpty());
+            done = true;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(done, test_performance::completionTimeout(15000));
+        qInfo() << count << "files / 256 exact-file associations ms" << elapsed.elapsed() << "ticks" << ticks;
+        QCOMPARE(learned, 256);
+        QCOMPARE(source->calls.size(), 256);
+        QCOMPARE(leaf->calls, QStringList{"root"});
+        QVERIFY(ticks > 1);
+        QVERIFY(test_performance::releaseBudgetMet(elapsed.elapsed(), 1500));
     }
     void largeRetainedGraphsAvoidUnrelatedReleaseDecoding_data() {
         QTest::addColumn<int>("count");

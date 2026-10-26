@@ -18,6 +18,8 @@ struct ContentOperation {
 };
 QString contentRowKey(const QVariantMap &);
 QVariantMap contentInstallPrediction(const ContentInstallRequest &, const QVariantMap &pack, QVariantMap row);
+// Exact-file metadata only: concrete file state is preserved; ambiguous identities return no prediction.
+QVariantMap contentRetainedPrediction(const ContentInstallRequest &, QVariantMap row);
 QVariantList reconcileContentRows(const QVariantList &actual, const QVariantList &previous,
                                   const QVariantList &predictions = {}, bool indexedMetadata = false);
 QVariantList projectContentOperations(QVariantList, const QList<ContentOperation> &);

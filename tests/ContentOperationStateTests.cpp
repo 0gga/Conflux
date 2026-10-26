@@ -296,6 +296,240 @@ class ContentOperationStateTests : public QObject {
         QCOMPARE(merged.value("sourceIds"), raw.value("sourceIds"));
         QCOMPARE(merged.value("installedRelease"), previous.value("installedRelease"));
     }
+    void exactFileRefreshRetainsVerifiedModrinthPriority_data() {
+        QTest::addColumn<QString>("category");
+        QTest::addColumn<bool>("indexed");
+        for (const auto &category : {"mods", "resourcepacks", "shaderpacks", "datapacks"})
+            for (bool indexed : {false, true})
+                QTest::newRow(qPrintable(QString(category) + QString::number(indexed)))
+                    << QString(category) << indexed;
+    }
+    void exactFileRefreshRetainsVerifiedModrinthPriority() {
+        QFETCH(QString, category);
+        QFETCH(bool, indexed);
+        auto previous = row("MR", category, false);
+        previous["sourceIds"] = QVariantMap{{"modrinth", "MR"}};
+        previous["title"] = "Modrinth title";
+        previous["author"] = "Modrinth author";
+        previous["projectUrl"] = "https://modrinth.com/mod/MR";
+        previous["icon"] = "modrinth-icon";
+        auto actual = previous;
+        auto cf = releaseFromVariant(actual.value("installedRelease").toMap());
+        cf.provider = "curseforge";
+        cf.projectId = "22";
+        cf.id = "222";
+        cf.version = "CF edition";
+        actual["sourceIds"] = QVariantMap{{"curseforge", "22"}};
+        actual["provider"] = "curseforge";
+        actual["projectId"] = "22";
+        actual["installedRelease"] = cf.toVariant();
+        actual["version"] = cf.version;
+        actual["title"] = "CurseForge title";
+        actual["author"] = "CurseForge author";
+        actual["projectUrl"] = "https://www.curseforge.com/minecraft/mc-mods/example";
+        actual["icon"] = "curseforge-icon";
+        actual["updateAvailable"] = false;
+        actual.remove("updateRelease");
+        actual["metadataResolved"] = true;
+        actual["metadataSha1"] = actual.value("sha1");
+        const auto merged = reconcileContentRows({actual}, {previous}, {}, indexed).first().toMap();
+        QCOMPARE(merged.value("sourceIds").toMap(), QVariantMap({{"modrinth", "MR"}, {"curseforge", "22"}}));
+        for (const auto &field : {"provider", "projectId", "title", "author", "projectUrl", "icon",
+                                  "installedRelease", "version"})
+            QCOMPARE(merged.value(field), previous.value(field));
+        for (const auto &field : {"relativePath", "fileName", "sha1", "enabled"})
+            QCOMPARE(merged.value(field), actual.value(field));
+        QVERIFY(!merged.value("updateAvailable").toBool());
+        QVERIFY(!merged.contains("updateRelease"));
+        QVERIFY(!merged.value("metadataResolved").toBool());
+        QVERIFY(!merged.contains("metadataSha1"));
+    }
+    void exactFileConflictsDoNotBorrowForeignMetadata_data() {
+        QTest::addColumn<QString>("provider");
+        QTest::addColumn<bool>("indexed");
+        QTest::addColumn<bool>("renamed");
+        for (const auto &provider : {QString("modrinth"), QString("curseforge")})
+            for (bool indexed : {false, true})
+                for (bool renamed : {false, true})
+                    QTest::newRow(qPrintable(provider + QString::number(indexed) + QString::number(renamed)))
+                        << provider << indexed << renamed;
+    }
+    void exactFileConflictsDoNotBorrowForeignMetadata() {
+        QFETCH(QString, provider);
+        QFETCH(bool, indexed);
+        QFETCH(bool, renamed);
+        const auto other = provider == "modrinth" ? "curseforge" : "modrinth";
+        auto old = row("old");
+        old["sourceIds"] = QVariantMap{{provider, "old"}, {other, "unrelated-alias"}};
+        old["provider"] = provider;
+        auto oldRelease = releaseFromVariant(old.value("installedRelease").toMap());
+        oldRelease.provider = provider;
+        old["installedRelease"] = oldRelease.toVariant();
+        old["author"] = "Old author";
+        auto actual = row("new");
+        actual["sha1"] = old.value("sha1");
+        actual["sourceIds"] = QVariantMap{{provider, "new"}};
+        actual["provider"] = provider;
+        auto newRelease = releaseFromVariant(actual.value("installedRelease").toMap());
+        newRelease.provider = provider;
+        newRelease.sha1 = oldRelease.sha1;
+        actual["installedRelease"] = newRelease.toVariant();
+        actual.remove("author");
+        if (!renamed)
+            actual["relativePath"] = old.value("relativePath");
+        const auto merged = reconcileContentRows({actual}, {old}, {}, indexed).first().toMap();
+        QCOMPARE(merged.value("sourceIds"), actual.value("sourceIds"));
+        QCOMPARE(merged.value("title"), actual.value("title"));
+        QCOMPARE(merged.value("installedRelease"), actual.value("installedRelease"));
+        QVERIFY(!merged.contains("author"));
+        QCOMPARE(contentRowKey(merged), contentRowKey(actual));
+    }
+    void retainedPredictionsRequireExactProof_data() {
+        QTest::addColumn<QString>("fault");
+        for (const auto &fault :
+             {"none", "hash-case", "empty-title", "hash-newline", "category", "path", "invalid-hash",
+              "different-hash", "missing-project", "missing-version", "unsupported-provider"})
+            QTest::newRow(fault) << QString(fault);
+    }
+    void retainedPredictionsRequireExactProof() {
+        QFETCH(QString, fault);
+        auto actual = row("MR");
+        actual["sourceIds"] = QVariantMap{{"curseforge", "22"}};
+        actual.remove("installedRelease");
+        auto release = releaseFromVariant(row("MR").value("installedRelease").toMap());
+        if (fault == "hash-case")
+            release.sha1 = release.sha1.toUpper();
+        if (fault == "hash-newline")
+            actual["sha1"] = release.sha1 = release.sha1 + '\n';
+        if (fault == "category")
+            actual["category"] = "resourcepacks";
+        if (fault == "path")
+            actual["relativePath"] = "";
+        if (fault == "invalid-hash")
+            actual["sha1"] = release.sha1 = QString(40, 'z');
+        if (fault == "different-hash")
+            release.sha1 = hash("foreign bytes");
+        if (fault == "missing-project")
+            release.projectId.clear();
+        if (fault == "missing-version")
+            release.id.clear();
+        if (fault == "unsupported-provider")
+            release.provider = "unknown";
+        const auto before = actual;
+        const auto metadata = contentRetainedPrediction(
+            {release, fault == "empty-title" ? QString{} : QString("MR"), {{"modrinth", "MR"}}, "mod"},
+            actual);
+        QCOMPARE(actual, before);
+        if (fault != "none" && fault != "hash-case" && fault != "empty-title") {
+            QVERIFY(metadata.isEmpty());
+            return;
+        }
+        QCOMPARE(metadata.value("relativePath"), actual.value("relativePath"));
+        QCOMPARE(metadata.value("fileName"), actual.value("fileName"));
+        QCOMPARE(metadata.value("title"), actual.value("title"));
+        QCOMPARE(metadata.value("sourceIds").toMap(),
+                 QVariantMap({{"modrinth", "MR"}, {"curseforge", "22"}}));
+    }
+    void freshModrinthPresentationIsNotDowngradedToCachedCurseforge_data() {
+        QTest::addColumn<bool>("indexed");
+        QTest::newRow("raw") << false;
+        QTest::newRow("indexed") << true;
+    }
+    void freshModrinthPresentationIsNotDowngradedToCachedCurseforge() {
+        QFETCH(bool, indexed);
+        auto actual = row("MR");
+        actual["sourceIds"] = QVariantMap{{"modrinth", "MR"}};
+        actual["title"] = "Fresh Modrinth";
+        actual["author"] = "Fresh author";
+        auto previous = actual;
+        auto cf = releaseFromVariant(previous.value("installedRelease").toMap());
+        cf.provider = "curseforge";
+        cf.projectId = "22";
+        cf.id = "222";
+        previous["installedRelease"] = cf.toVariant();
+        previous["provider"] = "curseforge";
+        previous["projectId"] = "22";
+        previous["sourceIds"] = QVariantMap{{"curseforge", "22"}};
+        previous["title"] = "Cached CurseForge";
+        previous["author"] = "Cached author";
+        const auto merged = reconcileContentRows({actual}, {previous}, {}, indexed).first().toMap();
+        for (const auto &field : {"provider", "projectId", "title", "author", "installedRelease", "version"})
+            QCOMPARE(merged.value(field), actual.value(field));
+    }
+    void retainedCompletionUsesItsOwnProjectFilters_data() {
+        QTest::addColumn<bool>("emptyTags");
+        QTest::addColumn<bool>("indexed");
+        for (bool empty : {false, true})
+            for (bool indexed : {false, true})
+                QTest::newRow(qPrintable(QString::number(empty) + QString::number(indexed)))
+                    << empty << indexed;
+    }
+    void retainedCompletionUsesItsOwnProjectFilters() {
+        QFETCH(bool, emptyTags);
+        QFETCH(bool, indexed);
+        auto previous = row("MR");
+        previous["sourceIds"] = QVariantMap{{"modrinth", "MR"}};
+        previous["metadataResolved"] = true;
+        previous["metadataSha1"] = previous.value("sha1");
+        previous["tags"] = emptyTags ? QVariantList{} : QVariantList{"mr-tag"};
+        previous["categories"] = emptyTags ? QStringList{} : QStringList{"mr-category"};
+        previous["environment"] = "client";
+        previous["openSource"] = false;
+        auto actual = previous;
+        auto cf = releaseFromVariant(actual.value("installedRelease").toMap());
+        cf.provider = "curseforge";
+        cf.projectId = "22";
+        cf.id = "222";
+        actual["sourceIds"] = QVariantMap{{"curseforge", "22"}};
+        actual["installedRelease"] = cf.toVariant();
+        actual["provider"] = "curseforge";
+        actual["projectId"] = "22";
+        actual["tags"] = QVariantList{"cf-tag"};
+        actual["categories"] = QStringList{"cf-category"};
+        actual["environment"] = "server";
+        actual["openSource"] = true;
+        const auto merged = reconcileContentRows({actual}, {previous}, {}, indexed).first().toMap();
+        QVERIFY(merged.value("metadataResolved").toBool());
+        for (const auto &field : {"tags", "categories", "environment", "openSource"})
+            QCOMPARE(merged.value(field), previous.value(field));
+    }
+    void malformedCachedReleaseCannotReplaceVerifiedSourceRelease_data() {
+        QTest::addColumn<QString>("fault");
+        for (const auto &fault :
+             {"hash", "missing-hash", "missing-version", "foreign-project", "invalid-hash"})
+            QTest::newRow(fault) << QString(fault);
+    }
+    void malformedCachedReleaseCannotReplaceVerifiedSourceRelease() {
+        QFETCH(QString, fault);
+        auto previous = row("MR");
+        previous["sourceIds"] = QVariantMap{{"modrinth", "MR"}};
+        auto actual = previous;
+        auto cf = releaseFromVariant(actual.value("installedRelease").toMap());
+        cf.provider = "curseforge";
+        cf.projectId = "22";
+        cf.id = "222";
+        actual["sourceIds"] = QVariantMap{{"curseforge", "22"}};
+        actual["provider"] = "curseforge";
+        actual["projectId"] = "22";
+        actual["installedRelease"] = cf.toVariant();
+        auto bad = previous.value("installedRelease").toMap();
+        if (fault == "hash")
+            bad["sha1"] = hash("different bytes");
+        if (fault == "missing-hash")
+            bad.remove("sha1");
+        if (fault == "missing-version")
+            bad.remove("id");
+        if (fault == "foreign-project")
+            bad["projectId"] = "another-project";
+        if (fault == "invalid-hash") {
+            previous["sha1"] = actual["sha1"] = QString(40, 'z');
+            bad["sha1"] = QString(40, 'z');
+        }
+        previous["installedRelease"] = bad;
+        const auto merged = reconcileContentRows({actual}, {previous}, {}, true).first().toMap();
+        QCOMPARE(merged.value("provider"), actual.value("provider"));
+        QCOMPARE(merged.value("installedRelease"), actual.value("installedRelease"));
+    }
     void reconciliationDoesNotAttachOldIdentityToExternallyEditedBytes() {
         const auto old = row("A");
         auto actual = old;

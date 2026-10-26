@@ -328,12 +328,13 @@
     },
     "src/features/content/ContentDependencyInstaller.cpp": {
       "phase": "non-ui",
-      "sha256": "101c8aa4989cf3fb0be96b92e52e4d26ad16605ec3435b0e60d0e11cb0b4fc85",
+      "sha256": "a5740ad8f2cbf12a000c6e1dbe7a2aeb447f89e3ebb7f8245740ec6ee34a9969",
       "status": "reviewed",
       "checks": [
         "Root-first independent commits, bounded expansion, cancellation, duplicate delivery and retained choices; missing retained descendants need reproduction",
         "Source review; measured uncovered paths remain explicit. Related regression sources: ContentDependencyTests OptionalDependencyTests",
-        "Verified retained-release/fresh exact-hash required traversal, exact cached proof, cycle/version-alias deduplication, unchanged disabled/locked files, inherited stages and independent child failures;84 dependency outcomes including12 real temporary-file transactions. Unrelated releases decoded only after identity matching;310/3000 retained-graph fixtures."
+        "Verified retained-release/fresh exact-hash required traversal, exact cached proof, cycle/version-alias deduplication, unchanged disabled/locked files, inherited stages and independent child failures;84 dependency outcomes including12 real temporary-file transactions. Unrelated releases decoded only after identity matching;310/3000 retained-graph fixtures.",
+        "Retained metadata-only projection; concrete path/state preservation; exact qualified hash proof; quiet identity conflicts/ambiguity; Modrinth priority and provider-specific completion through executor/raw/indexed refresh;70 state/102 dependency outcomes including4 native source instances and310/3000 association performance fixtures. Canonical project filter/license values and explicit empty tag/category lists retain their provider completion proof."
       ],
       "findings": [
         "AUD-16",
@@ -525,11 +526,12 @@
     },
     "src/features/content/ContentOperationState.cpp": {
       "phase": "non-ui",
-      "sha256": "387649b4757d7597c9e2c48c810f0a2b238a7c669ee82e33d34849cfa43ee9ef",
+      "sha256": "077330506e1881f2176e82666eb5ddd7c524b6b885cc7541b91cdf6c5ae5df41",
       "status": "reviewed",
       "checks": [
         "Stable keys, hash/metadata reconciliation, ambiguity and optimistic projection; unindexed fallback remains",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentOperationStateTests"
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentOperationStateTests",
+        "Retained metadata-only projection; concrete path/state preservation; exact qualified hash proof; quiet identity conflicts/ambiguity; Modrinth priority and provider-specific completion through executor/raw/indexed refresh;70 state/102 dependency outcomes including4 native source instances and310/3000 association performance fixtures. Canonical project filter/license values and explicit empty tag/category lists retain their provider completion proof."
       ],
       "findings": [
         "AUD-06"
@@ -537,11 +539,12 @@
     },
     "src/features/content/ContentOperationState.h": {
       "phase": "non-ui",
-      "sha256": "96cf94b865b450e3c7a0de12c4d7e8858c40bdba11ccba95638392cb0e4e20b7",
+      "sha256": "8e1d08a83a9e1b303c0ae501f2a365fabc0c064c13994962ef34ccd683664c81",
       "status": "reviewed",
       "checks": [
         "Stable keys, hash/metadata reconciliation, ambiguity and optimistic projection; unindexed fallback remains",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentOperationStateTests"
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentOperationStateTests",
+        "Retained metadata-only projection; concrete path/state preservation; exact qualified hash proof; quiet identity conflicts/ambiguity; Modrinth priority and provider-specific completion through executor/raw/indexed refresh;70 state/102 dependency outcomes including4 native source instances and310/3000 association performance fixtures. Canonical project filter/license values and explicit empty tag/category lists retain their provider completion proof."
       ],
       "findings": [
         "AUD-06"

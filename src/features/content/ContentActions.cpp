@@ -1049,6 +1049,8 @@ void ContentActions::setProjectLocked(const QVariantMap &project, bool locked) {
     emit changed();
 }
 void ContentActions::restoreLocked(const QVariantMap &project) {
+    const auto target = project.value("targetPack", m_pack).toMap();
+    const auto path = target.value("path").toString();
     const auto lock = sourceLock(project);
     if (lock.isEmpty() || !lock.value("missing").toBool()) {
         reject("There is no missing source-locked version to restore.");
@@ -1056,7 +1058,10 @@ void ContentActions::restoreLocked(const QVariantMap &project) {
     }
     ContentOperation operation;
     operation.kind = ContentOperation::Restore;
+    operation.packPath = path;
     operation.sourceLock = lock;
+    if (!m_states.contains(path))
+        seedState(path, {target, project.value("targetRows").toList(), {}});
     enqueue(operation);
 }
 void ContentActions::reject(const QString &message, const QString &title) {

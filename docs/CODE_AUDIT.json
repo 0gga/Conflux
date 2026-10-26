@@ -275,16 +275,15 @@
     },
     "src/features/content/ContentActions.cpp": {
       "phase": "non-ui",
-      "sha256": "4b91ba162ad7e5e3e68347f4d3af1f09672dd5eba4e967a21ae5516fdc8daa35",
+      "sha256": "db9000a9799445cb7646dcbc034dd8074420125d2889e61f61b17edd2995befe",
       "status": "reviewed",
       "checks": [
         "Complete1100-line coordinator reviewed: captured context, metadata/update generations, literal filtered index, lock preferences/source state, optimistic projection, claims, queue/history and per-item installation",
-        "Original-instance install/cleanup and post-commit inventory recovery guards inspected. Remaining post-notification/metadata callback lifetime gaps, captured locked recovery target and measured coordinator/index boundaries remain backlogged."
+        "Original-instance install/cleanup/recovery and post-commit inventory guards inspected. Locked recovery captures/seeds project target before enqueue, including reentrant navigation. Remaining post-notification/metadata callback lifetime and measured coordinator/index boundaries remain backlogged."
       ],
       "findings": [
         "AUD-07",
         "AUD-13",
-        "AUD-38",
         "AUD-39"
       ]
     },
@@ -1677,14 +1676,13 @@
     },
     "src/platform/NativeContentStore.cpp": {
       "phase": "non-ui",
-      "sha256": "98f24a12c0c528ccc277c4e9d10db045133a4259fcb8201a5511242bac0cb984",
+      "sha256": "08fc2c88f1f345a56bb637b19f469ea93b97953c81b650ae7f2990a937785d59",
       "status": "reviewed",
       "checks": [
         "Contained category paths, cooperating write lease, source/local locks, exact before/after hashes, per-file private staging/backups/rollback, selected manifest reconciliation and silent backed-up replacement inspected",
-        "Verified same-file/runtime replacement and enabled-state retention reviewed; locked recovery target containment/provider scope and stale external changes during rollback need dedicated fixtures. Managed snapshot pin association still scans pins for each row."
+        "Locked recovery revalidates provider/project/path/hash against authoritative locks, rejects linked target/backup paths, creates only contained missing categories and hashes copy bytes before atomic publication. Managed pin indexing and external plan/rollback races remain AUD-39."
       ],
       "findings": [
-        "AUD-38",
         "AUD-39"
       ]
     },

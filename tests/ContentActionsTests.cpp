@@ -62,6 +62,81 @@ class ContentActionsTests : public QObject {
                 {"updateRelease", next.toVariant()}};
     }
   private slots:
+    void lockedRecoveryKeepsTheProjectDestination_data() {
+        QTest::addColumn<bool>("previouslyOpened");
+        QTest::addColumn<bool>("navigateOnQueued");
+        for (bool opened : {false, true})
+            for (bool navigate : {false, true})
+                QTest::newRow(qPrintable(QString("cached-%1-navigate-%2").arg(opened).arg(navigate)))
+                    << opened << navigate;
+    }
+    void lockedRecoveryKeepsTheProjectDestination() {
+        QFETCH(bool, previouslyOpened);
+        QFETCH(bool, navigateOnQueued);
+        struct Files final : IContentFileStore {
+            mutable std::atomic<int> restored{0};
+            mutable QVariantMap destination, lock;
+            QVariantList snapshot(const QVariantMap &, const QVariantList &rows) const override {
+                return rows;
+            }
+            ContentWriteResult setEnabled(const QVariantMap &, const QVariantMap &, bool) const override {
+                return {true, {}};
+            }
+            ContentWriteResult remove(const QVariantMap &, const QVariantList &) const override {
+                return {true, {}};
+            }
+            ContentWriteResult importFiles(const QVariantMap &, const QList<QUrl> &,
+                                           const QString &) const override {
+                return {true, {}};
+            }
+            ContentWriteResult restoreLocked(const QVariantMap &pack,
+                                             const QVariantMap &request) const override {
+                destination = pack;
+                lock = request;
+                ++restored;
+                return {true, {}};
+            }
+        };
+        QTemporaryDir temp;
+        const QVariantMap lock{{"provider", "modrinth"},
+                               {"projectId", "locked-project"},
+                               {"sourceIds", QVariantMap{{"modrinth", "locked-project"}}},
+                               {"relativePath", "resourcepacks/locked.zip"},
+                               {"category", "resourcepacks"},
+                               {"sha1", QString(40, 'a')},
+                               {"missing", true},
+                               {"launcherLocked", true}};
+        const QVariantMap original{
+            {"path", "original-instance"}, {"provider", "modrinth"}, {"sourceContent", QVariantList{lock}}};
+        const QVariantMap visible{{"path", "visible-instance"}};
+        auto files = std::make_shared<Files>();
+        ContentActions content(files, std::make_shared<ContentCatalogueFixture>(),
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.filePath("prefs.ini")));
+        if (previouslyOpened) {
+            content.setContext(original, {row("Existing", "Owner")});
+            QTRY_VERIFY(!content.busy());
+        }
+        content.setContext(visible, {row("Visible", "Owner")});
+        QTRY_VERIFY(!content.busy());
+        bool navigated = false;
+        connect(content.operations(), &OperationHistory::changed, &content, [&] {
+            if (navigateOnQueued && !navigated) {
+                navigated = true;
+                content.setContext({{"path", "later-instance"}}, {row("Later", "Owner")});
+            }
+        });
+        content.restoreLocked({{"targetPack", original}, {"sourceIds", lock.value("sourceIds")}});
+        QTRY_COMPARE(files->restored.load(), 1);
+        QTRY_VERIFY(!content.operationsBusy());
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(files->destination.value("path"), original.value("path"));
+        QCOMPARE(files->lock.value("sha1"), lock.value("sha1"));
+        QCOMPARE(content.rows().size(), 1);
+        QCOMPARE(navigated, navigateOnQueued);
+        QCOMPARE(content.rows().first().toMap().value("title"),
+                 QVariant(navigateOnQueued ? "Later" : "Visible"));
+    }
     void instanceFilterChangesPreserveSearchAndRejectInvalidFilterValues() {
         QTemporaryDir temp;
         auto catalogue = std::make_shared<ContentCatalogueFixture>();

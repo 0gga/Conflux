@@ -36,19 +36,25 @@ static QString sha1File(const QString &path) {
         return {};
     return QString::fromLatin1(hash.result().toHex());
 }
-static bool atomicCopy(const QString &from, const QString &to) {
+static bool atomicCopy(const QString &from, const QString &to, const QString &expectedSha1 = {}) {
     QFile input(from);
     QSaveFile output(to);
     output.setDirectWriteFallback(false);
     if (!input.open(QIODevice::ReadOnly) || !output.open(QIODevice::WriteOnly))
         return false;
+    QCryptographicHash hash(QCryptographicHash::Sha1);
     while (!input.atEnd()) {
         const auto bytes = input.read(1024 * 1024);
         if (bytes.isEmpty() && input.error() != QFileDevice::NoError)
             return false;
         if (output.write(bytes) != bytes.size())
             return false;
+        if (!expectedSha1.isEmpty())
+            hash.addData(bytes);
     }
+    if (!expectedSha1.isEmpty() &&
+        QString::fromLatin1(hash.result().toHex()).compare(expectedSha1, Qt::CaseInsensitive) != 0)
+        return false;
     return output.commit();
 }
 static bool contentPath(const QString &relative) {
@@ -612,22 +618,48 @@ ContentWriteResult NativeContentStore::restoreLocked(const QVariantMap &pack,
     ContentAccess access(pack.value("path").toString(), ContentAccess::Write);
     if (!access.ok())
         return {false, access.error()};
-    const auto root = pack.value("path").toString();
-    for (const auto &value : LauncherContentState::read(pack)) {
+    const auto root = QFileInfo(pack.value("path").toString()).canonicalFilePath();
+    const auto provider = request.value("provider", pack.value("provider")).toString();
+    const auto requestedPath = request.value("relativePath").toString();
+    const auto requestedHash = request.value("sha1").toString();
+    static const QRegularExpression hashPattern("^[a-fA-F0-9]{40}$");
+    if (root.isEmpty() || !QStringList{"modrinth", "curseforge"}.contains(provider) ||
+        request.value("projectId").toString().isEmpty() || !contentPath(requestedPath) ||
+        !hashPattern.match(requestedHash).hasMatch())
+        return {false, "Choose a verified source-locked version to restore."};
+    QString policyError;
+    const auto sourceRows = LauncherContentState::read(pack, &policyError);
+    if (!policyError.isEmpty())
+        return {false, policyError};
+    for (const auto &value : sourceRows) {
         const auto lock = value.toMap();
         const auto relative = lock.value("relativePath").toString(), hash = lock.value("sha1").toString();
-        if (!lock.value("launcherLocked").toBool() || lock.value("projectId") != request.value("projectId") ||
-            !contentPath(relative))
+        if (!lock.value("launcherLocked").toBool() || lock.value("provider") != provider ||
+            lock.value("projectId") != request.value("projectId") ||
+            contentKey(relative) != contentKey(requestedPath) ||
+            hash.compare(requestedHash, Qt::CaseInsensitive) != 0 || !contentPath(relative))
             continue;
         const auto target = QDir(root).filePath(relative);
-        if (QFileInfo::exists(target))
+        const QFileInfo targetInfo(target);
+        if (targetInfo.exists() || targetInfo.isSymLink() || targetInfo.isJunction())
             return {false, "The locked file already exists. Refresh content before repairing it."};
+        const auto category = relative.section('/', 0, 0);
+        const auto folder = QDir(root).filePath(category);
+        const QFileInfo folderInfo(folder);
+        if (folderInfo.isSymLink() || folderInfo.isJunction() ||
+            (folderInfo.exists() && NativePackFileStore::resolve(root, category).isEmpty()))
+            return {false, "The content folder is linked or unavailable. Nothing was restored."};
         for (const auto &directory :
              QDir(m_backupRoot).entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Time)) {
-            const auto source = QDir(m_backupRoot).filePath(directory + '/' + relative);
+            const auto source = NativePackFileStore::resolve(m_backupRoot, directory + '/' + relative);
             if (sha1File(source) != hash)
                 continue;
-            if (!QDir().mkpath(QFileInfo(target).absolutePath()) || !atomicCopy(source, target))
+            if (!QDir().mkpath(folder))
+                return {false, "Could not restore the verified locked file."};
+            const auto parent = NativePackFileStore::resolve(root, category);
+            if (parent.isEmpty() || QFileInfo(target).exists() || QFileInfo(target).isSymLink() ||
+                QFileInfo(target).isJunction() ||
+                !atomicCopy(source, QDir(parent).filePath(relative.section('/', 1)), hash))
                 return {false, "Could not restore the verified locked file."};
             return {true, {}};
         }

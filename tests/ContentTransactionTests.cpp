@@ -4,6 +4,7 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
+#include <QJsonDocument>
 #include <QProcess>
 #include <QSemaphore>
 #include <QSqlDatabase>
@@ -12,6 +13,7 @@
 #include <QTimer>
 #include <QtConcurrent>
 #include <QtTest>
+#include <filesystem>
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
 #endif
@@ -62,6 +64,148 @@ class ContentTransactionTests : public QObject {
         return {{"path", path}, {"provider", "modrinth"}, {"minecraft", "1.21.1"}, {"loader", "fabric"}};
     }
   private slots:
+    void exactLockedRecoveryPreservesSourceMetadata_data() {
+        QTest::addColumn<QString>("provider");
+        QTest::addColumn<bool>("missingFolder");
+        QTest::addColumn<bool>("uppercaseHash");
+        for (const auto &provider : {"modrinth", "curseforge"})
+            for (bool missing : {false, true})
+                for (bool uppercase : {false, true})
+                    QTest::newRow(qPrintable(
+                        QString("%1-missing-%2-uppercase-%3").arg(provider).arg(missing).arg(uppercase)))
+                        << QString(provider) << missing << uppercase;
+    }
+    void exactLockedRecoveryPreservesSourceMetadata() {
+        QFETCH(QString, provider);
+        QFETCH(bool, missingFolder);
+        QFETCH(bool, uppercaseHash);
+        QTemporaryDir temp;
+        const QByteArray original = "exact locked version";
+        QVariantMap pack;
+        QString metadata;
+        if (provider == "modrinth") {
+            pack = sourcePack(temp.path(), original);
+            metadata = temp.path() + "/ModrinthApp/app.db";
+        } else {
+            const auto path = temp.path() + "/CurseForge/Instances/Fixture";
+            QVERIFY(QDir().mkpath(path + "/resourcepacks"));
+            metadata = path + "/minecraftinstance.json";
+            const QJsonObject addon{
+                {"addonID", 11},
+                {"isLocked", true},
+                {"isEnabled", true},
+                {"fileNameOnDisk", "locked.zip"},
+                {"modFolderPath", path + "/resourcepacks"},
+                {"installedFile",
+                 QJsonObject{{"id", 101},
+                             {"hashes", QJsonArray{QJsonObject{{"algo", 1}, {"value", hash(original)}}}}}}};
+            write(metadata, QJsonDocument(QJsonObject{{"installedAddons", QJsonArray{addon}}}).toJson());
+            pack = {{"path", path}, {"provider", provider}};
+        }
+        QVERIFY(!pack.isEmpty());
+        const auto sourceBytes = read(metadata);
+        QVERIFY(!sourceBytes.isEmpty());
+        const auto root = pack.value("path").toString();
+        if (missingFolder)
+            QVERIFY(QDir().rmdir(root + "/resourcepacks"));
+        auto locks = LauncherContentState::read(pack);
+        QCOMPARE(locks.size(), 1);
+        auto request = locks.first().toMap();
+        if (uppercaseHash)
+            request["sha1"] = request.value("sha1").toString().toUpper();
+        write(temp.path() + "/backups/good/resourcepacks/locked.zip", original);
+        NativeContentStore store(nullptr, temp.path() + "/backups");
+        const auto result = store.restoreLocked(pack, request);
+        QVERIFY2(result.ok, qPrintable(result.error));
+        QCOMPARE(read(root + "/resourcepacks/locked.zip"), original);
+        QCOMPARE(read(metadata), sourceBytes);
+        QVERIFY(LauncherContentState::read(pack).first().toMap().value("launcherLocked").toBool());
+        QVERIFY(!store.restoreLocked(pack, request).ok);
+        QCOMPARE(read(root + "/resourcepacks/locked.zip"), original);
+    }
+    void lockedRecoveryRequiresTheExactRequestedIdentity_data() {
+        QTest::addColumn<QString>("fault");
+        for (const auto &fault : {"provider", "project", "hash", "missing-hash", "path", "missing-path"})
+            QTest::newRow(fault) << QString(fault);
+    }
+    void lockedRecoveryRequiresTheExactRequestedIdentity() {
+        QFETCH(QString, fault);
+        QTemporaryDir temp;
+        const QByteArray original = "locked version";
+        const auto pack = sourcePack(temp.path(), original);
+        QVERIFY(!pack.isEmpty());
+        auto request = LauncherContentState::read(pack).first().toMap();
+        write(temp.path() + "/backups/good/resourcepacks/locked.zip", original);
+        if (fault == "provider")
+            request["provider"] = "curseforge";
+        if (fault == "project")
+            request["projectId"] = "different-project";
+        if (fault == "hash")
+            request["sha1"] = hash("another version");
+        if (fault == "missing-hash")
+            request.remove("sha1");
+        if (fault == "path")
+            request["relativePath"] = "resourcepacks/different.zip";
+        if (fault == "missing-path")
+            request.remove("relativePath");
+        NativeContentStore store(nullptr, temp.path() + "/backups");
+        const auto result = store.restoreLocked(pack, request);
+        QVERIFY(!result.ok);
+        QVERIFY(!result.error.isEmpty());
+        QVERIFY(!QFileInfo::exists(pack.value("path").toString() + "/resourcepacks/locked.zip"));
+        QCOMPARE(read(temp.path() + "/backups/good/resourcepacks/locked.zip"), original);
+    }
+    void lockedRecoveryRejectsLinkedFolders_data() {
+        QTest::addColumn<bool>("targetLink");
+        QTest::newRow("linked-destination-folder") << true;
+        QTest::newRow("linked-backup-folder") << false;
+    }
+    void lockedRecoveryRejectsLinkedFolders() {
+        QFETCH(bool, targetLink);
+        QTemporaryDir temp, outside;
+        const QByteArray original = "locked version";
+        const auto pack = sourcePack(temp.path(), original);
+        QVERIFY(!pack.isEmpty());
+        const auto root = pack.value("path").toString();
+        const auto request = LauncherContentState::read(pack).first().toMap();
+        const auto backups = temp.path() + "/backups";
+        const auto link = targetLink ? root + "/resourcepacks" : backups + "/linked";
+        if (targetLink) {
+            QVERIFY(QDir().rmdir(link));
+            write(backups + "/good/resourcepacks/locked.zip", original);
+        } else {
+            QVERIFY(QDir().mkpath(backups));
+            write(outside.path() + "/resourcepacks/locked.zip", original);
+        }
+        write(outside.path() + "/sentinel", "preserved");
+#ifdef Q_OS_WIN
+        QProcess junction;
+        junction.setCreateProcessArgumentsModifier(
+            [](QProcess::CreateProcessArguments *args) { args->flags |= CREATE_NO_WINDOW; });
+        junction.setStandardOutputFile(QProcess::nullDevice());
+        junction.setStandardErrorFile(QProcess::nullDevice());
+        junction.start("cmd.exe", {"/c", "mklink", "/J", QDir::toNativeSeparators(link),
+                                   QDir::toNativeSeparators(outside.path())});
+        QVERIFY(junction.waitForFinished(5000));
+        QCOMPARE(junction.exitCode(), 0);
+        QVERIFY(QFileInfo(link).isJunction());
+#else
+        std::error_code error;
+        std::filesystem::create_directory_symlink(outside.path().toStdString(), link.toStdString(), error);
+        QVERIFY2(!error, qPrintable(QString::fromStdString(error.message())));
+#endif
+        NativeContentStore store(nullptr, backups);
+        const auto result = store.restoreLocked(pack, request);
+        QVERIFY(!result.ok);
+        QVERIFY(!result.error.isEmpty());
+        QCOMPARE(read(outside.path() + "/sentinel"), QByteArray("preserved"));
+        if (targetLink)
+            QVERIFY(!QFileInfo::exists(outside.path() + "/locked.zip"));
+        else {
+            QVERIFY(!QFileInfo::exists(root + "/resourcepacks/locked.zip"));
+            QCOMPARE(read(outside.path() + "/resourcepacks/locked.zip"), original);
+        }
+    }
     void disabledDependenciesNeverBlockStagedInstall_data() {
         QTest::addColumn<QString>("identity");
         QTest::addColumn<QString>("dependencyForm");

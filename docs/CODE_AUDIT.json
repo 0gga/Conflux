@@ -235,27 +235,23 @@
     },
     "src/features/content/ArchiveReader.cpp": {
       "phase": "non-ui",
-      "sha256": "172f8e27cf7302dc6b4ef78d309fb1d8b79ff61926008376c8a1c191b85a609f",
+      "sha256": "49c71e51e823544744c4aa2a510c094d89d6bd542315e3ee2b4113bb07c9ef62",
       "status": "reviewed",
       "checks": [
-        "Contained entry names, image limits and ZIP extraction; invalid signed limits need explicit guards",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests ContentPipelineTests"
+        "Signed inclusive per-entry limit checked before unsigned conversion/open; zero allows empty entries; no extraction to disk",
+        "25 focused archive/icon outcomes cover negative/min/max/exact limits, corrupt/missing/oversized entries, Unicode native reads, safe paths and bounded PNG conversion"
       ],
-      "findings": [
-        "AUD-18"
-      ]
+      "findings": []
     },
     "src/features/content/ArchiveReader.h": {
       "phase": "non-ui",
-      "sha256": "c574f3856927540f871d04c68b1b83e17607bf7d871d0230e2f148a2aceeeb13",
+      "sha256": "551d5a88338784e99d1250e0602b50fc4346e031170e40ee74bdedef44bc0cfa",
       "status": "reviewed",
       "checks": [
-        "Contained entry names, image limits and ZIP extraction; invalid signed limits need explicit guards",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests ContentPipelineTests"
+        "Signed inclusive per-entry limit checked before unsigned conversion/open; zero allows empty entries; no extraction to disk",
+        "25 focused archive/icon outcomes cover negative/min/max/exact limits, corrupt/missing/oversized entries, Unicode native reads, safe paths and bounded PNG conversion"
       ],
-      "findings": [
-        "AUD-18"
-      ]
+      "findings": []
     },
     "src/features/content/ConfigAssociation.cpp": {
       "phase": "non-ui",
@@ -279,10 +275,18 @@
     },
     "src/features/content/ContentActions.cpp": {
       "phase": "non-ui",
-      "sha256": "113c1ceedb8538f89023526620162eeeb013cc4159d10c3b9ea0d11c6e7f7fd6",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "sha256": "4b91ba162ad7e5e3e68347f4d3af1f09672dd5eba4e967a21ae5516fdc8daa35",
+      "status": "reviewed",
+      "checks": [
+        "Complete1100-line coordinator reviewed: captured context, metadata/update generations, literal filtered index, lock preferences/source state, optimistic projection, claims, queue/history and per-item installation",
+        "Original-instance install/cleanup and post-commit inventory recovery guards inspected. Remaining post-notification/metadata callback lifetime gaps, captured locked recovery target and measured coordinator/index boundaries remain backlogged."
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-13",
+        "AUD-38",
+        "AUD-39"
+      ]
     },
     "src/features/content/ContentActions.h": {
       "phase": "non-ui",
@@ -795,16 +799,26 @@
     "src/features/explore/BrowseInstalls.cpp": {
       "phase": "non-ui",
       "sha256": "e37f85eeb3ea9ea71ff844e6647e758a3b476cf484bd90032d1cb41a399d8e6e",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Verified hash/provider/category installed index, bounded learned identities, independent pack-scoped lookup reservations and current channel eligibility",
+        "Captured accepted destinations and guarded provider replies reviewed; install/version/cancel multi-signal post-notification accesses still require destruction/reentrancy tests."
+      ],
+      "findings": [
+        "AUD-07"
+      ]
     },
     "src/features/explore/BrowseInstalls.h": {
       "phase": "non-ui",
       "sha256": "00a61afcf5a6b26c698023c73186954f7cd38c20c7afdca72326e36fdb4af1f4",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Verified hash/provider/category installed index, bounded learned identities, independent pack-scoped lookup reservations and current channel eligibility",
+        "Captured accepted destinations and guarded provider replies reviewed; install/version/cancel multi-signal post-notification accesses still require destruction/reentrancy tests."
+      ],
+      "findings": [
+        "AUD-07"
+      ]
     },
     "src/features/launch/WorldLaunch.cpp": {
       "phase": "non-ui",
@@ -1019,30 +1033,54 @@
     "src/features/showcase/DescriptionRenderer.cpp": {
       "phase": "non-ui",
       "sha256": "05e3cca261c0efe15ac288c4021e87e8a6e30d04aef2675756e4ec2a7bda31d7",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "HTTPS/no-userinfo resources, native markup allowlist, fenced-code normalization, image row/link restoration and bounded output traversal reviewed",
+        "Input capped at2097152 QString code units; rendered frame recursion12. Placeholder/entity round trips and table expansion/parser CPU budgets need adversarial fixtures before declaring complete resource bounds."
+      ],
+      "findings": [
+        "AUD-36"
+      ]
     },
     "src/features/showcase/DescriptionRenderer.h": {
       "phase": "non-ui",
       "sha256": "20cfe1b27a712987678df3b44e6e60998f6178a00a90284279b23bd23ad5a72b",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "HTTPS/no-userinfo resources, native markup allowlist, fenced-code normalization, image row/link restoration and bounded output traversal reviewed",
+        "Input capped at2097152 QString code units; rendered frame recursion12. Placeholder/entity round trips and table expansion/parser CPU budgets need adversarial fixtures before declaring complete resource bounds."
+      ],
+      "findings": [
+        "AUD-36"
+      ]
     },
     "src/features/showcase/ProjectShowcase.cpp": {
       "phase": "non-ui",
       "sha256": "5ed7c603567858124815f24e4722f4fe5a36609cc26e1bab5ba1d6b19545474f",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Identity/project/detail/description/gallery generations, captured worker inputs, installed metadata/hash proof, progressive state and eight-entry rendered-description cache reviewed",
+        "Reset cancels before invalidating, installed-file open continues after publication, and changelog group publication has unguarded continuation. Worker exception boundaries and rendered-byte/queue budgets remain open."
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08",
+        "AUD-36"
+      ]
     },
     "src/features/showcase/ProjectShowcase.h": {
       "phase": "non-ui",
       "sha256": "5d4573809871a346cb3b4a73551b4e1d2bfda46ddea8c7cf8bae15e8188f6122",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Identity/project/detail/description/gallery generations, captured worker inputs, installed metadata/hash proof, progressive state and eight-entry rendered-description cache reviewed",
+        "Reset cancels before invalidating, installed-file open continues after publication, and changelog group publication has unguarded continuation. Worker exception boundaries and rendered-byte/queue budgets remain open."
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08",
+        "AUD-36"
+      ]
     },
     "src/features/showcase/ProjectShowcaseSource.h": {
       "phase": "non-ui",
@@ -1258,16 +1296,28 @@
     "src/platform/AssetInstaller.cpp": {
       "phase": "non-ui",
       "sha256": "e720151de97e5c403ebd6a03ce3f4807b3c3fe898dea62912e8e188303f6d499",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Separate ZIP staging/verified download and worker commit ownership, busy rejection and captured target/rows; source progress and worker terminal publication inspected",
+        "Progress observers can dispose the adapter before subsequent member accesses, and worker exceptions need scoped results. Existing temporary fixture tests do not establish all such states."
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08"
+      ]
     },
     "src/platform/AssetInstaller.h": {
       "phase": "non-ui",
       "sha256": "2b7d3acc1561a570b3dceaa2b7dd44a201fcd505585139481344958309df762e",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Separate ZIP staging/verified download and worker commit ownership, busy rejection and captured target/rows; source progress and worker terminal publication inspected",
+        "Progress observers can dispose the adapter before subsequent member accesses, and worker exceptions need scoped results. Existing temporary fixture tests do not establish all such states."
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08"
+      ]
     },
     "src/platform/BrowseSettingsStore.cpp": {
       "phase": "non-ui",
@@ -1366,15 +1416,21 @@
     "src/platform/ContentDependencySource.cpp": {
       "phase": "non-ui",
       "sha256": "c895557792aa1d702965b1379ac98be603c55e81a33f695b3713dc2dbe8412ff",
-      "status": "pending",
-      "checks": [],
+      "status": "reviewed",
+      "checks": [
+        "Narrow required-dependency adapter: exact Modrinth project/version and compatible loader/channel forwarding; CurseForge project-only resolver and single-result mapping",
+        "Cancellation drops Modrinth pending reads and terminates active CurseForge lookup; no storage writes. Provider/coalesced callback hardening remains a separate audit."
+      ],
       "findings": []
     },
     "src/platform/ContentDependencySource.h": {
       "phase": "non-ui",
       "sha256": "16539a8aabaac0d44c609a8492e039e70e6ef77e61c17bb1477019672b7d61ef",
-      "status": "pending",
-      "checks": [],
+      "status": "reviewed",
+      "checks": [
+        "Narrow required-dependency adapter: exact Modrinth project/version and compatible loader/channel forwarding; CurseForge project-only resolver and single-result mapping",
+        "Cancellation drops Modrinth pending reads and terminates active CurseForge lookup; no storage writes. Provider/coalesced callback hardening remains a separate audit."
+      ],
       "findings": []
     },
     "src/platform/ContentFileCache.cpp": {
@@ -1400,16 +1456,30 @@
     "src/platform/ContentInstaller.cpp": {
       "phase": "non-ui",
       "sha256": "f45d98262c5e87431c4c7e083ea0f9a5d6b5fcb949d938dc8fb358d516445746",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Captured original pack/rows, compatible channel/loader/lock validation, independent root commands, selected-only staged commit and verified file reuse inspected",
+        "Direct/legacy staging, retained hash paths, terminal reset before callback, worker-owned temporary directories and original destination reviewed; progress reentrancy/cancellation and worker exception results remain open."
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08",
+        "AUD-13"
+      ]
     },
     "src/platform/ContentInstaller.h": {
       "phase": "non-ui",
       "sha256": "ae7106a62a50e481f6bb3c4a6cde1585ff7aeeda2fa9fca8cfbcbc7bd5bac669",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Captured original pack/rows, compatible channel/loader/lock validation, independent root commands, selected-only staged commit and verified file reuse inspected",
+        "Direct/legacy staging, retained hash paths, terminal reset before callback, worker-owned temporary directories and original destination reviewed; progress reentrancy/cancellation and worker exception results remain open."
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08",
+        "AUD-13"
+      ]
     },
     "src/platform/ContentMetadataSource.cpp": {
       "phase": "non-ui",
@@ -1442,16 +1512,26 @@
     "src/platform/CurseforgeContentState.cpp": {
       "phase": "non-ui",
       "sha256": "f7aaaa910adfdd26ab17aa11fef6be004a1707357375184aaec7efe6fcfbc444",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Validated bounded lossless JSON BooleanSpans traversal; escaped paths, duplicate-field rejection, indexed exact matches and deduplicated sorted patches preserve unrelated bytes",
+        "Only isLocked values change; locking checks hashes while unlock recovery deliberately permits changed/missing files. Negative addon read identity and Windows path aliases require focused fixtures."
+      ],
+      "findings": [
+        "AUD-33"
+      ]
     },
     "src/platform/CurseforgeContentState.h": {
       "phase": "non-ui",
       "sha256": "9db1133eb6426da62d6919309668afff1cb3e12eceee8bfbeba8143545e474b5",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Validated bounded lossless JSON BooleanSpans traversal; escaped paths, duplicate-field rejection, indexed exact matches and deduplicated sorted patches preserve unrelated bytes",
+        "Only isLocked values change; locking checks hashes while unlock recovery deliberately permits changed/missing files. Negative addon read identity and Windows path aliases require focused fixtures."
+      ],
+      "findings": [
+        "AUD-33"
+      ]
     },
     "src/platform/CurseforgeFingerprint.cpp": {
       "phase": "non-ui",
@@ -1476,16 +1556,28 @@
     "src/platform/CurseforgeInstallSource.cpp": {
       "phase": "non-ui",
       "sha256": "48fe8c22a8392e6406b51594370e8412f5fe0ff38b62614a85e7ad9151609391",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Exact project/file/SHA1/distribution/game/loader/channel checks, captured prepared state, cancellation generation and callback state cleared before terminal delivery",
+        "Dependency selection already paginates50-item pages to a1000-version bound; shallow existing updates do not expand graphs. GUI-side bounded JSON parsing remains a measurement/failure-boundary candidate."
+      ],
+      "findings": [
+        "AUD-13",
+        "AUD-35"
+      ]
     },
     "src/platform/CurseforgeInstallSource.h": {
       "phase": "non-ui",
       "sha256": "7a3baaee8e41ade28bac9cf9086b43c610173f65c742332c4ab8273cd88e26bc",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Exact project/file/SHA1/distribution/game/loader/channel checks, captured prepared state, cancellation generation and callback state cleared before terminal delivery",
+        "Dependency selection already paginates50-item pages to a1000-version bound; shallow existing updates do not expand graphs. GUI-side bounded JSON parsing remains a measurement/failure-boundary candidate."
+      ],
+      "findings": [
+        "AUD-13",
+        "AUD-35"
+      ]
     },
     "src/platform/InstalledModIdentity.cpp": {
       "phase": "non-ui",
@@ -1536,58 +1628,102 @@
     "src/platform/LauncherContentLocks.cpp": {
       "phase": "non-ui",
       "sha256": "46029dfc142ce202a7f7690e55baa581f2d954798fd82ef99aa4fdc2509db2aa",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Only explicit owner-authorized content lock ports write source state; ContentAccess instance lease, contained paths, exact hash check for locks and recovery unlock semantics",
+        "Modrinth BEGIN IMMEDIATE/all-row verification/backups/rollback; CurseForge bounded lossless patch, sharing guard, byte comparison and atomic replacement reviewed. External non-cooperating compare/commit races are not universally prevented."
+      ],
+      "findings": [
+        "AUD-33"
+      ]
     },
     "src/platform/LauncherContentLocks.h": {
       "phase": "non-ui",
       "sha256": "90c13c801dddfff277a58de1c2274ac7139bc75f35983ff6110b9a28a1925377",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Only explicit owner-authorized content lock ports write source state; ContentAccess instance lease, contained paths, exact hash check for locks and recovery unlock semantics",
+        "Modrinth BEGIN IMMEDIATE/all-row verification/backups/rollback; CurseForge bounded lossless patch, sharing guard, byte comparison and atomic replacement reviewed. External non-cooperating compare/commit races are not universally prevented."
+      ],
+      "findings": [
+        "AUD-33"
+      ]
     },
     "src/platform/LauncherContentState.cpp": {
       "phase": "non-ui",
       "sha256": "a3594b3e66beab13252986de6d9cfbf34e3d5f2c31d3a5bf4658c14e749eb56a",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Bounded CurseForge JSON and read-only Modrinth SQL with unique scoped connection, bounded ancestor resolution and normalized source rows",
+        "No source metadata writes; disabled path/missing-file mapping inspected. Missing Modrinth database currently falls back to empty locks and reused error outputs need explicit fixtures."
+      ],
+      "findings": [
+        "AUD-33",
+        "AUD-34"
+      ]
     },
     "src/platform/LauncherContentState.h": {
       "phase": "non-ui",
       "sha256": "9a3473f9f9346afa13d414d72ffd4b2c9f4bf50d593f71da463e98bfd4af6525",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Bounded CurseForge JSON and read-only Modrinth SQL with unique scoped connection, bounded ancestor resolution and normalized source rows",
+        "No source metadata writes; disabled path/missing-file mapping inspected. Missing Modrinth database currently falls back to empty locks and reused error outputs need explicit fixtures."
+      ],
+      "findings": [
+        "AUD-33",
+        "AUD-34"
+      ]
     },
     "src/platform/NativeContentStore.cpp": {
       "phase": "non-ui",
       "sha256": "98f24a12c0c528ccc277c4e9d10db045133a4259fcb8201a5511242bac0cb984",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Contained category paths, cooperating write lease, source/local locks, exact before/after hashes, per-file private staging/backups/rollback, selected manifest reconciliation and silent backed-up replacement inspected",
+        "Verified same-file/runtime replacement and enabled-state retention reviewed; locked recovery target containment/provider scope and stale external changes during rollback need dedicated fixtures. Managed snapshot pin association still scans pins for each row."
+      ],
+      "findings": [
+        "AUD-38",
+        "AUD-39"
+      ]
     },
     "src/platform/NativeContentStore.h": {
       "phase": "non-ui",
       "sha256": "b933e4e7a0e1a0107bc9df2f04c2460ddef5dd8a125fb2041ea3db05c966db11",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Contained category paths, cooperating write lease, source/local locks, exact before/after hashes, per-file private staging/backups/rollback, selected manifest reconciliation and silent backed-up replacement inspected",
+        "Verified same-file/runtime replacement and enabled-state retention reviewed; locked recovery target containment/provider scope and stale external changes during rollback need dedicated fixtures. Managed snapshot pin association still scans pins for each row."
+      ],
+      "findings": [
+        "AUD-38",
+        "AUD-39"
+      ]
     },
     "src/platform/OptionalDependencySource.cpp": {
       "phase": "non-ui",
       "sha256": "3d8d6afe91211978ae3e24fec9f2870901ba9bdfffb33a18a6e17393bfeab434",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Separate optional version/project clients, generation/QPointer guarded chained callbacks, cancellation invalidates before child callbacks",
+        "Provider identity fallback and quiet metadata warning separate from release error; credential-change sequencing needs a targeted reentrant regression before alteration."
+      ],
+      "findings": [
+        "AUD-07"
+      ]
     },
     "src/platform/OptionalDependencySource.h": {
       "phase": "non-ui",
       "sha256": "74877f7bf4c6c67323400d7889f6792e41a77e28e32d3de70a85d78f54ebb64b",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Separate optional version/project clients, generation/QPointer guarded chained callbacks, cancellation invalidates before child callbacks",
+        "Provider identity fallback and quiet metadata warning separate from release error; credential-change sequencing needs a targeted reentrant regression before alteration."
+      ],
+      "findings": [
+        "AUD-07"
+      ]
     },
     "src/platform/PackChangeMonitor.cpp": {
       "phase": "non-ui",
@@ -1726,15 +1862,21 @@
     "src/platform/VerifiedDownload.cpp": {
       "phase": "non-ui",
       "sha256": "a9232f17b109b871be5fe9f79348a2ec60753f159194387e6c912a8cfc434fbc",
-      "status": "pending",
-      "checks": [],
+      "status": "reviewed",
+      "checks": [
+        "Captured worker streaming and atomic private staging; bounded bytes/read buffers/redirects, SHA1/SHA512 and archive-type checks; cancellation retains busy until terminal callback",
+        "Progress identity guarded, callback terminal state cleared before delivery, existing-file reuse rehashes bytes. Connection reuse across per-worker network managers is a measurement candidate under PW-10."
+      ],
       "findings": []
     },
     "src/platform/VerifiedDownload.h": {
       "phase": "non-ui",
       "sha256": "b90251b008698f54ec10174637194357cfb9b8db50e30e0e1f13d9ce66af6a39",
-      "status": "pending",
-      "checks": [],
+      "status": "reviewed",
+      "checks": [
+        "Captured worker streaming and atomic private staging; bounded bytes/read buffers/redirects, SHA1/SHA512 and archive-type checks; cancellation retains busy until terminal callback",
+        "Progress identity guarded, callback terminal state cleared before delivery, existing-file reuse rehashes bytes. Connection reuse across per-worker network managers is a measurement candidate under PW-10."
+      ],
       "findings": []
     },
     "src/platform/WindowFrame.cpp": {
@@ -1896,16 +2038,34 @@
     "src/services/ModInstaller.cpp": {
       "phase": "non-ui",
       "sha256": "79c6a48ff3d28ec5c987b3604dacf8ada85b4d7108b3a6b768b5925f4956e95a",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Exact root/dependency identity, channel/compatibility/hash verification, immutable retained pins, disabled references, worker download/hash and staged manifest apply inspected",
+        "Progress publication continuation, recursive skipped-task/reference advancement, unbounded legacy metadata reads and queued worker exception boundaries remain explicit. Desktop selected roots use independent coordinator commands."
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08",
+        "AUD-13",
+        "AUD-35",
+        "AUD-37"
+      ]
     },
     "src/services/ModInstaller.h": {
       "phase": "non-ui",
       "sha256": "084b4e451285cde8b7629c936af214cc8c08360921cce82861f398b10adac788",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Exact root/dependency identity, channel/compatibility/hash verification, immutable retained pins, disabled references, worker download/hash and staged manifest apply inspected",
+        "Progress publication continuation, recursive skipped-task/reference advancement, unbounded legacy metadata reads and queued worker exception boundaries remain explicit. Desktop selected roots use independent coordinator commands."
+      ],
+      "findings": [
+        "AUD-07",
+        "AUD-08",
+        "AUD-13",
+        "AUD-35",
+        "AUD-37"
+      ]
     },
     "src/services/PackContent.cpp": {
       "phase": "non-ui",
@@ -1934,16 +2094,26 @@
     "src/services/PackRepository.cpp": {
       "phase": "non-ui",
       "sha256": "56e128782db39be234f4c307077b726f31ca501f217c43855e681a2dfde4e764",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Exclusive creation, optional Git identity/setup, argument-vector Git invocation with disabled credential prompts, exact manifest compare and hash-owned reference replacement/removal reviewed",
+        "Static legacy manifest entry points need bounded reads, contained manifest paths and complete cooperating-writer serialization review; staged private uses differ from original-instance writes. Gitignore/manifest rollback remains handled-error recovery, not crash durability."
+      ],
+      "findings": [
+        "AUD-37"
+      ]
     },
     "src/services/PackRepository.h": {
       "phase": "non-ui",
       "sha256": "885d419a0eef6dff5d77817efd548a6052e7614bcf24bd893ceed71bef470afc",
-      "status": "pending",
-      "checks": [],
-      "findings": []
+      "status": "reviewed",
+      "checks": [
+        "Exclusive creation, optional Git identity/setup, argument-vector Git invocation with disabled credential prompts, exact manifest compare and hash-owned reference replacement/removal reviewed",
+        "Static legacy manifest entry points need bounded reads, contained manifest paths and complete cooperating-writer serialization review; staged private uses differ from original-instance writes. Gitignore/manifest rollback remains handled-error recovery, not crash durability."
+      ],
+      "findings": [
+        "AUD-37"
+      ]
     },
     "src/theme/Appearance.cpp": {
       "phase": "ui",

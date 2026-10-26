@@ -7,6 +7,8 @@ namespace studio {
 QMap<QString, QByteArray> ZipArchiveReader::readEntries(const QString &path, const QStringList &entries,
                                                         qsizetype limit) const {
     QMap<QString, QByteArray> result;
+    if (limit < 0 || entries.isEmpty())
+        return result;
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly))
         return result;

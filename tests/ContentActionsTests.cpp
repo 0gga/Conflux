@@ -62,6 +62,68 @@ class ContentActionsTests : public QObject {
                 {"updateRelease", next.toVariant()}};
     }
   private slots:
+    void sourcePathLocksDoNotDependOnDuplicateOrder_data() {
+        QTest::addColumn<QString>("provider");
+        QTest::addColumn<QString>("state");
+        QTest::addColumn<QString>("spelling");
+        for (const auto &provider : {"modrinth", "curseforge"})
+            for (const auto &state : {"locked-first", "locked-last", "all-unlocked"})
+                for (const auto &spelling : {"exact", "disabled", "case", "disabled-case"})
+                    QTest::newRow(qPrintable(QString("%1-%2-%3").arg(provider, state, spelling)))
+                        << QString(provider) << QString(state) << QString(spelling);
+    }
+    void sourcePathLocksDoNotDependOnDuplicateOrder() {
+        QFETCH(QString, provider);
+        QFETCH(QString, state);
+        QFETCH(QString, spelling);
+        QTemporaryDir temp;
+        auto file = row("Example", "Author");
+        file.remove("sourceIds"); // An unresolved file still has source path protection.
+        file["sha1"] = hash("verified file");
+        auto sourcePath = file.value("relativePath").toString();
+        if (spelling.contains("disabled"))
+            sourcePath += ".disabled";
+        if (spelling.contains("case"))
+            sourcePath = sourcePath.toUpper();
+        QVariantMap first{{"relativePath", sourcePath},
+                          {"provider", provider},
+                          {"projectId", "first"},
+                          {"sha1", file.value("sha1")},
+                          {"launcherLocked", state == "locked-first"}};
+        auto last = first;
+        last["projectId"] = "last";
+        last["launcherLocked"] = state == "locked-last";
+        const QVariantMap unrelated{{"relativePath", "mods/uninstalled.jar"},
+                                    {"provider", provider},
+                                    {"projectId", "unrelated"},
+                                    {"launcherLocked", true}};
+        QVariantMap pack{{"path", temp.path()},
+                         {"provider", provider},
+                         {"sourceContent", QVariantList{first, last, unrelated}}};
+        ContentActions content(std::make_shared<ContentFileFixture>(),
+                               std::make_shared<ContentCatalogueFixture>(),
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.filePath("prefs.ini")));
+        content.setContext(pack, {file});
+        QTRY_VERIFY(!content.busy());
+        bool samePath = !spelling.contains("case");
+#ifdef Q_OS_WIN
+        samePath = true;
+#endif
+        const bool locked = samePath && state != "all-unlocked";
+        QCOMPARE(content.inventory().size(), 1);
+        QCOMPARE(content.inventory().first().toMap().value("launcherLocked").toBool(), locked);
+        QCOMPARE(content.inventory().first().toMap().value("locked").toBool(), locked);
+        content.setFilter("locked", true);
+        QCOMPARE(content.rows().size(), locked ? 1 : 0);
+        first["launcherLocked"] = false;
+        last["launcherLocked"] = false;
+        pack["sourceContent"] = QVariantList{first, last, unrelated};
+        content.setContext(pack, {file}, true);
+        QTRY_VERIFY(!content.busy());
+        QVERIFY(!content.inventory().first().toMap().value("locked").toBool());
+        QVERIFY(content.rows().isEmpty());
+    }
     void lockedRecoveryKeepsTheProjectDestination_data() {
         QTest::addColumn<bool>("previouslyOpened");
         QTest::addColumn<bool>("navigateOnQueued");

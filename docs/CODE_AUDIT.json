@@ -275,11 +275,12 @@
     },
     "src/features/content/ContentActions.cpp": {
       "phase": "non-ui",
-      "sha256": "db9000a9799445cb7646dcbc034dd8074420125d2889e61f61b17edd2995befe",
+      "sha256": "663fd6967b1a65731eb00241b40420418eb297c771d4e99495b2b641fcd07a68",
       "status": "reviewed",
       "checks": [
         "Complete1100-line coordinator reviewed: captured context, metadata/update generations, literal filtered index, lock preferences/source state, optimistic projection, claims, queue/history and per-item installation",
-        "Original-instance install/cleanup/recovery and post-commit inventory guards inspected. Locked recovery captures/seeds project target before enqueue, including reentrant navigation. Remaining post-notification/metadata callback lifetime and measured coordinator/index boundaries remain backlogged."
+        "Original-instance install/cleanup/recovery and post-commit inventory guards inspected. Locked recovery captures/seeds project target before enqueue, including reentrant navigation. Remaining post-notification/metadata callback lifetime and measured coordinator/index boundaries remain backlogged.",
+        "Source path locks aggregate any locked entry using the registry logical key; duplicate order cannot erase protection.24 model data cases cover providers, case/disabled aliases, filters, unrelated locks and authoritative unlock clearing. Remaining notification reentrancy stays AUD-07."
       ],
       "findings": [
         "AUD-07",
@@ -432,21 +433,26 @@
     },
     "src/features/content/ContentLockRegistry.cpp": {
       "phase": "non-ui",
-      "sha256": "07f51a6bf6c760e0294ee0504ca55add88e39a61bb70c548143d9cd0cd8c23cc",
+      "sha256": "a7a91766ff948c4a60ebec1dd8c6cc03df00172b4779ffaccc87b53bde25f365",
       "status": "reviewed",
       "checks": [
         "Thread-safe path/project indexes and predicted managed-hash path protection",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentTransactionTests ContentActionsTests"
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentTransactionTests ContentActionsTests",
+        "Logical relative-path normalization is shared without changing registry project/pending-hash protection or lock synchronization.",
+        "Existing Unicode-folded path keys can collapse distinct Windows filenames; an actual Qt/Win32/exclusive-file probe confirms U+03A3/U+03C2 coexistence. Full application regressions and filesystem-aware policy remain AUD-41."
       ],
-      "findings": []
+      "findings": [
+        "AUD-41"
+      ]
     },
     "src/features/content/ContentLockRegistry.h": {
       "phase": "non-ui",
-      "sha256": "35de25d4966ed965ce2d330f9e82688862c0c4501185790917a83167bde82b37",
+      "sha256": "2face0a5018a36a7ecbc7c47a73012dfd52f7b62a0114763c506bd8c8f420070",
       "status": "reviewed",
       "checks": [
         "Thread-safe path/project indexes and predicted managed-hash path protection",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentTransactionTests ContentActionsTests"
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentTransactionTests ContentActionsTests",
+        "Logical relativePathKey is shared by source projections and native refresh; it strips enabled/disabled suffixes and folds Windows case without authorizing filesystem containment."
       ],
       "findings": []
     },
@@ -729,9 +735,12 @@
       "status": "reviewed",
       "checks": [
         "Normalized instance scopes, authoritative snapshots and earliest qualified source lock",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentActionsTests"
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentActionsTests",
+        "Existing Unicode-folded path keys can collapse distinct Windows filenames; an actual Qt/Win32/exclusive-file probe confirms U+03A3/U+03C2 coexistence. Full application regressions and filesystem-aware policy remain AUD-41."
       ],
-      "findings": []
+      "findings": [
+        "AUD-41"
+      ]
     },
     "src/features/content/SourceLockIndex.h": {
       "phase": "non-ui",
@@ -1675,14 +1684,17 @@
     },
     "src/platform/NativeContentStore.cpp": {
       "phase": "non-ui",
-      "sha256": "32085bf0eed5e8e71feaf39e4b69531be67f3926518d467ed028b0f251056990",
+      "sha256": "4868cd7587b4d02f7f9aebbe086b2a3d6faf62b58d548cb47c172d36f56c8341",
       "status": "reviewed",
       "checks": [
         "Contained category paths, cooperating write lease, source/local locks, exact before/after hashes, per-file private staging/backups/rollback, selected manifest reconciliation and silent backed-up replacement inspected",
-        "Locked recovery revalidates provider/project/path/hash against authoritative locks, rejects linked target/backup paths, creates only contained missing categories and hashes copy bytes before atomic publication. Per-snapshot category/path indexes retain exact hash and duplicate-order semantics; real310/3000-row tests verify identities and unchanged hash I/O. Selected-commit indexing, external plan/rollback races and cache bounds remain AUD-39."
+        "Locked recovery revalidates provider/project/path/hash against authoritative locks, rejects linked target/backup paths, creates only contained missing categories and hashes copy bytes before atomic publication. Per-snapshot category/path indexes retain exact hash and duplicate-order semantics; real310/3000-row tests verify identities and unchanged hash I/O. Selected-commit indexing, external plan/rollback races and cache bounds remain AUD-39.",
+        "Both native refresh paths aggregate logical source path locks independently of exact source identity attachment.24 temporary native data cases preserve lock protection through duplicates/case/disabled paths and retain source/content bytes. Invalid source IDs and source-write/rename aliases remain with dedicated source ports under AUD-33.",
+        "Existing Unicode-folded path keys can collapse distinct Windows filenames; an actual Qt/Win32/exclusive-file probe confirms U+03A3/U+03C2 coexistence. Full application regressions and filesystem-aware policy remain AUD-41."
       ],
       "findings": [
-        "AUD-39"
+        "AUD-39",
+        "AUD-41"
       ]
     },
     "src/platform/NativeContentStore.h": {

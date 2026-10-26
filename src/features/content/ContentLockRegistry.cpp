@@ -9,7 +9,7 @@ QString ContentLockRegistry::packKey(const QString &path) {
 #endif
     return key;
 }
-QString ContentLockRegistry::pathKey(QString path) {
+QString ContentLockRegistry::relativePathKey(QString path) {
     if (path.endsWith(".disabled", Qt::CaseInsensitive))
         path.chop(9);
 #ifdef Q_OS_WIN
@@ -22,7 +22,7 @@ void ContentLockRegistry::setRows(const QString &pack, const QVariantList &rows)
     for (const auto &value : rows) {
         const auto row = value.toMap();
         if (row.value("locked").toBool()) {
-            paths.insert(pathKey(row.value("relativePath").toString()));
+            paths.insert(relativePathKey(row.value("relativePath").toString()));
             const auto ids = row.value("sourceIds").toMap();
             for (auto it = ids.begin(); it != ids.end(); ++it)
                 if (!it.value().toString().isEmpty())
@@ -31,7 +31,7 @@ void ContentLockRegistry::setRows(const QString &pack, const QVariantList &rows)
             static const QRegularExpression sha1("^[a-fA-F0-9]{40}$");
             if (row.value("pending").toBool() && row.value("category") == "mods" &&
                 sha1.match(hash).hasMatch())
-                paths.insert(pathKey("mods/" + hash + ".jar"));
+                paths.insert(relativePathKey("mods/" + hash + ".jar"));
         }
     }
     QWriteLocker guard(&m_mutex);
@@ -42,7 +42,7 @@ bool ContentLockRegistry::locked(const QString &pack, const QString &relative) c
     if (relative.isEmpty())
         return false;
     QReadLocker guard(&m_mutex);
-    return m_paths.value(packKey(pack)).contains(pathKey(relative));
+    return m_paths.value(packKey(pack)).contains(relativePathKey(relative));
 }
 bool ContentLockRegistry::projectLocked(const QString &pack, const QString &provider,
                                         const QString &id) const {

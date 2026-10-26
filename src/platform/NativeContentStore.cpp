@@ -25,6 +25,19 @@ static QString contentKey(const QString &path) {
     return path;
 #endif
 }
+static QSet<QString> sourceLockPaths(const QVariantList &rows) {
+    QSet<QString> paths;
+    paths.reserve(rows.size());
+    for (const auto &value : rows) {
+        const auto row = value.toMap();
+        if (!row.value("launcherLocked").toBool())
+            continue;
+        const auto path = ContentLockRegistry::relativePathKey(row.value("relativePath").toString());
+        if (!path.isEmpty())
+            paths.insert(path);
+    }
+    return paths;
+}
 static QString sha1File(const QString &path) {
     if (path.isEmpty())
         return {};
@@ -95,14 +108,12 @@ ContentFileState NativeContentStore::reload(const QVariantMap &pack, const QVari
     }
     if (!inspectInventory) {
         auto rows = previous;
-        QHash<QString, bool> locks;
-        for (const auto &value : current.value("sourceContent").toList())
-            locks[value.toMap().value("relativePath").toString()] =
-                value.toMap().value("launcherLocked").toBool();
+        const auto locks = sourceLockPaths(current.value("sourceContent").toList());
         for (auto &value : rows) {
             auto row = value.toMap();
             row.remove("lockPending");
-            row["launcherLocked"] = locks.value(row.value("relativePath").toString());
+            row["launcherLocked"] =
+                locks.contains(ContentLockRegistry::relativePathKey(row.value("relativePath").toString()));
             value = row;
         }
         return {current, rows, {}};
@@ -115,6 +126,7 @@ QVariantList NativeContentStore::snapshot(const QVariantMap &pack, const QVarian
         return {};
     const auto sourceRows = pack.contains("sourceContent") ? pack.value("sourceContent").toList()
                                                            : LauncherContentState::read(pack);
+    const auto locks = sourceLockPaths(sourceRows);
     QHash<QString, QVariantMap> sourceIndex;
     for (const auto &value : sourceRows) {
         const auto row = value.toMap();
@@ -140,6 +152,7 @@ QVariantList NativeContentStore::snapshot(const QVariantMap &pack, const QVarian
             continue;
         const auto relative = row.value("relativePath").toString();
         row["enabled"] = !relative.endsWith(".disabled", Qt::CaseInsensitive);
+        row["launcherLocked"] = locks.contains(ContentLockRegistry::relativePathKey(relative));
         row["external"] = true;
         if (!row.value("directory").toBool() && contentPath(relative)) {
             const auto path = NativePackFileStore::resolve(pack.value("path").toString(), relative);
@@ -151,7 +164,6 @@ QVariantList NativeContentStore::snapshot(const QVariantMap &pack, const QVarian
             const auto source = sourceIndex.value(relative + '\n' + row.value("sha1").toString());
             if (!source.isEmpty()) {
                 row["sourceIds"] = source.value("sourceIds");
-                row["launcherLocked"] = source.value("launcherLocked");
                 row["provider"] = source.value("provider");
                 row["projectId"] = source.value("projectId");
                 row["external"] = false;

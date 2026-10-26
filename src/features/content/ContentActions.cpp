@@ -400,14 +400,15 @@ void ContentActions::syncVisibleRows() {
 QVariantList ContentActions::withPreferences(const QVariantMap &pack, QVariantList rows) const {
     const auto path = pack.value("path").toString();
     QSet<QString> sourceLocks;
-    QHash<QString, bool> sourcePaths;
+    QSet<QString> sourcePaths;
     for (const auto &value : pack.value("sourceContent").toList()) {
         const auto source = value.toMap();
-        auto relative = source.value("relativePath").toString();
-        if (relative.endsWith(".disabled"))
-            relative.chop(9);
-        sourcePaths[relative] = source.value("launcherLocked").toBool();
-        if (source.value("launcherLocked").toBool() && !source.value("projectId").toString().isEmpty())
+        if (!source.value("launcherLocked").toBool())
+            continue;
+        const auto relative = ContentLockRegistry::relativePathKey(source.value("relativePath").toString());
+        if (!relative.isEmpty())
+            sourcePaths.insert(relative);
+        if (!source.value("projectId").toString().isEmpty())
             sourceLocks.insert(source.value("provider", "modrinth").toString() + ':' +
                                source.value("projectId").toString());
     }
@@ -418,8 +419,9 @@ QVariantList ContentActions::withPreferences(const QVariantMap &pack, QVariantLi
         if (relative.endsWith(".disabled"))
             relative.chop(9);
         const auto ids = row.value("sourceIds").toMap();
-        bool sourceLocked = pack.contains("sourceContent") ? sourcePaths.value(relative)
-                                                           : row.value("launcherLocked").toBool();
+        bool sourceLocked = pack.contains("sourceContent")
+                                ? sourcePaths.contains(ContentLockRegistry::relativePathKey(relative))
+                                : row.value("launcherLocked").toBool();
         for (auto it = ids.cbegin(); it != ids.cend(); ++it)
             sourceLocked |= sourceLocks.contains(it.key() + ':' + it.value().toString());
         row["launcherLocked"] = sourceLocked;

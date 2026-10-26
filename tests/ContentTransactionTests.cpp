@@ -64,6 +64,70 @@ class ContentTransactionTests : public QObject {
         return {{"path", path}, {"provider", "modrinth"}, {"minecraft", "1.21.1"}, {"loader", "fabric"}};
     }
   private slots:
+    void nativeRefreshPreservesEverySourcePathLock_data() {
+        QTest::addColumn<QString>("state");
+        QTest::addColumn<bool>("disabled");
+        QTest::addColumn<bool>("upper");
+        QTest::addColumn<bool>("inspect");
+        for (const auto &state : {"locked-first", "locked-last", "all-unlocked"})
+            for (bool disabled : {false, true})
+                for (bool upper : {false, true})
+                    for (bool inspect : {false, true})
+                        QTest::newRow(qPrintable(QString("%1-disabled-%2-upper-%3-inspect-%4")
+                                                     .arg(state)
+                                                     .arg(disabled)
+                                                     .arg(upper)
+                                                     .arg(inspect)))
+                            << QString(state) << disabled << upper << inspect;
+    }
+    void nativeRefreshPreservesEverySourcePathLock() {
+        QFETCH(QString, state);
+        QFETCH(bool, disabled);
+        QFETCH(bool, upper);
+        QFETCH(bool, inspect);
+        QTemporaryDir temp;
+        const QByteArray bytes = "installed file";
+        const auto relative = QString("mods/Example.jar") + (disabled ? ".disabled" : "");
+        write(temp.filePath(relative), bytes);
+        QJsonObject first{
+            {"addonID", 11},
+            {"isLocked", state == "locked-first"},
+            {"isEnabled", !disabled},
+            {"fileNameOnDisk", upper ? "EXAMPLE.JAR" : "Example.jar"},
+            {"modFolderPath", temp.filePath("mods")},
+            {"installedFile",
+             QJsonObject{{"id", 101},
+                         {"hashes", QJsonArray{QJsonObject{{"algo", 1}, {"value", hash(bytes)}}}}}}};
+        auto last = first;
+        last["addonID"] = 22;
+        last["isLocked"] = state == "locked-last";
+        const auto metadata =
+            QJsonDocument(QJsonObject{{"installedAddons", QJsonArray{first, last}}}).toJson();
+        write(temp.filePath("minecraftinstance.json"), metadata);
+        const QVariantMap pack{{"path", temp.path()}, {"provider", "curseforge"}};
+        const QVariantMap row{{"relativePath", relative}, {"category", "mods"},    {"sha1", hash(bytes)},
+                              {"enabled", !disabled},     {"title", "Keep title"}, {"lockPending", true}};
+        NativeContentStore store(nullptr, temp.filePath("backups"));
+        const auto result = store.reload(pack, {row}, inspect);
+        QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+        QCOMPARE(result.rows.size(), 1);
+        bool samePath = !upper;
+#ifdef Q_OS_WIN
+        samePath = true;
+#endif
+        const auto actual = result.rows.first().toMap();
+        QCOMPARE(actual.value("launcherLocked").toBool(), samePath && state != "all-unlocked");
+        QCOMPARE(actual.value("sha1").toString(), hash(bytes));
+        QCOMPARE(actual.value("relativePath").toString(), relative);
+        if (!inspect) {
+            auto expected = row;
+            expected.remove("lockPending");
+            expected["launcherLocked"] = samePath && state != "all-unlocked";
+            QCOMPARE(actual, expected);
+        }
+        QCOMPARE(read(temp.filePath("minecraftinstance.json")), metadata);
+        QCOMPARE(read(temp.filePath(relative)), bytes);
+    }
     void missingSourceLockStateCannotAuthorizeFileChanges_data() {
         QTest::addColumn<QString>("action");
         QTest::addColumn<bool>("missingDatabase");

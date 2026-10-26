@@ -1675,11 +1675,11 @@
     },
     "src/platform/NativeContentStore.cpp": {
       "phase": "non-ui",
-      "sha256": "08fc2c88f1f345a56bb637b19f469ea93b97953c81b650ae7f2990a937785d59",
+      "sha256": "32085bf0eed5e8e71feaf39e4b69531be67f3926518d467ed028b0f251056990",
       "status": "reviewed",
       "checks": [
         "Contained category paths, cooperating write lease, source/local locks, exact before/after hashes, per-file private staging/backups/rollback, selected manifest reconciliation and silent backed-up replacement inspected",
-        "Locked recovery revalidates provider/project/path/hash against authoritative locks, rejects linked target/backup paths, creates only contained missing categories and hashes copy bytes before atomic publication. Managed pin indexing and external plan/rollback races remain AUD-39."
+        "Locked recovery revalidates provider/project/path/hash against authoritative locks, rejects linked target/backup paths, creates only contained missing categories and hashes copy bytes before atomic publication. Per-snapshot category/path indexes retain exact hash and duplicate-order semantics; real310/3000-row tests verify identities and unchanged hash I/O. Selected-commit indexing, external plan/rollback races and cache bounds remain AUD-39."
       ],
       "findings": [
         "AUD-39"

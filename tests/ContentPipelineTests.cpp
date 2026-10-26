@@ -112,6 +112,150 @@ class ContentPipelineTests : public QObject {
         }
     };
   private slots:
+    void snapshotPinsRequireTheMatchingCategoryPathAndHash_data() {
+        QTest::addColumn<QString>("category");
+        QTest::addColumn<QString>("fault");
+        for (const auto &category : {"mods", "resourcepacks", "shaderpacks", "datapacks"})
+            for (const auto &fault : {"none", "absent", "category", "path", "hash", "hash-case", "path-case"})
+                QTest::newRow(qPrintable(QString("%1-%2").arg(category, fault)))
+                    << QString(category) << QString(fault);
+    }
+    void snapshotPinsRequireTheMatchingCategoryPathAndHash() {
+        QFETCH(QString, category);
+        QFETCH(QString, fault);
+        QTemporaryDir temp;
+        const QByteArray bytes = "verified " + category.toUtf8();
+        const auto relative = category + (category == "mods" ? "/example.jar" : "/example.zip");
+        write(temp.filePath(relative), bytes);
+        QVariantMap pin{{"installPath", relative}, {"sha1", hash(bytes)},
+                        {"provider", "modrinth"},  {"projectId", "pinned-project"},
+                        {"id", "pinned-release"},  {"projectTitle", "Pinned title"},
+                        {"version", "2"}};
+        if (fault == "path")
+            pin["installPath"] = relative + ".disabled";
+        if (fault == "hash")
+            pin["sha1"] = hash("different binary");
+        if (fault == "hash-case")
+            pin["sha1"] = pin.value("sha1").toString().toUpper();
+        if (fault == "path-case")
+            pin["installPath"] = relative.toUpper();
+        auto kind = category == "mods" ? QString("mods") : QString("assets");
+        if (fault == "category")
+            kind = kind == "mods" ? "assets" : "mods";
+        QVariantMap pack{{"path", temp.path()}, {"provider", "conflux"}};
+        if (fault != "absent")
+            pack[kind] = QVariantList{pin};
+        NativeContentStore store(nullptr, temp.filePath("backups"));
+        const auto result = store.snapshot(
+            pack,
+            {QVariantMap{{"relativePath", relative}, {"category", category}, {"title", "Local title"}}});
+        QCOMPARE(result.size(), 1);
+        bool matches = fault == "none";
+#ifdef Q_OS_WIN
+        matches |= fault == "path-case";
+#endif
+        const auto actual = result.first().toMap();
+        QCOMPARE(actual.contains("installedRelease"), matches);
+        QCOMPARE(actual.value("external").toBool(), !matches);
+        QCOMPARE(actual.value("title").toString(),
+                 matches ? QString("Pinned title") : QString("Local title"));
+        QCOMPARE(actual.value("sha1").toString(), hash(bytes));
+        if (matches) {
+            QCOMPARE(actual.value("installedRelease").toMap(), pin);
+            QCOMPARE(actual.value("sourceIds").toMap(), (QVariantMap{{"modrinth", "pinned-project"}}));
+            QCOMPARE(actual.value("version").toString(), QString("2"));
+        }
+    }
+    void snapshotPinsPreserveDuplicateOrderAndMappedIdentities_data() {
+        QTest::addColumn<bool>("finalTitle");
+        QTest::newRow("last-title-overrides") << true;
+        QTest::newRow("missing-title-retains-prior") << false;
+    }
+    void snapshotPinsPreserveDuplicateOrderAndMappedIdentities() {
+        QFETCH(bool, finalTitle);
+        QTemporaryDir temp;
+        const QByteArray bytes = "shared exact file";
+        const QString relative = "mods/example.jar";
+        write(temp.filePath(relative), bytes);
+        const QVariantMap first{{"installPath", relative}, {"sha1", hash(bytes)},
+                                {"provider", "modrinth"},  {"projectId", "primary"},
+                                {"id", "first"},           {"projectTitle", "First title"}};
+        QVariantMap last{{"installPath", relative},
+                         {"sha1", hash(bytes)},
+                         {"provider", "curseforge"},
+                         {"projectId", "42"},
+                         {"id", "second"},
+                         {"version", "2"},
+                         {"projectSourceIds", QVariantMap{{"modrinth", "primary"}}}};
+        if (finalTitle)
+            last["projectTitle"] = "Final title";
+        auto stale = first;
+        stale["sha1"] = hash("different file");
+        stale["projectTitle"] = "Must not apply";
+        const QVariantMap pack{{"path", temp.path()}, {"mods", QVariantList{stale, first, last, stale}}};
+        NativeContentStore store(nullptr, temp.filePath("backups"));
+        const auto rows = store.snapshot(
+            pack, {QVariantMap{{"relativePath", relative}, {"category", "mods"}, {"title", "Local title"}}});
+        QCOMPARE(rows.size(), 1);
+        const auto actual = rows.first().toMap();
+        QCOMPARE(actual.value("installedRelease").toMap(), last);
+        QCOMPARE(actual.value("sourceIds").toMap(),
+                 (QVariantMap{{"modrinth", "primary"}, {"curseforge", "42"}}));
+        QCOMPARE(actual.value("provider").toString(), QString("curseforge"));
+        QCOMPARE(actual.value("projectId").toString(), QString("42"));
+        QCOMPARE(actual.value("title").toString(),
+                 finalTitle ? QString("Final title") : QString("First title"));
+    }
+    void warmSnapshotPinAssociationHasBoundedCpuAndNoExtraHashIo_data() {
+        QTest::addColumn<int>("count");
+        QTest::newRow("owner-sized-310") << 310;
+        QTest::newRow("large-3000") << 3000;
+    }
+    void warmSnapshotPinAssociationHasBoundedCpuAndNoExtraHashIo() {
+        QFETCH(int, count);
+        QTemporaryDir temp;
+        const QByteArray bytes(256, 'x');
+        QVariantList files, pins;
+        files.reserve(count);
+        pins.reserve(count);
+        for (int i = 0; i < count; ++i) {
+            const auto relative = QString("mods/file-%1.jar").arg(i);
+            write(temp.filePath(relative), bytes);
+            files << QVariantMap{{"relativePath", relative}, {"category", "mods"}, {"title", "Local"}};
+            pins << QVariantMap{{"installPath", relative}, {"sha1", hash(bytes)},
+                                {"provider", "modrinth"},  {"projectId", QString("project-%1").arg(i)},
+                                {"id", "version"},         {"projectTitle", QString("Pinned %1").arg(i)},
+                                {"version", "1"}};
+        }
+        const QVariantMap plain{{"path", temp.path()}, {"provider", "conflux"}};
+        auto managed = plain;
+        managed["mods"] = pins;
+        NativeContentStore store(nullptr, temp.filePath("backups"));
+        ContentFileCache::instance().clear();
+        QCOMPARE(store.snapshot(plain, files).size(), count);
+        const auto before = ContentFileCache::instance().statistics();
+        QElapsedTimer clock;
+        clock.start();
+        const auto rows = store.snapshot(managed, files);
+        const auto elapsed = clock.elapsed();
+        QCOMPARE(rows.size(), count);
+        for (int i = 0; i < count; ++i) {
+            const auto actual = rows[i].toMap();
+            QCOMPARE(actual.value("projectId").toString(), QString("project-%1").arg(i));
+            QCOMPARE(actual.value("title").toString(), QString("Pinned %1").arg(i));
+            QCOMPARE(actual.value("sourceIds").toMap().value("modrinth").toString(),
+                     QString("project-%1").arg(i));
+        }
+        const auto after = ContentFileCache::instance().statistics();
+        QCOMPARE(after.hashedFiles, before.hashedFiles);
+        QCOMPARE(after.hashedBytes, before.hashedBytes);
+        qInfo() << "Native snapshot pins/elapsed ms/extra hashed bytes" << count << elapsed
+                << (after.hashedBytes - before.hashedBytes);
+        QVERIFY2(
+            test_performance::releaseBudgetMet(elapsed, count == 310 ? 350 : 1500),
+            qPrintable(
+                QString("Native snapshot pin association took %1ms for %2 rows").arg(elapsed).arg(count)));
+    }
     void init() {
         ContentFileCache::instance().clear();
     }

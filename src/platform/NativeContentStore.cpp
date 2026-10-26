@@ -123,7 +123,17 @@ QVariantList NativeContentStore::snapshot(const QVariantMap &pack, const QVarian
         if (!path.endsWith(".disabled", Qt::CaseInsensitive))
             sourceIndex[path + ".disabled\n" + row.value("sha1").toString()] = row;
     }
+    const auto indexPins = [](const QVariantList &pins) {
+        QHash<QString, QVariantList> index;
+        index.reserve(pins.size());
+        for (const auto &value : pins)
+            index[contentKey(value.toMap().value("installPath").toString())].append(value);
+        return index;
+    };
+    const auto modPins = indexPins(pack.value("mods").toList());
+    const auto assetPins = indexPins(pack.value("assets").toList());
     QVariantList rows;
+    rows.reserve(files.size());
     for (const auto &value : files) {
         auto row = value.toMap();
         if (row.value("category") == "configs")
@@ -166,11 +176,12 @@ QVariantList NativeContentStore::snapshot(const QVariantMap &pack, const QVarian
         // Managed pins identify every content type, including provider-only mods. Attach a
         // release only when both its contained path and published hash match the actual file.
         {
-            const auto kind = row.value("category") == "mods" ? QString("mods") : QString("assets");
-            for (const auto &value : pack.value(kind).toList()) {
+            const auto &pins = row.value("category") == "mods" ? modPins : assetPins;
+            const auto matching = pins.constFind(contentKey(relative));
+            const QVariantList empty;
+            for (const auto &value : matching == pins.cend() ? empty : matching.value()) {
                 const auto pin = value.toMap();
-                if (contentKey(pin.value("installPath").toString()) == contentKey(relative) &&
-                    pin.value("sha1") == row.value("sha1")) {
+                if (pin.value("sha1") == row.value("sha1")) {
                     auto ids = row.value("sourceIds").toMap();
                     const auto pinnedIds = pin.value("projectSourceIds").toMap();
                     for (auto it = pinnedIds.cbegin(); it != pinnedIds.cend(); ++it)

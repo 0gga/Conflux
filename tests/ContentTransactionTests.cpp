@@ -64,6 +64,67 @@ class ContentTransactionTests : public QObject {
         return {{"path", path}, {"provider", "modrinth"}, {"minecraft", "1.21.1"}, {"loader", "fabric"}};
     }
   private slots:
+    void missingSourceLockStateCannotAuthorizeFileChanges_data() {
+        QTest::addColumn<QString>("action");
+        QTest::addColumn<bool>("missingDatabase");
+        for (const auto &action : {"reload", "remove", "disable", "import", "install-asset"})
+            for (bool missing : {true, false})
+                QTest::newRow(qPrintable(QString("%1-missing-db-%2").arg(action).arg(missing)))
+                    << QString(action) << missing;
+    }
+    void missingSourceLockStateCannotAuthorizeFileChanges() {
+        QFETCH(QString, action);
+        QFETCH(bool, missingDatabase);
+        QTemporaryDir temp;
+        const QByteArray original = "locked original", replacement = "new content";
+        auto pack = sourcePack(temp.path(), original);
+        QVERIFY(!pack.isEmpty());
+        const auto root = pack.value("path").toString();
+        const auto file = root + "/resourcepacks/locked.zip";
+        write(file, original);
+        const QVariantMap row{{"relativePath", "resourcepacks/locked.zip"},
+                              {"category", "resourcepacks"},
+                              {"sha1", hash(original)},
+                              {"enabled", true},
+                              {"sourceIds", QVariantMap{{"modrinth", "locked-project"}}}};
+        if (missingDatabase)
+            QVERIFY(QFile::remove(temp.path() + "/ModrinthApp/app.db"));
+        else
+            pack["launcherInstanceId"] = "untracked-instance";
+        const auto databaseBytes = read(temp.path() + "/ModrinthApp/app.db");
+        NativeContentStore store(nullptr, temp.path() + "/backups");
+        if (action == "reload") {
+            const auto result = store.reload(pack, {row});
+            QVERIFY(!result.error.isEmpty());
+            QVERIFY(result.rows.isEmpty());
+        } else {
+            ContentWriteResult result;
+            if (action == "remove")
+                result = store.remove(pack, {row});
+            else if (action == "disable")
+                result = store.setEnabled(pack, row, false);
+            else {
+                const auto source = temp.path() + "/upload/locked.zip";
+                write(source, replacement);
+                if (action == "import")
+                    result = store.importFiles(pack, {QUrl::fromLocalFile(source)}, "resourcepacks");
+                else {
+                    ContentInstallRequest request;
+                    request.contentType = "resourcepack";
+                    request.release.provider = "modrinth";
+                    request.release.projectId = "locked-project";
+                    request.release.filename = "locked.zip";
+                    request.release.sha1 = hash(replacement);
+                    result = store.installAsset(pack, {row}, request, source);
+                }
+            }
+            QVERIFY(!result.ok);
+            QVERIFY(!result.error.isEmpty());
+        }
+        QCOMPARE(read(file), original);
+        QVERIFY(!QFileInfo::exists(file + ".disabled"));
+        QCOMPARE(read(temp.path() + "/ModrinthApp/app.db"), databaseBytes);
+    }
     void exactLockedRecoveryPreservesSourceMetadata_data() {
         QTest::addColumn<QString>("provider");
         QTest::addColumn<bool>("missingFolder");

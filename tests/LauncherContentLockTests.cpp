@@ -142,6 +142,219 @@ class GateLocks final : public ILauncherContentLocks {
 class LauncherContentLockTests final : public QObject {
     Q_OBJECT
   private slots:
+    void explicitDatabaseLocationSupportsExternalProfiles() {
+        Fixture fixture("modrinth");
+        const auto external = fixture.temp.path() + "/ExternalInstance";
+        QVERIFY(write(external + "/mods/example.jar", "original content"));
+        auto escaped = external;
+        escaped.replace("'", "''");
+        QVERIFY(fixture.sql("UPDATE instances SET path='" + escaped + "' WHERE id='instance'"));
+        QVERIFY(fixture.sql("INSERT INTO instance_content_locks VALUES('file')"));
+        auto pack = fixture.pack;
+        pack["path"] = external;
+        pack["launcherDatabasePath"] = fixture.database;
+        QString error;
+        const auto rows = LauncherContentState::read(pack, &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(rows.size(), 1);
+        QVERIFY(rows.first().toMap().value("launcherLocked").toBool());
+        LauncherContentLocks locks(fixture.temp.path() + "/backups");
+        const auto result = locks.setLocked(pack, rows, false);
+        QVERIFY2(result.ok, qPrintable(result.error));
+        const auto unlocked = LauncherContentState::read(pack, &error);
+        QVERIFY(error.isEmpty());
+        QCOMPARE(unlocked.size(), 1);
+        QVERIFY(!unlocked.first().toMap().value("launcherLocked").toBool());
+        QCOMPARE(read(external + "/mods/example.jar"), QByteArray("original content"));
+        QCOMPARE(read(fixture.file), QByteArray("original content"));
+    }
+    void invalidExplicitDatabaseLocationNeverFallsBack_data() {
+        QTest::addColumn<QString>("fault");
+        for (const auto &fault : {"relative", "different-name", "missing", "empty"})
+            QTest::newRow(fault) << QString(fault);
+    }
+    void invalidExplicitDatabaseLocationNeverFallsBack() {
+        QFETCH(QString, fault);
+        Fixture fixture("modrinth");
+        auto pack = fixture.pack;
+        pack["launcherDatabasePath"] = fault == "relative"         ? QString("app.db")
+                                       : fault == "different-name" ? fixture.temp.path() + "/other.sqlite"
+                                       : fault == "missing"        ? fixture.temp.path() + "/missing/app.db"
+                                                                   : QString{};
+        if (fault == "different-name")
+            QVERIFY(write(pack.value("launcherDatabasePath").toString(), read(fixture.database)));
+        const auto original = read(fixture.database);
+        QString error;
+        QVERIFY(LauncherContentState::read(pack, &error).isEmpty());
+        QVERIFY(!error.isEmpty());
+        QCOMPARE(read(fixture.database), original);
+    }
+    void unavailableSourceRefreshKeepsConfirmedContentAndLocks() {
+        Fixture fixture("modrinth");
+        QVERIFY(fixture.sql("INSERT INTO instance_content_locks VALUES('file')"));
+        const auto original = read(fixture.database);
+        auto files = std::make_shared<NativeContentStore>(nullptr, fixture.temp.path() + "/backups");
+        ContentActions content(
+            files, std::make_shared<ContentCatalogueFixture>(), std::make_shared<ContentInstallerFixture>(),
+            std::make_shared<SettingsContentPreferences>(fixture.temp.path() + "/prefs.ini"));
+        content.setContext(fixture.pack, {fixture.row});
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(content.rows().size(), 1);
+        QVERIFY(content.rows().first().toMap().value("locked").toBool());
+        const auto key = content.rows().first().toMap().value("contentKey").toString();
+        QVERIFY(!key.isEmpty());
+        QSignalSpy errors(&content, &ContentActions::operationFailed);
+        const auto held = fixture.database + ".held";
+        QVERIFY(QFile::rename(fixture.database, held));
+        content.refresh(false);
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(errors.size(), 1);
+        QVERIFY(!content.notice().isEmpty());
+        QCOMPARE(content.rows().size(), 1);
+        QCOMPARE(content.rows().first().toMap().value("contentKey").toString(), key);
+        QVERIFY(content.rows().first().toMap().value("locked").toBool());
+        QCOMPARE(read(fixture.file), QByteArray("original content"));
+        QVERIFY(QFile::rename(held, fixture.database));
+        content.refresh(false);
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(errors.size(), 1);
+        QVERIFY(content.notice().isEmpty());
+        QCOMPARE(content.rows().size(), 1);
+        QCOMPARE(content.rows().first().toMap().value("contentKey").toString(), key);
+        QVERIFY(content.rows().first().toMap().value("locked").toBool());
+        QCOMPARE(read(fixture.database), original);
+        QCOMPARE(read(fixture.file), QByteArray("original content"));
+    }
+    void sourceReadsValidateTheSelectedInstance_data() {
+        QTest::addColumn<QString>("fault");
+        for (const auto &fault : {"unknown-id", "foreign-id", "changed-path", "ambiguous-path"})
+            QTest::newRow(fault) << QString(fault);
+    }
+    void sourceReadsValidateTheSelectedInstance() {
+        QFETCH(QString, fault);
+        Fixture fixture("modrinth");
+        QVERIFY(fixture.sql("INSERT INTO instance_content_locks VALUES('file')"));
+        auto pack = fixture.pack;
+        if (fault == "unknown-id")
+            pack["launcherInstanceId"] = "untracked";
+        else if (fault == "foreign-id") {
+            QVERIFY(QDir().mkpath(fixture.temp.path() + "/ModrinthApp/profiles/Other"));
+            QVERIFY(fixture.sql("INSERT INTO instances VALUES('foreign','Other')"));
+            pack["launcherInstanceId"] = "foreign";
+        } else if (fault == "changed-path") {
+            QVERIFY(QDir().mkpath(fixture.temp.path() + "/ModrinthApp/profiles/Other"));
+            QVERIFY(fixture.sql("UPDATE instances SET path='Other' WHERE id='instance'"));
+        } else {
+            QVERIFY(fixture.sql("INSERT INTO instances VALUES('duplicate','Fixture')"));
+            pack.remove("launcherInstanceId");
+        }
+        const auto original = read(fixture.database);
+        QString error;
+        QVERIFY(LauncherContentState::read(pack, &error).isEmpty());
+        QVERIFY(!error.isEmpty());
+        QCOMPARE(read(fixture.database), original);
+        QCOMPARE(read(fixture.file), QByteArray("original content"));
+    }
+    void validInstanceReadsSupportEmptyAndAbsolutePaths_data() {
+        QTest::addColumn<bool>("absolutePath");
+        QTest::addColumn<bool>("explicitId");
+        QTest::addColumn<bool>("emptyInstance");
+        for (bool absolute : {false, true})
+            for (bool id : {false, true})
+                for (bool empty : {false, true})
+                    QTest::newRow(
+                        qPrintable(QString("absolute-%1-id-%2-empty-%3").arg(absolute).arg(id).arg(empty)))
+                        << absolute << id << empty;
+    }
+    void validInstanceReadsSupportEmptyAndAbsolutePaths() {
+        QFETCH(bool, absolutePath);
+        QFETCH(bool, explicitId);
+        QFETCH(bool, emptyInstance);
+        Fixture fixture("modrinth");
+        QVERIFY(fixture.sql("INSERT INTO instance_content_locks VALUES('file')"));
+        auto pack = fixture.pack;
+        if (!explicitId)
+            pack.remove("launcherInstanceId");
+        if (absolutePath) {
+            auto path = pack.value("path").toString();
+            path.replace("'", "''");
+            QVERIFY(fixture.sql("UPDATE instances SET path='" + path + "' WHERE id='instance'"));
+        }
+        if (emptyInstance) {
+            QVERIFY(fixture.sql("DELETE FROM instance_content_locks"));
+            QVERIFY(fixture.sql("DELETE FROM instance_content_entries"));
+            QVERIFY(fixture.sql("DELETE FROM instance_files"));
+        }
+        const auto original = read(fixture.database);
+        QString error = "old error";
+        const auto rows = LauncherContentState::read(pack, &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(rows.size(), emptyInstance ? 0 : 1);
+        if (!emptyInstance)
+            QVERIFY(rows.first().toMap().value("launcherLocked").toBool());
+        QCOMPARE(read(fixture.database), original);
+        QCOMPARE(read(fixture.file), QByteArray("original content"));
+    }
+    void unavailableModrinthSourceReportsAnError_data() {
+        QTest::addColumn<QString>("fault");
+        QTest::newRow("missing-database") << QString("database");
+        QTest::newRow("unrecognized-profile-root") << QString("root");
+        QTest::newRow("missing-profile-path") << QString("path");
+    }
+    void unavailableModrinthSourceReportsAnError() {
+        QFETCH(QString, fault);
+        Fixture fixture("modrinth");
+        QVERIFY(fixture.sql("INSERT INTO instance_content_locks VALUES('file')"));
+        QVERIFY(fixture.locked());
+        auto pack = fixture.pack;
+        if (fault == "database")
+            QVERIFY(QFile::remove(fixture.database));
+        else if (fault == "root")
+            pack["path"] = fixture.temp.path();
+        else
+            pack.remove("path");
+        QString error;
+        QVERIFY(LauncherContentState::read(pack, &error).isEmpty());
+        QVERIFY(!error.isEmpty());
+        QVERIFY(error.contains("Modrinth"));
+        QVERIFY(LauncherContentState::read(pack).isEmpty());
+        QCOMPARE(read(fixture.file), QByteArray("original content"));
+        if (fault == "database")
+            QVERIFY(!QFileInfo::exists(fixture.database));
+    }
+    void successfulAndUnsupportedReadsClearOldErrors_data() {
+        QTest::addColumn<QString>("provider");
+        for (const auto &provider : {"modrinth", "curseforge", "conflux", ""})
+            QTest::newRow(*provider ? provider : "no-provider") << QString(provider);
+    }
+    void successfulAndUnsupportedReadsClearOldErrors() {
+        QFETCH(QString, provider);
+        Fixture fixture(provider == "curseforge" ? "curseforge" : "modrinth");
+        auto pack = fixture.pack;
+        pack["provider"] = provider;
+        QString error = "old failure";
+        const auto rows = LauncherContentState::read(pack, &error);
+        QVERIFY(error.isEmpty());
+        QCOMPARE(rows.size(), provider == "modrinth" || provider == "curseforge" ? 1 : 0);
+        QCOMPARE(read(fixture.file), QByteArray("original content"));
+    }
+    void sourceReadRecoversAfterItsDatabaseReturns() {
+        Fixture fixture("modrinth");
+        QVERIFY(fixture.sql("INSERT INTO instance_content_locks VALUES('file')"));
+        const auto original = read(fixture.database);
+        const auto held = fixture.database + ".held";
+        QVERIFY(QFile::rename(fixture.database, held));
+        QString error;
+        QVERIFY(LauncherContentState::read(fixture.pack, &error).isEmpty());
+        QVERIFY(!error.isEmpty());
+        QVERIFY(QFile::rename(held, fixture.database));
+        const auto rows = LauncherContentState::read(fixture.pack, &error);
+        QVERIFY(error.isEmpty());
+        QCOMPARE(rows.size(), 1);
+        QVERIFY(rows.first().toMap().value("launcherLocked").toBool());
+        QCOMPARE(read(fixture.database), original);
+        QCOMPARE(read(fixture.file), QByteArray("original content"));
+    }
     void nativeRoundTrip_data() {
         QTest::addColumn<QString>("provider");
         QTest::addColumn<bool>("enabled");

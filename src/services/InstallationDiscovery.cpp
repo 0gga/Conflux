@@ -36,11 +36,13 @@ static QVariantMap inspectFolder(const QString &path, const QString &source, con
 DiscoveryResult InstallationDiscovery::scan(const QString &mrRoot, const QString &cfRoot) {
     DiscoveryResult result;
     QSet<QString> paths;
-    auto append = [&](const QVariantMap &row) {
+    auto append = [&](QVariantMap row) {
         auto path = QFileInfo(row.value("path").toString()).canonicalFilePath();
         if (path.isEmpty() || paths.contains(path))
             return;
         paths.insert(path);
+        if (row.value("provider") == "modrinth")
+            row["launcherDatabasePath"] = QDir(mrRoot).absoluteFilePath("app.db");
         result.installations.append(row);
     };
     const auto dbPath = QDir(mrRoot).filePath("app.db");

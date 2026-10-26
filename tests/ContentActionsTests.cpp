@@ -1711,7 +1711,7 @@ class ContentActionsTests : public QObject {
         auto reader = std::make_shared<NativePackFileStore>();
         NativeContentStore files(std::make_shared<NativeInstalledModIdentity>(reader),
                                  temp.path() + "/backups");
-        const QVariantMap pack{{"path", root}, {"provider", "modrinth"}};
+        const QVariantMap pack{{"path", root}};
         auto item = row("local", "author");
         item["sha1"] = hash("original");
         auto result = files.setEnabled(pack, item, false);

@@ -351,16 +351,26 @@ class FoundationTests : public QObject {
         const auto found = InstallationDiscovery::scan(mr, cf);
         QCOMPARE(found.installations.size(), 2);
         QCOMPARE(found.installations.first().toMap().value("title").toString(), "Modrinth Fixture");
+        QCOMPARE(found.installations.first().toMap().value("launcherDatabasePath").toString(),
+                 mr + "/app.db");
         QCOMPARE(found.installations.last().toMap().value("provider").toString(), "curseforge");
         QCOMPARE(found.installations.last().toMap().value("modCount").toInt(), 1);
         QFile after(cfProfile + "/minecraftinstance.json");
         QVERIFY(after.open(QIODevice::ReadOnly));
         QCOMPARE(after.readAll(), metadata);
     }
+    void discoveryReadsAppliedContentSetWithoutWrites_data() {
+        QTest::addColumn<bool>("externalProfile");
+        QTest::newRow("default-profile-root") << false;
+        QTest::newRow("external-profile-root") << true;
+    }
     void discoveryReadsAppliedContentSetWithoutWrites() {
+        QFETCH(bool, externalProfile);
         QTemporaryDir temp;
         const auto mr = temp.path() + "/ModrinthApp";
-        QVERIFY(QDir().mkpath(mr + "/profiles/A"));
+        const auto profile = externalProfile ? temp.path() + "/ExternalInstance" : mr + "/profiles/A";
+        QVERIFY(QDir().mkpath(mr));
+        QVERIFY(QDir().mkpath(profile));
         {
             auto db = QSqlDatabase::addDatabase("QSQLITE", "current-schema");
             db.setDatabaseName(mr + "/app.db");
@@ -370,8 +380,9 @@ class FoundationTests : public QObject {
                            "TEXT,id TEXT)"));
             QVERIFY(q.exec("CREATE TABLE instance_content_sets(id TEXT,game_version TEXT,loader "
                            "TEXT,loader_version TEXT)"));
-            QVERIFY(q.exec(
-                "INSERT INTO instances VALUES('Current schema','A','','set','local:verified-instance')"));
+            q.prepare("INSERT INTO instances VALUES('Current schema',?,'','set','local:verified-instance')");
+            q.addBindValue(externalProfile ? profile : QString("A"));
+            QVERIFY(q.exec());
             QVERIFY(q.exec("INSERT INTO instance_content_sets VALUES('set','1.21.1','neoforge','21.1.248')"));
         }
         QSqlDatabase::removeDatabase("current-schema");
@@ -384,6 +395,8 @@ class FoundationTests : public QObject {
         QCOMPARE(result.installations.first().toMap().value("launcherInstanceId").toString(),
                  QString("local:verified-instance"));
         const auto row = result.installations.first().toMap();
+        QCOMPARE(row.value("path").toString(), profile);
+        QCOMPARE(row.value("launcherDatabasePath").toString(), mr + "/app.db");
         QCOMPARE(row.value("gameVersion").toString(), QString("1.21.1"));
         QCOMPARE(row.value("loader").toString(), QString("neoforge"));
         QCOMPARE(row.value("loaderVersion").toString(), QString("21.1.248"));

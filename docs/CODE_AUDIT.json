@@ -1650,15 +1650,15 @@
     },
     "src/platform/LauncherContentState.cpp": {
       "phase": "non-ui",
-      "sha256": "a3594b3e66beab13252986de6d9cfbf34e3d5f2c31d3a5bf4658c14e749eb56a",
+      "sha256": "faea0b293a03c0bba487347a22da3ddb4c3df758a2b3cda7a157afe78e0b9c74",
       "status": "reviewed",
       "checks": [
-        "Bounded CurseForge JSON and read-only Modrinth SQL with unique scoped connection, bounded ancestor resolution and normalized source rows",
-        "No source metadata writes; disabled path/missing-file mapping inspected. Missing Modrinth database currently falls back to empty locks and reused error outputs need explicit fixtures."
+        "Read-only SQLite snapshot and canonical unique profile scope, relative/absolute paths, valid empty instances, explicit discovered database location and strict invalid-locator rejection reviewed",
+        "Missing/untracked/foreign/ambiguous authority fails without partial rows; reused errors clear.48 native lock/60 transaction outcomes include real-backend model retention/recovery and external-profile lock writes; per-file identity/path normalization remains AUD-33."
       ],
       "findings": [
         "AUD-33",
-        "AUD-34"
+        "AUD-40"
       ]
     },
     "src/platform/LauncherContentState.h": {
@@ -1670,8 +1670,7 @@
         "No source metadata writes; disabled path/missing-file mapping inspected. Missing Modrinth database currently falls back to empty locks and reused error outputs need explicit fixtures."
       ],
       "findings": [
-        "AUD-33",
-        "AUD-34"
+        "AUD-33"
       ]
     },
     "src/platform/NativeContentStore.cpp": {
@@ -1995,11 +1994,12 @@
     },
     "src/services/InstallationDiscovery.cpp": {
       "phase": "non-ui",
-      "sha256": "9324086cc1f748ea549f5d414ba02c01d2dddd361c308f6cddec3fa749243a32",
+      "sha256": "035b1c0c1bc811653e9a747996c85b28e589ae406ce06a3ad14c0ea80ac6964f",
       "status": "reviewed",
       "checks": [
         "Read-only public launcher fields, schema fallbacks and canonical deduplication",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: FoundationTests"
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FoundationTests",
+        "Modrinth rows carry the selected launcherDatabasePath through legacy/default/external discovery; canonical profile scope remains verified by the lock reader/writer.21 foundation outcomes pass with2 live opt-in skips."
       ],
       "findings": []
     },

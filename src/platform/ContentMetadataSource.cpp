@@ -195,15 +195,15 @@ void ContentMetadataSource::json(const QString &provider, const QString &path, c
 }
 void ContentMetadataSource::deliver(const QString &key, QJsonDocument document, QString error, bool cf,
                                     int generation) {
-    if (cf && generation != m_authGeneration) {
-        document = {};
-        error = "The CurseForge connection changed during identification.";
-    }
     const auto callbacks = m_pendingReads.take(key);
     const QPointer<ContentMetadataSource> guard(this);
     for (const auto &callback : callbacks) {
         if (!guard)
             return;
+        if (cf && generation != guard->m_authGeneration) {
+            document = {};
+            error = "The CurseForge connection changed during identification.";
+        }
         callback(document, error);
     }
 }

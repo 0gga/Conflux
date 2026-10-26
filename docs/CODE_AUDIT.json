@@ -1492,11 +1492,12 @@
     },
     "src/platform/ContentMetadataSource.cpp": {
       "phase": "non-ui",
-      "sha256": "3f1ce307b676cca4872ec874a2d13e17095d8a79ba4be73a73bcde09c14331f9",
+      "sha256": "dbdd4fa5e7b4734a1b93b06608e2fe57b25b365089acd83d5f378283b10dd012",
       "status": "reviewed",
       "checks": [
         "Reviewed hash proofs, index snapshots, fingerprints, coalesced API reads, partial metadata, author teams and quiet completion. Per-waiter auth generations, negative caching and unknown-field provenance remain tracked.",
-        "Source review; uncovered states remain explicit. Related regression sources: ContentMetadataTests"
+        "Source review; uncovered states remain explicit. Related regression sources: ContentMetadataTests",
+        "Coalesced delivery checks lifetime before each provider authentication-generation check. Three original stale-delivery failures reproduced;20 metadata outcomes verify key changes/trimming, independent Modrinth reads, quiet retryable fallbacks, current-key retry and both-provider disposal. Other metadata continuations remain AUD-07."
       ],
       "findings": [
         "AUD-07",
@@ -1640,10 +1641,12 @@
       "status": "reviewed",
       "checks": [
         "Only explicit owner-authorized content lock ports write source state; ContentAccess instance lease, contained paths, exact hash check for locks and recovery unlock semantics",
-        "Modrinth BEGIN IMMEDIATE/all-row verification/backups/rollback; CurseForge bounded lossless patch, sharing guard, byte comparison and atomic replacement reviewed. External non-cooperating compare/commit races are not universally prevented."
+        "Modrinth BEGIN IMMEDIATE/all-row verification/backups/rollback; CurseForge bounded lossless patch, sharing guard, byte comparison and atomic replacement reviewed. External non-cooperating compare/commit races are not universally prevented.",
+        "Canonical profile scope still uses Qt case-insensitive string comparison on Windows. An independent actual-file probe shows Qt-equivalent Unicode names that remain distinct to Windows; full source read/write isolation regressions and directory-identity guards remain AUD-41."
       ],
       "findings": [
-        "AUD-33"
+        "AUD-33",
+        "AUD-41"
       ]
     },
     "src/platform/LauncherContentLocks.h": {
@@ -1664,11 +1667,13 @@
       "status": "reviewed",
       "checks": [
         "Read-only SQLite snapshot and canonical unique profile scope, relative/absolute paths, valid empty instances, explicit discovered database location and strict invalid-locator rejection reviewed",
-        "Missing/untracked/foreign/ambiguous authority fails without partial rows; reused errors clear.48 native lock/60 transaction outcomes include real-backend model retention/recovery and external-profile lock writes; per-file identity/path normalization remains AUD-33."
+        "Missing/untracked/foreign/ambiguous authority fails without partial rows; reused errors clear.48 native lock/60 transaction outcomes include real-backend model retention/recovery and external-profile lock writes; per-file identity/path normalization remains AUD-33.",
+        "Canonical profile scope still uses Qt case-insensitive string comparison on Windows. An independent actual-file probe shows Qt-equivalent Unicode names that remain distinct to Windows; full source read/write isolation regressions and directory-identity guards remain AUD-41."
       ],
       "findings": [
         "AUD-33",
-        "AUD-40"
+        "AUD-40",
+        "AUD-41"
       ]
     },
     "src/platform/LauncherContentState.h": {

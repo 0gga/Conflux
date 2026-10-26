@@ -17,63 +17,75 @@ void DependencyRemovals::accept(Offer offer) {
         ++m_generation;
     m_pack = std::move(offer.pack);
     m_files = std::move(offer.files);
+    QSet<QString> known(m_keys.cbegin(), m_keys.cend());
     for (const auto &key : offer.keys)
-        if (!m_keys.contains(key))
+        if (!known.contains(key)) {
+            known.insert(key);
             m_keys << key;
+        }
     for (const auto &value : m_files) {
         const auto row = value.toMap();
-        if (m_keys.contains(contentRowKey(row)))
+        if (known.contains(contentRowKey(row)))
             m_details[contentRowKey(row)] = row;
     }
-    publish();
 }
 void DependencyRemovals::observe(const QVariantMap &pack, const QVariantList &before,
                                  const QVariantList &current, const QStringList &targets,
                                  const QString &error, bool cleanup) {
     const auto path = pack.value("path").toString();
-    if (visible() && m_pack.value("path").toString() == path) {
+    bool changed = visible() && m_pack.value("path").toString() == path;
+    if (changed) {
         m_pack = pack;
         m_files = current;
         for (const auto &key : targets) {
             if (m_queued.remove(key) && !error.isEmpty())
                 m_errors[key] = error;
         }
+        const QSet<QString> offered(m_keys.cbegin(), m_keys.cend());
         for (const auto &value : current) {
             const auto row = value.toMap();
-            if (m_keys.contains(contentRowKey(row)))
+            if (offered.contains(contentRowKey(row)))
                 m_details[contentRowKey(row)] = row;
         }
-        publish();
     }
     for (auto &offer : m_offers)
         if (offer.pack.value("path").toString() == path) {
             offer.pack = pack;
             offer.files = current;
         }
-    if (cleanup || !error.isEmpty() || path.isEmpty())
-        return;
-    auto keys = ContentDependencyGraph(before).descendants(targets);
-    QSet<QString> present;
-    for (const auto &value : current)
-        present.insert(contentRowKey(value.toMap()));
-    keys.erase(
-        std::remove_if(keys.begin(), keys.end(), [&](const auto &key) { return !present.contains(key); }),
-        keys.end());
-    if (keys.isEmpty())
-        return;
-    Offer offer{pack, current, keys};
-    if (!visible() || m_pack.value("path").toString() == path)
-        accept(std::move(offer));
-    else {
-        for (auto &waiting : m_offers)
-            if (waiting.pack.value("path").toString() == path) {
-                for (const auto &key : keys)
-                    if (!waiting.keys.contains(key))
-                        waiting.keys << key;
-                return;
+    if (!cleanup && error.isEmpty() && !path.isEmpty()) {
+        auto keys = ContentDependencyGraph(before).descendants(targets);
+        QSet<QString> present;
+        for (const auto &value : current)
+            present.insert(contentRowKey(value.toMap()));
+        keys.erase(
+            std::remove_if(keys.begin(), keys.end(), [&](const auto &key) { return !present.contains(key); }),
+            keys.end());
+        if (!keys.isEmpty()) {
+            if (!visible() || m_pack.value("path").toString() == path) {
+                accept({pack, current, keys});
+                changed = true;
+            } else {
+                auto waiting = std::find_if(m_offers.begin(), m_offers.end(), [&](const auto &offer) {
+                    return offer.pack.value("path").toString() == path;
+                });
+                if (waiting == m_offers.end())
+                    m_offers << Offer{pack, current, keys};
+                else {
+                    QSet<QString> known(waiting->keys.cbegin(), waiting->keys.cend());
+                    for (const auto &key : keys)
+                        if (!known.contains(key)) {
+                            known.insert(key);
+                            waiting->keys << key;
+                        }
+                }
             }
-        m_offers << std::move(offer);
+        }
     }
+    // Publish only the final snapshot. A subscriber can dismiss, replace or
+    // destroy this offer; no old observation may continue afterward.
+    if (changed)
+        publish();
 }
 void DependencyRemovals::rebuild() {
     const ContentDependencyGraph graph(m_files);
@@ -158,6 +170,8 @@ void DependencyRemovals::removeUnused() {
     apply(m_unused);
 }
 void DependencyRemovals::dismiss() {
+    if (!visible())
+        return;
     ++m_generation;
     m_keys.clear();
     m_files.clear();
@@ -169,8 +183,10 @@ void DependencyRemovals::dismiss() {
     publish();
     if (guard)
         QTimer::singleShot(0, this, [this] {
-            if (!visible() && !m_offers.isEmpty())
+            if (!visible() && !m_offers.isEmpty()) {
                 accept(m_offers.takeFirst());
+                publish();
+            }
         });
 }
 } // namespace studio

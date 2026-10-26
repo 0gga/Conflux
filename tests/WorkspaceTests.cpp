@@ -10,6 +10,7 @@
 #include <QJSValue>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QPointer>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -17,6 +18,7 @@
 #include <QSemaphore>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QThreadPool>
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 #include <atomic>
@@ -100,6 +102,87 @@ class WorkspaceTests : public QObject {
         QTRY_VERIFY(!workspace.busy());
         QCOMPARE(workspace.files(), files);
         QVERIFY(!workspace.issues().isEmpty());
+        for (int i = 0; i < 3; ++i) {
+            workspace.refresh();
+            QTRY_VERIFY(!workspace.busy());
+            QCOMPARE(workspace.files(), files);
+            QCOMPARE(workspace.issues().size(), 1);
+        }
+        inspector->fail = false;
+        workspace.refresh();
+        QTRY_VERIFY(!workspace.busy());
+        QCOMPARE(workspace.files(), files);
+        QVERIFY(workspace.issues().isEmpty());
+    }
+
+    void disposedWorkspaceDoesNotScheduleWorkAfterNotification_data() {
+        QTest::addColumn<bool>("setPack");
+        QTest::newRow("set-pack") << true;
+        QTest::newRow("refresh") << false;
+    }
+    void disposedWorkspaceDoesNotScheduleWorkAfterNotification() {
+        QFETCH(bool, setPack);
+        class Inspector final : public IPackContentInspector {
+          public:
+            mutable std::atomic<int> calls{0};
+            PackContentResult inspect(const QVariantMap &) const override {
+                ++calls;
+                return {};
+            }
+        };
+        auto inspector = std::make_shared<Inspector>();
+        QPointer<PackWorkspace> workspace = new PackWorkspace(inspector);
+        if (!setPack) {
+            workspace->setPack({{"path", "first"}});
+            QTRY_VERIFY(!workspace->busy());
+        }
+        const int before = inspector->calls.load();
+        connect(workspace, &PackWorkspace::changed, this, [&] {
+            if (workspace->busy())
+                delete workspace.data();
+        });
+        if (setPack)
+            workspace->setPack({{"path", "first"}});
+        else
+            workspace->refresh();
+        QVERIFY(workspace.isNull());
+        QCOMPARE(inspector->calls.load(), before);
+    }
+
+    void reentrantPackSelectionSchedulesOnlyTheLatestRead_data() {
+        QTest::addColumn<QString>("nextPath");
+        QTest::newRow("another-pack") << QString("second");
+        QTest::newRow("no-pack") << QString{};
+    }
+    void reentrantPackSelectionSchedulesOnlyTheLatestRead() {
+        QFETCH(QString, nextPath);
+        class Inspector final : public IPackContentInspector {
+          public:
+            mutable std::atomic<int> calls{0};
+            PackContentResult inspect(const QVariantMap &pack) const override {
+                ++calls;
+                return {{{QVariantMap{{"relativePath", pack.value("path")}}}}, {}, {}, {}};
+            }
+        };
+        auto inspector = std::make_shared<Inspector>();
+        PackWorkspace workspace(inspector);
+        bool redirected = false;
+        connect(&workspace, &PackWorkspace::changed, this, [&] {
+            if (!redirected && workspace.busy()) {
+                redirected = true;
+                workspace.setPack(nextPath.isEmpty() ? QVariantMap{} : QVariantMap{{"path", nextPath}});
+            }
+        });
+        workspace.setPack({{"path", "first"}});
+        QTRY_VERIFY(!workspace.busy());
+        QVERIFY(QThreadPool::globalInstance()->waitForDone(5000));
+        QCoreApplication::processEvents();
+        QCOMPARE(workspace.pack().value("path").toString(), nextPath);
+        QCOMPARE(inspector->calls.load(), nextPath.isEmpty() ? 0 : 1);
+        if (nextPath.isEmpty())
+            QVERIFY(workspace.files().isEmpty());
+        else
+            QCOMPARE(workspace.files().first().toMap().value("relativePath").toString(), nextPath);
     }
 
     void backgroundMetadataRefreshDoesNotMakeRepositoryControlsBusy() {

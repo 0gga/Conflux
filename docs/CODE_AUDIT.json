@@ -632,15 +632,13 @@
     },
     "src/features/content/DependencyRemovals.cpp": {
       "phase": "non-ui",
-      "sha256": "7cc7276896a121207b1d089da5fa442c3581855f16a0e52de07c1a708a495393",
+      "sha256": "3f3f453f25ddaca4b44b08d8e2794d4a72d925c06c6b72ff3c2209ee11e32830",
       "status": "reviewed",
       "checks": [
-        "Full review: graph-derived offers, original target capture, queued/error/removed states, exception-to-retry behavior and dismissal-safe accepted commands. observe continues after publish without owner/generation checks; track before changing.",
-        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+        "Complete candidate/error/inventory merge precedes one final publication; no continuation after reentrant dismissal/replacement/destruction",
+        "Captured accepted removal scope preserved; idempotent hidden dismissal; hash-set membership; 17 focused outcomes including 310/3000-row budgets"
       ],
-      "findings": [
-        "AUD-07"
-      ]
+      "findings": []
     },
     "src/features/content/DependencyRemovals.h": {
       "phase": "non-ui",
@@ -1203,16 +1201,13 @@
     },
     "src/features/workspace/PackWorkspace.cpp": {
       "phase": "non-ui",
-      "sha256": "2dc5a232d1811b28051d392feccab9c197fa3720d16efe7a2aa01eeb75095747",
+      "sha256": "d75a8c1a376e84cabc31081493e10df49fac725cfacf4b234d6897e5f2089482",
       "status": "reviewed",
       "checks": [
-        "Full review: one worker, generation-scoped stale completions, current-root replacement and exception-to-last-good inventory. Public notification continuations and repeated transient-error accumulation remain open.",
-        "Source review is separate from measured coverage and does not close the listed behavior gaps."
+        "Captured serialized worker scan, generation/QPointer notification guards, last-good inventory on exceptions and deduplicated transient failures",
+        "20 focused workspace outcomes including reentrant selection/destruction, repeated failures and successful recovery"
       ],
-      "findings": [
-        "AUD-07",
-        "AUD-08"
-      ]
+      "findings": []
     },
     "src/features/workspace/PackWorkspace.h": {
       "phase": "non-ui",

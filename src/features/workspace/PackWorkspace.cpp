@@ -1,5 +1,6 @@
 #include "PackWorkspace.h"
 #include <QFutureWatcher>
+#include <QPointer>
 #include <QtConcurrent>
 #include <exception>
 namespace studio {
@@ -13,12 +14,16 @@ void PackWorkspace::setPack(const QVariantMap &pack) {
     m_pack = pack;
     if (changedRoot)
         m_content = {};
+    const QPointer<PackWorkspace> guard(this);
+    const auto generation = m_generation + 1;
     refresh();
+    if (!guard || generation != m_generation)
+        return;
     if (wasBusy && m_busy)
         emit changed();
 }
 void PackWorkspace::refresh() {
-    ++m_generation;
+    const auto generation = ++m_generation;
     if (m_pack.isEmpty()) {
         m_content = {};
         m_busy = false;
@@ -26,9 +31,12 @@ void PackWorkspace::refresh() {
         return;
     }
     const bool wasBusy = m_busy;
+    const QPointer<PackWorkspace> guard(this);
     m_busy = true;
     if (!wasBusy)
         emit changed();
+    if (!guard || generation != m_generation)
+        return;
     if (!m_scanRunning)
         startScan();
 }
@@ -58,9 +66,12 @@ void PackWorkspace::startScan() {
         } catch (...) {
             auto result = previous;
             const QString message = "Could not inspect this instance. Refresh to retry.";
-            result.diagnostics << message;
-            result.issues << QVariantMap{
-                {"category", "inventory"}, {"severity", "error"}, {"message", message}};
+            if (!result.diagnostics.contains(message))
+                result.diagnostics << message;
+            const QVariant issue =
+                QVariantMap{{"category", "inventory"}, {"severity", "error"}, {"message", message}};
+            if (!result.issues.contains(issue))
+                result.issues << issue;
             return result;
         }
     }));

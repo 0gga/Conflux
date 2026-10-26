@@ -1,9 +1,12 @@
 #include "ContentFixtures.h"
+#include "TestPerformance.h"
 #include "features/content/ContentActions.h"
 #include "features/content/DependencyRemovals.h"
 #include "features/preferences/ContentPreferences.h"
+#include <QElapsedTimer>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QPointer>
 #include <QTemporaryDir>
 #include <QtTest>
 #include <algorithm>
@@ -60,6 +63,136 @@ class Files final : public IContentFileStore {
 class DependencyRemovalTests final : public QObject {
     Q_OBJECT
   private slots:
+    void dismissingAnAlreadyHiddenOfferDoesNotNotifyOrReenter() {
+        DependencyRemovals model;
+        QSignalSpy changed(&model, &DependencyRemovals::changed);
+        model.dismiss();
+        QCOMPARE(changed.size(), 0);
+        const auto root = row("Root", {"B"}), b = row("B");
+        model.observe({{"path", "first"}}, {root, b}, {b}, {key("Root")}, {}, false);
+        bool closed = false;
+        connect(&model, &DependencyRemovals::changed, this, [&] {
+            if (!model.visible()) {
+                closed = true;
+                model.dismiss();
+            }
+        });
+        model.dismiss();
+        QVERIFY(closed);
+        QCOMPARE(changed.size(), 2);
+        model.dismiss();
+        QCOMPARE(changed.size(), 2);
+    }
+    void largeCleanupRefreshHasOneCoherentPublicationAndBoundedCpu_data() {
+        QTest::addColumn<int>("count");
+        QTest::newRow("owner-sized-310") << 310;
+        QTest::newRow("large-3000") << 3000;
+    }
+    void largeCleanupRefreshHasOneCoherentPublicationAndBoundedCpu() {
+        QFETCH(int, count);
+        QVariantList files;
+        QStringList dependencies;
+        for (int i = 0; i < count; ++i) {
+            const auto name = "Item" + QString::number(i);
+            auto file = row(name);
+            file["locked"] = i == count - 1;
+            files << file;
+            dependencies << name;
+        }
+        const QVariantMap pack{{"path", "first"}};
+        DependencyRemovals model;
+        QVariantList before{row("Root", dependencies)};
+        before.append(files);
+        model.observe(pack, before, files, {key("Root")}, {}, false);
+        QCOMPARE(model.unusedCount(), count - 1);
+        auto locked = files[0].toMap();
+        locked["locked"] = true;
+        files[0] = locked;
+        before = {row("Next", dependencies)};
+        before.append(files);
+        QSignalSpy changed(&model, &DependencyRemovals::changed);
+        QElapsedTimer elapsed;
+        elapsed.start();
+        model.observe(pack, before, files, {key("Next")}, {}, false);
+        const auto milliseconds = elapsed.elapsed();
+        qInfo() << count << "dependency candidates refreshed ms" << milliseconds;
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(model.rows().size(), count);
+        QCOMPARE(model.unusedCount(), count - 2);
+        int kept = 0;
+        for (const auto &value : model.rows())
+            if (value.toMap().value("state") == "kept")
+                ++kept;
+        QCOMPARE(kept, 2);
+        QVERIFY(test_performance::releaseBudgetMet(milliseconds, count == 310 ? 75 : 450));
+    }
+    void eachRemovalObservationPublishesItsCompleteCandidateSet() {
+        DependencyRemovals model;
+        const QVariantMap pack{{"path", "first"}};
+        auto root = row("Root", {"B"}), b = row("B"), next = row("Next", {"C"}), c = row("C");
+        model.observe(pack, {root, b}, {b}, {key("Root")}, {}, false);
+        QVariantList snapshots;
+        connect(&model, &DependencyRemovals::changed, this, [&] { snapshots << QVariant(model.rows()); });
+        model.observe(pack, {next, b, c}, {b, c}, {key("Next")}, {}, false);
+        QCOMPARE(snapshots.size(), 1);
+        for (const auto &snapshot : snapshots) {
+            const auto rows = snapshot.toList();
+            QCOMPARE(rows.size(), 2);
+            QCOMPARE(rows.last().toMap().value("title").toString(), QString("C"));
+        }
+    }
+    void dismissalDuringObservationIsNotFollowedByAResurrectedOffer() {
+        DependencyRemovals model;
+        const QVariantMap pack{{"path", "first"}};
+        auto root = row("Root", {"B"}), b = row("B"), next = row("Next", {"C"}), c = row("C");
+        model.observe(pack, {root, b}, {b}, {key("Root")}, {}, false);
+        bool dismissed = false;
+        connect(&model, &DependencyRemovals::changed, this, [&] {
+            if (!dismissed) {
+                dismissed = true;
+                model.dismiss();
+            }
+        });
+        model.observe(pack, {next, b, c}, {b, c}, {key("Next")}, {}, false);
+        QVERIFY(dismissed);
+        QVERIFY(!model.visible());
+        QCoreApplication::processEvents();
+        QVERIFY(!model.visible());
+    }
+    void newerObservationDuringPublicationIsNeverRewound() {
+        DependencyRemovals model;
+        const QVariantMap pack{{"path", "first"}};
+        auto root = row("Root", {"B"}), b = row("B"), next = row("Next", {"C"}), c = row("C"),
+             last = row("Last", {"D"}), d = row("D");
+        model.observe(pack, {root, b}, {b}, {key("Root")}, {}, false);
+        bool redirected = false;
+        connect(&model, &DependencyRemovals::changed, this, [&] {
+            if (!redirected) {
+                redirected = true;
+                model.observe(pack, {last, b, c, d}, {b, c, d}, {key("Last")}, {}, false);
+            }
+        });
+        model.observe(pack, {next, b, c}, {b, c}, {key("Next")}, {}, false);
+        QVERIFY(redirected);
+        bool found = false;
+        for (const auto &value : model.rows()) {
+            const auto item = value.toMap();
+            if (item.value("title") == "D") {
+                found = true;
+                QCOMPARE(item.value("state").toString(), QString("ready"));
+            }
+        }
+        QVERIFY(found);
+    }
+    void disposingAnExistingOfferDuringPublicationIsSafe() {
+        QPointer<DependencyRemovals> model = new DependencyRemovals;
+        const QVariantMap pack{{"path", "first"}};
+        const auto root = row("Root", {"B"}), b = row("B");
+        model->observe(pack, {root, b}, {b}, {key("Root")}, {}, false);
+        connect(model, &DependencyRemovals::changed, this, [&] { delete model.data(); });
+        model->observe(pack, {b}, {b}, {}, {}, true);
+        QVERIFY(model.isNull());
+    }
     void promptKeepsSharedAndLockedDependenciesAndQueuesOnlyExplicitActions() {
         DependencyRemovals model;
         const QVariantMap pack{{"path", "original"}};

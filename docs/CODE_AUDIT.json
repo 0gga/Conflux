@@ -328,11 +328,12 @@
     },
     "src/features/content/ContentDependencyInstaller.cpp": {
       "phase": "non-ui",
-      "sha256": "36a0d5024a1d7c18e66295515f002935337028f3062ae571cf78ccd81df625e2",
+      "sha256": "101c8aa4989cf3fb0be96b92e52e4d26ad16605ec3435b0e60d0e11cb0b4fc85",
       "status": "reviewed",
       "checks": [
         "Root-first independent commits, bounded expansion, cancellation, duplicate delivery and retained choices; missing retained descendants need reproduction",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentDependencyTests OptionalDependencyTests"
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentDependencyTests OptionalDependencyTests",
+        "Verified retained-release/fresh exact-hash required traversal, exact cached proof, cycle/version-alias deduplication, unchanged disabled/locked files, inherited stages and independent child failures;84 dependency outcomes including12 real temporary-file transactions. Unrelated releases decoded only after identity matching;310/3000 retained-graph fixtures."
       ],
       "findings": [
         "AUD-16",
@@ -341,11 +342,12 @@
     },
     "src/features/content/ContentDependencyInstaller.h": {
       "phase": "non-ui",
-      "sha256": "b68599f9258eaf6415c23717e8bbe90edd27b8dc2211de4f08f6b1cd7c8758a6",
+      "sha256": "3f3de505275eb43b42b7c874e7e30d086cb13b1b5e52bde0810f56ef16c81269",
       "status": "reviewed",
       "checks": [
         "Root-first independent commits, bounded expansion, cancellation, duplicate delivery and retained choices; missing retained descendants need reproduction",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentDependencyTests OptionalDependencyTests"
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentDependencyTests OptionalDependencyTests",
+        "Verified retained-release/fresh exact-hash required traversal, exact cached proof, cycle/version-alias deduplication, unchanged disabled/locked files, inherited stages and independent child failures;84 dependency outcomes including12 real temporary-file transactions. Unrelated releases decoded only after identity matching;310/3000 retained-graph fixtures."
       ],
       "findings": [
         "AUD-16",

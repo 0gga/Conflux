@@ -1,6 +1,7 @@
 #pragma once
 #include "ContentPorts.h"
 #include <QObject>
+#include <QPair>
 #include <QQueue>
 #include <QSet>
 #include <memory>
@@ -45,6 +46,7 @@ class ContentDependencyInstaller final : public QObject, public IContentInstalle
     QQueue<ContentInstallRequest> m_roots;
     QQueue<PendingDependency> m_dependencies;
     QSet<QString> m_seen;
+    QSet<QPair<QString, QString>> m_expandedReleases;
     QHash<QString, QString> m_selected;
     Callback m_callback;
     QStringList m_warnings, m_errors;
@@ -54,8 +56,9 @@ class ContentDependencyInstaller final : public QObject, public IContentInstalle
     void next();
     void later();
     void apply(ContentInstallRequest, bool root);
-    void expand(const ContentInstallRequest &);
-    bool retained(const ContentDependency &) const;
+    void expand(const ContentInstallRequest &, bool offerOptional = true);
+    void expandRetained(const QVariantMap &, const QStringList &channels);
+    QVariantMap retainedRow(const ContentDependency &) const;
     void finish();
 };
 } // namespace studio

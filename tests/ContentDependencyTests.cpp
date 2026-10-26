@@ -72,12 +72,14 @@ class Source final : public IContentDependencySource {
   public:
     QHash<QString, ContentInstallRequest> values;
     QStringList calls;
+    QHash<QString, QStringList> channels;
     QHash<QString, QString> failures;
     bool throwing = false, held = false;
     Callback completion;
     void resolve(const QVariantMap &, const QVariantList &, const ContentDependency &reference,
-                 const QStringList &, Callback callback) override {
+                 const QStringList &allowedChannels, Callback callback) override {
         calls << reference.projectId;
+        channels[reference.projectId] = allowedChannels;
         if (throwing)
             throw std::runtime_error("Fixture dependency exception");
         if (held) {
@@ -363,6 +365,286 @@ class ContentDependencyTests final : public QObject {
         QTRY_VERIFY(done);
         QCOMPARE(leaf->calls, QStringList{"root"});
         QCOMPARE(files->rows.size(), 2);
+    }
+    void retainedDependenciesExpandTheirVerifiedCachedChildren_data() {
+        QTest::addColumn<QString>("provider");
+        QTest::addColumn<QString>("state");
+        for (const auto &provider : {QString("modrinth"), QString("curseforge")})
+            for (const auto &state : {QString("enabled"), QString("disabled"), QString("locked"),
+                                      QString("disabled-older"), QString("child-fails")})
+                QTest::newRow(qPrintable(provider + '-' + state)) << provider << state;
+    }
+    void retainedDependenciesExpandTheirVerifiedCachedChildren() {
+        QFETCH(QString, provider);
+        QFETCH(QString, state);
+        const auto make = [&](const QString &id, const QStringList &children = {}) {
+            auto value = selected(id);
+            value.release.provider = provider;
+            value.sourceIds = {{provider, id}};
+            for (const auto &child : children)
+                value.release.dependencyRefs
+                    << (provider == "modrinth" ? required(child)
+                                               : QJsonObject{{"relationType", 3}, {"modId", child.toInt()}});
+            return value;
+        };
+        auto files = std::make_shared<Files>();
+        auto existing = contentInstallPrediction(make("22", {"33"}), pack(), {});
+        const bool disabled = state.startsWith("disabled");
+        existing["enabled"] = !disabled;
+        existing["locked"] = state == "locked";
+        if (disabled)
+            existing["relativePath"] = "mods/22.jar.disabled";
+        files->rows = {existing};
+        auto leaf = std::make_shared<Leaf>(files);
+        auto source = std::make_shared<Source>();
+        source->values["33"] = make("33");
+        if (state == "child-fails")
+            source->failures["33"] = "Child is temporarily unavailable";
+        auto root = make("11", {"22"});
+        if (state == "disabled-older" && provider == "modrinth")
+            root.release.dependencyRefs = {required("22", "22-v2")};
+        root.allowedChannels = {"release", "beta"};
+        ContentDependencyInstaller installer(leaf, source, files);
+        bool done = false;
+        installer.install(pack(), files->rows, {root}, [&](auto result) {
+            QVERIFY(result.ok);
+            QCOMPARE(result.warnings.isEmpty(), state != "child-fails");
+            done = true;
+        });
+        QTRY_VERIFY(done);
+        QCOMPARE(source->calls, QStringList{"33"});
+        QCOMPARE(source->channels.value("33"), root.allowedChannels);
+        QCOMPARE(leaf->calls, state == "child-fails" ? QStringList{"11"} : QStringList({"11", "33"}));
+        QCOMPARE(files->rows.first().toMap(), existing);
+    }
+    void retainedCachedGraphsRequireExactFileAndProviderProof_data() {
+        QTest::addColumn<QString>("fault");
+        for (const auto &fault : {"none", "hash-case", "missing-hash", "different-hash", "missing-version",
+                                  "foreign-project", "unknown-provider"})
+            QTest::newRow(fault) << QString(fault);
+    }
+    void retainedCachedGraphsRequireExactFileAndProviderProof() {
+        QFETCH(QString, fault);
+        auto files = std::make_shared<Files>();
+        auto dependency = selected("lib", {"child"});
+        if (fault == "hash-case")
+            dependency.release.sha1 = dependency.release.sha1.toUpper();
+        if (fault == "missing-hash")
+            dependency.release.sha1.clear();
+        if (fault == "different-hash")
+            dependency.release.sha1 = hash("different bytes");
+        if (fault == "missing-version")
+            dependency.release.id.clear();
+        if (fault == "foreign-project")
+            dependency.release.projectId = "foreign";
+        if (fault == "unknown-provider")
+            dependency.release.provider = "unknown";
+        auto existing = contentInstallPrediction(selected("lib"), pack(), {});
+        existing["installedRelease"] = dependency.release.toVariant();
+        existing["enabled"] = false;
+        files->rows = {existing};
+        auto leaf = std::make_shared<Leaf>(files);
+        auto source = std::make_shared<Source>();
+        source->values["child"] = selected("child");
+        ContentDependencyInstaller installer(leaf, source, files);
+        bool done = false;
+        installer.install(pack(), files->rows, {selected("root", {"lib"})}, [&](auto result) {
+            QVERIFY(result.ok);
+            QVERIFY(result.warnings.isEmpty());
+            done = true;
+        });
+        QTRY_VERIFY(done);
+        const bool verified = fault == "none" || fault == "hash-case";
+        QCOMPARE(source->calls, verified ? QStringList{"child"} : QStringList{});
+        QCOMPARE(leaf->calls, verified ? QStringList({"root", "child"}) : QStringList{"root"});
+        QCOMPARE(files->rows.first().toMap(), existing);
+    }
+    void retainedCyclesVersionAliasesAndReuseStayBounded() {
+        auto files = std::make_shared<Files>();
+        auto dependency = selected("lib", {"root", "child"});
+        dependency.release.dependencyRefs
+            << QJsonObject{{"dependency_type", "optional"}, {"project_id", "unchanged-optional"}};
+        const auto existing = contentInstallPrediction(dependency, pack(), {});
+        auto root = selected("root", {"lib"});
+        root.release.dependencyRefs << required("", dependency.release.id);
+        auto leaf = std::make_shared<Leaf>(files);
+        auto source = std::make_shared<Source>();
+        source->values["child"] = selected("child");
+        ContentDependencyInstaller installer(leaf, source, files);
+        QSignalSpy offered(&installer, &ContentDependencyInstaller::optionalDependencies);
+        for (int run = 0; run < 2; ++run) {
+            files->rows = {existing};
+            leaf->calls.clear();
+            source->calls.clear();
+            bool done = false;
+            installer.install(pack(), files->rows, {root}, [&](auto result) {
+                QVERIFY(result.ok);
+                QVERIFY(result.warnings.isEmpty());
+                done = true;
+            });
+            QTRY_VERIFY(done);
+            QCOMPARE(source->calls, QStringList{"child"});
+            QCOMPARE(leaf->calls, QStringList({"root", "child"}));
+            QCOMPARE(offered.size(), 0);
+        }
+    }
+    void exactSharedBytesStillExpandFreshRequiredDeclarations() {
+        auto files = std::make_shared<Files>();
+        auto dependency = selected("lib", {"child"});
+        auto existing = contentInstallPrediction(selected("other-platform"), pack(), {});
+        existing["sha1"] = dependency.release.sha1;
+        existing["sourceIds"] = QVariantMap{{"curseforge", "22"}};
+        existing["installedRelease"] = QVariantMap{};
+        existing["enabled"] = false;
+        existing["relativePath"] = "mods/retained.jar.disabled";
+        files->rows = {existing};
+        auto leaf = std::make_shared<Leaf>(files);
+        auto source = std::make_shared<Source>();
+        source->values["lib"] = dependency;
+        source->values["child"] = selected("child");
+        ContentDependencyInstaller installer(leaf, source, files);
+        bool done = false;
+        installer.install(pack(), files->rows, {selected("root", {"lib"})}, [&](auto result) {
+            QVERIFY(result.ok);
+            QVERIFY(result.warnings.isEmpty());
+            done = true;
+        });
+        QTRY_VERIFY(done);
+        QCOMPARE(source->calls, QStringList({"lib", "child"}));
+        QCOMPARE(leaf->calls, QStringList({"root", "child"}));
+        QCOMPARE(files->rows.first().toMap(), existing);
+    }
+    void largeRetainedGraphsAvoidUnrelatedReleaseDecoding_data() {
+        QTest::addColumn<int>("count");
+        QTest::newRow("310-files") << 310;
+        QTest::newRow("3000-files") << 3000;
+    }
+    void largeRetainedGraphsAvoidUnrelatedReleaseDecoding() {
+        QFETCH(int, count);
+        auto files = std::make_shared<Files>();
+        QStringList references;
+        for (int i = 0; i < count; ++i) {
+            const auto id = QString("lib%1").arg(i);
+            files->rows << contentInstallPrediction(selected(id), pack(), {});
+            if (i >= count - 256)
+                references << id;
+        }
+        auto leaf = std::make_shared<Leaf>(files);
+        auto source = std::make_shared<Source>();
+        ContentDependencyInstaller installer(leaf, source, files);
+        QElapsedTimer elapsed;
+        elapsed.start();
+        bool done = false;
+        installer.install(pack(), files->rows, {selected("root", references)}, [&](auto result) {
+            QVERIFY(result.ok);
+            QVERIFY(result.warnings.isEmpty());
+            done = true;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(done, test_performance::completionTimeout(15000));
+        qInfo() << count << "files / 256 retained references ms" << elapsed.elapsed();
+        QCOMPARE(leaf->calls, QStringList{"root"});
+        QVERIFY(source->calls.isEmpty());
+        QVERIFY(test_performance::releaseBudgetMet(elapsed.elapsed(), 750));
+    }
+    void nativeRetainedGraphsKeepFilesAndInstallMissingChildren_data() {
+        QTest::addColumn<QString>("provider");
+        QTest::addColumn<QString>("state");
+        QTest::addColumn<bool>("childFails");
+        for (const auto &provider : {QString("modrinth"), QString("curseforge")})
+            for (const auto &state : {QString("enabled"), QString("disabled"), QString("locked")})
+                for (bool fails : {false, true})
+                    QTest::newRow(qPrintable(provider + '-' + state + QString::number(fails)))
+                        << provider << state << fails;
+    }
+    void nativeRetainedGraphsKeepFilesAndInstallMissingChildren() {
+        QFETCH(QString, provider);
+        QFETCH(QString, state);
+        QFETCH(bool, childFails);
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        Server server;
+        const QVariantMap target{
+            {"path", temp.path() + "/instance"}, {"minecraft", "1.21.1"}, {"loader", "fabric"}};
+        const auto path = target.value("path").toString();
+        QVERIFY(QDir().mkpath(path + "/mods"));
+        const auto rootBytes = archive(temp.path() + "/root.jar", "root");
+        const auto retainedBytes = archive(temp.path() + "/retained.jar", "retained");
+        const auto childBytes = archive(temp.path() + "/child.jar", "child");
+        QVERIFY(!rootBytes.isEmpty() && !retainedBytes.isEmpty() && !childBytes.isEmpty());
+        Release root, retained, child;
+        QString retainedEndpoint, childEndpoint;
+        if (provider == "modrinth") {
+            root = modrinthRelease(server.modrinth("root", "root-v1", rootBytes, {required("retained")}));
+            retained = modrinthRelease(
+                server.modrinth("retained", "retained-v1", retainedBytes, {required("child")}));
+            child = modrinthRelease(server.modrinth("child", "child-v1", childBytes));
+            retainedEndpoint = "/project/retained/version";
+            childEndpoint = "/project/child/version";
+        } else {
+            root = curseforgeRelease(
+                server.curseforge(11, 101, rootBytes, {QJsonObject{{"modId", 22}, {"relationType", 3}}}));
+            retained = curseforgeRelease(
+                server.curseforge(22, 202, retainedBytes, {QJsonObject{{"modId", 33}, {"relationType", 3}}}));
+            child = curseforgeRelease(server.curseforge(33, 303, childBytes));
+            retainedEndpoint = "/mods/22";
+            childEndpoint = "/mods/33";
+        }
+        // Complete cached metadata must work even when the retained project's API is unavailable.
+        server.statuses[retainedEndpoint] = 503;
+        if (childFails)
+            server.statuses[childEndpoint] = 503;
+        const auto relative = "mods/kept.jar" + QString(state == "disabled" ? ".disabled" : "");
+        QFile kept(path + '/' + relative);
+        QVERIFY(kept.open(QIODevice::WriteOnly));
+        QCOMPARE(kept.write(retainedBytes), retainedBytes.size());
+        kept.close();
+        auto cached = contentInstallPrediction(request(retained), target, {});
+        cached["relativePath"] = relative;
+        cached["enabled"] = state != "disabled";
+        cached["locked"] = state == "locked";
+        auto locks = std::make_shared<ContentLockRegistry>();
+        locks->setRows(path, {cached});
+        auto files = std::make_shared<NativeContentStore>(nullptr, temp.path() + "/backups", locks);
+        auto leaf = std::make_shared<ContentInstaller>(files, nullptr, true, server.base(), server.base());
+        auto source = std::make_shared<ContentDependencySource>(nullptr, server.base(), server.base());
+        leaf->setCurseforgeKey("fixture-key");
+        source->setCurseforgeKey("fixture-key");
+        ContentDependencyInstaller installer(leaf, source, files);
+        bool childRequestedAfterRootCommit = false;
+        server.requested = [&](const QString &endpoint) {
+            if (endpoint == childEndpoint)
+                childRequestedAfterRootCommit = read(path + "/mods/" + root.filename) == rootBytes;
+        };
+        bool done = false;
+        ContentWriteResult result;
+        installer.install(target, {cached}, {request(root)}, [&](auto value) {
+            result = value;
+            done = true;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(done, test_performance::completionTimeout(15000));
+        QVERIFY2(result.ok, qPrintable(result.error));
+        QCOMPARE(result.warnings.isEmpty(), !childFails);
+        QCOMPARE(read(path + "/mods/" + root.filename), rootBytes);
+        QCOMPARE(read(path + '/' + relative), retainedBytes);
+        QVERIFY(!QFileInfo::exists(path + "/mods/" + retained.filename));
+        QCOMPARE(read(path + "/mods/" + child.filename), childFails ? QByteArray{} : childBytes);
+        QVERIFY(childRequestedAfterRootCommit);
+        for (const auto &endpoint : server.requests)
+            QVERIFY(!QUrl(endpoint).path().startsWith(retainedEndpoint));
+        const auto actual = files->reload(target, {cached});
+        QVERIFY2(actual.error.isEmpty(), qPrintable(actual.error));
+        QCOMPARE(actual.rows.size(), childFails ? 2 : 3);
+        int matched = 0;
+        for (const auto &value : actual.rows) {
+            const auto row = value.toMap();
+            if (row.value("relativePath") == relative) {
+                ++matched;
+                QCOMPARE(row.value("enabled").toBool(), state != "disabled");
+            }
+        }
+        QCOMPARE(matched, 1);
+        QCOMPARE(locks->locked(path, relative), state == "locked");
+        QCOMPARE(locks->projectLocked(path, provider, retained.projectId), state == "locked");
     }
     void shallowInstallerExceptionsDoNotLeaveTheCoordinatorBusy() {
         auto files = std::make_shared<Files>();

@@ -42,6 +42,7 @@ void ContentDependencyInstaller::install(const QVariantMap &pack, const QVariant
     m_errors.clear();
     m_warnings.clear();
     m_seen.clear();
+    m_expandedReleases.clear();
     m_selected.clear();
     m_roots.clear();
     m_dependencies.clear();
@@ -98,31 +99,58 @@ void ContentDependencyInstaller::later() {
             next();
     });
 }
-bool ContentDependencyInstaller::retained(const ContentDependency &reference) const {
+QVariantMap ContentDependencyInstaller::retainedRow(const ContentDependency &reference) const {
     for (const auto &value : m_rows) {
         const auto row = value.toMap();
-        const auto installed = releaseFromVariant(row.value("installedRelease").toMap());
+        if (row.value("category") != "mods")
+            continue;
         const bool project =
             !reference.projectId.isEmpty() &&
             row.value("sourceIds").toMap().value(reference.provider).toString() == reference.projectId;
-        const bool version = !reference.versionId.isEmpty() && installed.provider == reference.provider &&
-                             installed.id == reference.versionId;
-        if ((!project && !version) || row.value("category") != "mods")
+        if (!project && reference.versionId.isEmpty())
+            continue;
+        const auto metadata = row.value("installedRelease").toMap();
+        const bool version = !reference.versionId.isEmpty() &&
+                             metadata.value("provider") == reference.provider &&
+                             metadata.value("id") == reference.versionId;
+        if (!project && !version)
             continue;
         // A disabled dependency is an explicit user choice, including an older pinned edition.
         if (!row.value("enabled", true).toBool())
-            return true;
+            return row;
+        const auto installed = releaseFromVariant(metadata);
         if ((reference.versionId.isEmpty() || version) &&
             installed.gameVersions.contains(m_pack.value("minecraft").toString()) &&
             sharesLoader(installed.loaders, compatibleLoaders(m_pack.value("loader").toString(), m_rows)))
-            return true;
+            return row;
     }
-    return false;
+    return {};
 }
-void ContentDependencyInstaller::expand(const ContentInstallRequest &request) {
+void ContentDependencyInstaller::expandRetained(const QVariantMap &row, const QStringList &channels) {
+    const auto metadata = row.value("installedRelease").toMap();
+    const auto provider = metadata.value("provider").toString();
+    const auto project = metadata.value("projectId").toString();
+    const auto hash = row.value("sha1").toString();
+    // A preserved file is not permission to follow stale or unqualified cached declarations.
+    if ((provider != "modrinth" && provider != "curseforge") || project.isEmpty() ||
+        metadata.value("id").toString().isEmpty() || hash.isEmpty() ||
+        hash.compare(metadata.value("sha1").toString(), Qt::CaseInsensitive) != 0 ||
+        row.value("sourceIds").toMap().value(provider).toString() != project)
+        return;
+    ContentInstallRequest request;
+    request.release = releaseFromVariant(metadata);
+    request.allowedChannels = channels;
+    request.resolveDependencies = true;
+    expand(request, false);
+}
+void ContentDependencyInstaller::expand(const ContentInstallRequest &request, bool offerOptional) {
     if (!request.resolveDependencies)
         return;
     const auto &release = request.release;
+    const auto identity = qMakePair(projectKey(release.provider, release.projectId), release.id);
+    if (m_expandedReleases.contains(identity))
+        return;
+    m_expandedReleases.insert(identity);
     auto add = [this, &request](ContentDependency reference) {
         if (reference.projectId.isEmpty() && reference.versionId.isEmpty()) {
             m_warnings << "A declared dependency has no project or version identity.";
@@ -142,8 +170,9 @@ void ContentDependencyInstaller::expand(const ContentInstallRequest &request) {
     };
     for (const auto &value : release.dependencyRefs) {
         const auto ref = value.toObject();
-        if ((release.provider == "modrinth" && ref.value("dependency_type") == "optional") ||
-            (release.provider == "curseforge" && ref.value("relationType").toInt() == 2)) {
+        if (offerOptional &&
+            ((release.provider == "modrinth" && ref.value("dependency_type") == "optional") ||
+             (release.provider == "curseforge" && ref.value("relationType").toInt() == 2))) {
             const auto project = release.provider == "modrinth" ? ref.value("project_id").toString()
                                  : ref.value("modId").toInteger() > 0
                                      ? QString::number(ref.value("modId").toInteger())
@@ -189,7 +218,9 @@ void ContentDependencyInstaller::next() {
         return;
     }
     const auto pending = m_dependencies.dequeue();
-    if (retained(pending.reference)) {
+    const auto existing = retainedRow(pending.reference);
+    if (!existing.isEmpty()) {
+        expandRetained(existing, pending.channels);
         later();
         return;
     }
@@ -242,12 +273,15 @@ void ContentDependencyInstaller::next() {
                         ids[it.key()] = it.value().toVariant();
                     metadata["sourceIds"] = ids;
                     guard->m_predictions << metadata;
+                    guard->expand(request, false);
                     guard->later();
                     return;
                 }
             }
         const auto key = projectKey(release.provider, release.projectId);
-        if (guard->retained({release.provider, release.projectId, release.id})) {
+        const auto existing = guard->retainedRow({release.provider, release.projectId, release.id});
+        if (!existing.isEmpty()) {
+            guard->expandRetained(existing, pending.channels);
             guard->later();
             return;
         }
@@ -369,6 +403,7 @@ void ContentDependencyInstaller::finish() {
     m_roots.clear();
     m_dependencies.clear();
     m_seen.clear();
+    m_expandedReleases.clear();
     m_selected.clear();
     m_optional.clear();
     m_optionalSeen.clear();

@@ -7,6 +7,7 @@
 #include "features/content/OptionalDependencies.h"
 #include "features/explore/BrowseCatalogue.h"
 #include "features/explore/BrowseInstalls.h"
+#include "features/explore/BulkContentAdd.h"
 #include "features/launch/WorldLaunch.h"
 #include "features/navigation/NavigationHistory.h"
 #include "features/navigation/NavigationInput.h"
@@ -45,6 +46,7 @@ class DesktopSession final : public QObject {
     Q_PROPERTY(studio::ContentActions *content READ content CONSTANT)
     Q_PROPERTY(studio::BrowseInstalls *browse READ browse CONSTANT)
     Q_PROPERTY(studio::BrowseCatalogue *catalogue READ catalogue CONSTANT)
+    Q_PROPERTY(studio::BulkContentAdd *bulkAdd READ bulkAdd CONSTANT)
     Q_PROPERTY(studio::BrowsePreferences *browsePreferences READ browsePreferences CONSTANT)
     Q_PROPERTY(studio::InstallationPreferences *installationPreferences READ installationPreferences CONSTANT)
     Q_PROPERTY(studio::OptionalDependencies *optionalDependencies READ optionalDependencies CONSTANT)
@@ -99,6 +101,10 @@ class DesktopSession final : public QObject {
     BrowseCatalogue *catalogue() {
         return &m_catalogue;
     }
+    BulkContentAdd *bulkAdd() {
+        return &m_bulkAdd;
+    }
+    Q_INVOKABLE void openBulkAdd(bool fromBrowse = false);
     BrowsePreferences *browsePreferences() {
         return &m_browsePreferences;
     }
@@ -116,6 +122,7 @@ class DesktopSession final : public QObject {
         m_showcase.setCurseforgeKey(key);
         m_content.setCurseforgeKey(key);
         m_browse.setCurseforgeKey(key);
+        m_bulkAdd.setCurseforgeKey(key);
         m_contentInstaller->setCurseforgeKey(key);
         m_dependencySource->setCurseforgeKey(key);
         m_optionalSource->setCurseforgeKey(key);
@@ -158,6 +165,7 @@ class DesktopSession final : public QObject {
     OptionalDependencies m_optionalDependencies;
     DependencyRemovals m_dependencyRemovals;
     BrowseCatalogue m_catalogue;
+    BulkContentAdd m_bulkAdd;
     PackChangeMonitor m_changes;
     bool m_pendingScan = false;
     void activateRoute();

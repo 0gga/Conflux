@@ -59,11 +59,22 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
       m_dependencyRemovals(this),
       m_catalogue(std::make_shared<CatalogueClient>(), m_visibility, m_reviewedIdentities,
                   std::make_shared<BrowseFilterPreferences>(m_browseStore), this),
+      m_bulkAdd(std::make_shared<CatalogueClient>(),
+                std::make_shared<ContentCatalogue>(nullptr, QUrl("https://api.modrinth.com/v2/"),
+                                                   QUrl("https://api.curseforge.com/v1/"), m_contentIndex,
+                                                   m_reviewedIdentities),
+                m_releasePolicy, m_reviewedIdentities, this),
       m_changes(this) {
     m_content.setReleasePolicy(m_releasePolicy);
     m_browse.setReleasePolicy(m_releasePolicy);
     m_content.setVisibility(m_visibility);
     m_content.setLockRegistry(m_contentLocks);
+    m_bulkAdd.setInstaller([this](QVariantMap release, QVariantMap project) {
+        return m_content.installRelease(release, project);
+    });
+    connect(&m_content, &ContentActions::installationFinished, &m_bulkAdd,
+            &BulkContentAdd::installationFinished);
+    connect(&m_bulkAdd, &BulkContentAdd::operationFailed, &m_content, &ContentActions::operationFailed);
     m_optionalDependencies.setInstaller([this](QVariantMap release, QVariantMap project) {
         return m_content.installRelease(release, project);
     });
@@ -163,6 +174,16 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
             m_worlds.refresh();
         }
     });
+}
+void DesktopSession::openBulkAdd(bool fromBrowse) {
+    const auto pack = fromBrowse ? m_browse.pack() : m_workspace.pack();
+    const auto files = fromBrowse ? m_browse.inventory() : m_content.inventory();
+    const auto category = fromBrowse ? m_catalogue.filters().value("type").toString() : m_content.category();
+    const auto type = category == "resourcepacks" ? QString("resourcepack")
+                      : category == "shaderpacks" ? QString("shader")
+                      : category == "datapacks"   ? QString("datapack")
+                                                  : category;
+    m_bulkAdd.open(pack, files, type);
 }
 void DesktopSession::setPack(const QVariantMap &pack) {
     const auto root = pack.value("path").toString();

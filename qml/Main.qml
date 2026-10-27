@@ -16,11 +16,14 @@ ApplicationWindow {
         if (session.editor.dirty) { close.accepted = false; closeRequested = true; unsaved.open() }
         else {
             session.browse.cancelPending()
-            if (session.content.operationsBusy) { close.accepted=false; closeAfterOperations=true; window.hide() }
+            if (session.content.operationsBusy || session.bulkAdd.operationsBusy) { close.accepted=false; closeAfterOperations=true; window.hide() }
         }
     }
     Connections { target: window.session.content; function onOperationsChanged() {
-        if (window.closeAfterOperations && !window.session.content.operationsBusy) window.close()
+        if (window.closeAfterOperations && !window.session.content.operationsBusy && !window.session.bulkAdd.operationsBusy) window.close()
+    } }
+    Connections { target: window.session.bulkAdd; function onChanged() {
+        if (window.closeAfterOperations && !window.session.content.operationsBusy && !window.session.bulkAdd.operationsBusy) window.close()
     } }
     function finishLeaving() {
         unsaved.close()
@@ -164,7 +167,7 @@ ApplicationWindow {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 currentIndex: ["library", "discover", "workspace", "settings", "showcase"].indexOf(window.page)
                 LibraryPage { app: window.app; onCreateRequested: newPack.open(); onDiscoverRequested: window.navigate("discover"); onPackRequested: function(path, explore) { window.session.navigation.go({page:explore ? "discover" : "workspace",packPath:path}) } }
-                DiscoverPage { id: discovery; releasePolicy: window.session.releasePolicy; app: window.app; content: window.session.content; browse: window.session.browse; catalogue: window.session.catalogue; worlds: window.session.worlds; targetPath: window.session.navigation.route.packPath || ""; onInstanceRequested: function(path) { window.session.navigation.go({page:"discover",packPath:path}) } onCreateRequested: newPack.open(); onWorkspaceRequested: window.navigate("workspace"); onShowcaseRequested: function(project, tab) { window.session.navigation.go({page:"showcase",packPath:window.session.navigation.route.packPath || "",author:window.session.navigation.route.author,project:project,showcaseTab:tab || "description"}) } onAuthorRequested: function(author) { window.session.navigation.go({page:"discover",packPath:window.session.navigation.route.packPath || "",author:author}) } }
+                DiscoverPage { id: discovery; onPasteRequested: window.session.openBulkAdd(true); releasePolicy: window.session.releasePolicy; app: window.app; content: window.session.content; browse: window.session.browse; catalogue: window.session.catalogue; worlds: window.session.worlds; targetPath: window.session.navigation.route.packPath || ""; onInstanceRequested: function(path) { window.session.navigation.go({page:"discover",packPath:path}) } onCreateRequested: newPack.open(); onWorkspaceRequested: window.navigate("workspace"); onShowcaseRequested: function(project, tab) { window.session.navigation.go({page:"showcase",packPath:window.session.navigation.route.packPath || "",author:window.session.navigation.route.author,project:project,showcaseTab:tab || "description"}) } onAuthorRequested: function(author) { window.session.navigation.go({page:"discover",packPath:window.session.navigation.route.packPath || "",author:author}) } }
                 PackPage {
                     app: window.app; session: window.session; onCreateRequested: newPack.open(); onDiscoverRequested: window.navigate("discover")
                     onSectionRequested: function(key) { window.packRoute(key) }
@@ -202,7 +205,8 @@ ApplicationWindow {
         }
     }
     CreatePackDialog { id: newPack; app: window.app; catalogue: window.session.catalogue }
-    OptionalDependenciesDialog { suggestions: window.session.optionalDependencies; presentationEnabled: !window.session.dependencyRemovals.visible }
-    DependenciesDialog { objectName: "dependencyRemovalDialog"; suggestions: window.session.dependencyRemovals; removalMode: true }
+    DependenciesDialog { objectName: "bulkContentDialog"; suggestions: window.session.bulkAdd; selectionMode: true }
+    OptionalDependenciesDialog { suggestions: window.session.optionalDependencies; presentationEnabled: !window.session.dependencyRemovals.visible && !window.session.bulkAdd.visible }
+    DependenciesDialog { objectName: "dependencyRemovalDialog"; suggestions: window.session.dependencyRemovals; removalMode: true; presentationEnabled: !window.session.bulkAdd.visible }
     }
 }

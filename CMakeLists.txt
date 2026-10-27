@@ -118,6 +118,8 @@ target_sources(conflux_desktop PRIVATE
     src/features/launch/WorldLaunch.h src/features/launch/WorldLaunch.cpp
     src/platform/WorldLaunchAdapters.h src/platform/WorldLaunchAdapters.cpp
     src/features/showcase/DescriptionRenderer.h src/features/showcase/DescriptionRenderer.cpp
+    src/features/explore/BulkContentInput.h src/features/explore/BulkContentInput.cpp
+    src/features/explore/BulkContentAdd.h src/features/explore/BulkContentAdd.cpp
     src/features/config/ConfigLibrary.h src/features/config/ConfigLibrary.cpp
     src/platform/ConfigOwnershipStore.h src/platform/ConfigOwnershipStore.cpp
     src/features/showcase/ProjectShowcaseSource.h
@@ -308,6 +310,9 @@ if(BUILD_TESTING)
     qt_add_executable(content-preferences-tests tests/ContentPreferenceTests.cpp)
     target_link_libraries(content-preferences-tests PRIVATE conflux_desktop Qt6::Test)
     conflux_add_test(content-preferences content-preferences-tests)
+    qt_add_executable(bulk-content-tests tests/BulkContentTests.cpp)
+    target_link_libraries(bulk-content-tests PRIVATE conflux_desktop miniz Qt6::Test)
+    conflux_add_test(bulk-content bulk-content-tests)
     qt_add_executable(content-actions-tests tests/ContentActionsTests.cpp)
     target_link_libraries(content-actions-tests PRIVATE conflux_desktop Qt6::Test)
     conflux_add_test(content-actions content-actions-tests)

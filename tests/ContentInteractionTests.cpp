@@ -2,6 +2,7 @@
 #include "TestPerformance.h"
 #include "features/config/ConfigLibrary.h"
 #include "features/content/ContentActions.h"
+#include "features/explore/BulkContentAdd.h"
 #include "features/preferences/BrowsePreferences.h"
 #include "features/preferences/ContentPreferences.h"
 #include "features/status/RunningInstances.h"
@@ -9,6 +10,7 @@
 #include "platform/ConfigOwnershipStore.h"
 #include "theme/Appearance.h"
 #include <QBuffer>
+#include <QFontDatabase>
 #include <QImage>
 #include <QQmlComponent>
 #include <QQmlEngine>
@@ -16,6 +18,7 @@
 #include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QRawFont>
 #include <QTemporaryDir>
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
@@ -33,8 +36,185 @@ class ContentInteractionTests : public QObject {
     }
   private slots:
     void initTestCase() {
+#ifdef Q_OS_WIN
+        const auto fontRoot = qEnvironmentVariable("WINDIR", "C:/Windows") + "/Fonts/";
+        for (const auto &file : {"segoeui.ttf", "seguisb.ttf", "segoeuib.ttf", "seguisym.ttf"})
+            QVERIFY(QFontDatabase::addApplicationFont(fontRoot + file) >= 0);
+        QGuiApplication::setFont(QFont("Segoe UI"));
+        QVERIFY(QRawFont::fromFont(QGuiApplication::font()).supportsCharacter('A'));
+#endif
         QQuickStyle::setStyle("Basic");
         qputenv("CONFLUX_STYLE_SETTINGS_DIR", styleStorage.path().toUtf8());
+    }
+    void pastedNamesReuseDependencyOverlay_data() {
+        QTest::addColumn<int>("width");
+        QTest::addColumn<int>("height");
+        QTest::newRow("1080p") << 1080 << 720;
+        QTest::newRow("short-window") << 1080 << 480;
+        QTest::newRow("compact-overlay") << 420 << 320;
+    }
+    void pastedNamesReuseDependencyOverlay() {
+        QFETCH(int, width);
+        QFETCH(int, height);
+        struct Search final : ICatalogueSearch {
+            bool delayed = false;
+            std::function<void()> completion;
+            void fetch(const CatalogueQuery &, int, int, Callback done) override {
+                Project exact;
+                exact.provider = "modrinth";
+                exact.id = "exact";
+                exact.title = "modabc";
+                exact.url = "https://modrinth.com/mod/modabc";
+                exact.sourceIds = {{"modrinth", "exact"}};
+                auto next = exact;
+                next.id = "alternative";
+                next.title = "mod-abc";
+                next.url = "https://modrinth.com/mod/mod-abc";
+                next.sourceIds = {{"modrinth", "alternative"}};
+                if (delayed)
+                    completion = [done, next, exact] { done({{next, exact}, 2, {}}); };
+                else
+                    done({{next, exact}, 2, {}});
+            }
+            void facets(std::function<void(QVariantMap, QString)> done) override {
+                done({}, {});
+            }
+            void setKey(const QByteArray &) override {}
+        };
+        // ContentCatalogueFixture's version port returns no downloads, so this test supplies a narrow one.
+        struct Source final : IContentCatalogue {
+            void refresh(const QVariantList &rows, const QString &, const QString &,
+                         IndexCallback done) override {
+                done(rows, {});
+            }
+            void setCurseforgeKey(const QByteArray &) override {}
+            void versions(const QVariantMap &p, const QString &, const QString &,
+                          VersionsCallback done) override {
+                Release r;
+                r.provider = "modrinth";
+                r.projectId = p.value("id").toString();
+                r.id = r.projectId + "-v1";
+                r.filename = r.projectId + ".jar";
+                r.url = "https://example.test/fixture.jar";
+                r.sha1 = QString(40, 'a');
+                r.gameVersions = {"1.21.1"};
+                r.loaders = {"fabric"};
+                done({r}, {});
+            }
+        };
+        QTemporaryDir temp;
+        auto policy = std::make_shared<PackReleasePolicy>(
+            std::make_shared<BrowseSettingsStore>(temp.path() + "/prefs.ini"));
+        auto search = std::make_shared<Search>();
+        BulkContentAdd model(search, std::make_shared<Source>(), policy);
+        QVariantList accepted;
+        model.setInstaller([&](QVariantMap, QVariantMap p) {
+            accepted << p;
+            return true;
+        });
+        QQmlEngine engine;
+        QSignalSpy warnings(&engine, &QQmlEngine::warnings);
+        QQmlComponent component(&engine);
+        component.setData(R"QML(
+import QtQuick
+import QtQuick.Controls
+import Conflux.Style
+import "components"
+ApplicationWindow {
+ id: fixtureWindow
+ required property var suggestions
+ visible: true
+ color: Theme.colors.background
+ Item { anchors.fill: parent; DependenciesDialog { objectName:"testedBulkOverlay"; suggestions: fixtureWindow.suggestions; selectionMode:true } }
+}
+)QML",
+                          QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/bulk-test.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QObject> root(component.createWithInitialProperties(
+            {{"suggestions", QVariant::fromValue(&model)}, {"width", width}, {"height", height}}));
+        QVERIFY2(root, qPrintable(component.errorString()));
+        auto *window = qobject_cast<QQuickWindow *>(root.get());
+        QVERIFY(window);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        model.open(
+            {{"path", temp.path()}, {"name", "Fixture pack"}, {"minecraft", "1.21.1"}, {"loader", "fabric"}},
+            {});
+        auto *dialog = root->findChild<QObject *>("testedBulkOverlay");
+        QVERIFY(dialog);
+        QTRY_VERIFY(dialog->property("opened").toBool());
+        auto *input = findItem(window->contentItem(), "bulkContentInput");
+        QVERIFY(input);
+        input->forceActiveFocus();
+        input->setProperty("text", "modabc");
+        QTRY_COMPARE(model.input(), QString("modabc"));
+        auto click = [&](QQuickItem *item) {
+            QVERIFY(item);
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                              item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+        };
+        click(findItem(window->contentItem(), "findBulkContent"));
+        QTRY_VERIFY(!model.busy());
+        QTRY_COMPARE(model.rows().size(), 1);
+        QTRY_VERIFY(findItem(window->contentItem(), "nextBulkContentMatch"));
+        QCOMPARE(model.rows().first().toMap().value("title").toString(), "modabc");
+        auto *next = findItem(window->contentItem(), "nextBulkContentMatch");
+        auto *choice = findItem(window->contentItem(), "bulkContentChoice");
+        auto *install = findItem(window->contentItem(), "installBulkContent");
+        QVERIFY(choice);
+        QVERIFY(install);
+        const QRectF bounds(0, 0, width, height);
+        for (auto *item : {next, choice, install})
+            QVERIFY2(bounds.contains(item->mapRectToScene(item->boundingRect())),
+                     qPrintable(item->objectName()));
+        QCOMPARE(model.selectedCount(), 1);
+        click(choice);
+        QTRY_COMPARE(model.selectedCount(), 0);
+        click(next);
+        QTRY_COMPARE(model.rows().first().toMap().value("title").toString(), QString("mod-abc"));
+        QCOMPARE(model.selectedCount(), 0);
+        choice = findItem(window->contentItem(), "bulkContentChoice");
+        choice->forceActiveFocus();
+        QTest::keyClick(window, Qt::Key_Space);
+        QTRY_COMPARE(model.selectedCount(), 1);
+        QCoreApplication::processEvents();
+        QTest::qWait(30);
+        QVERIFY(window->grabWindow().save(
+            QDir(QStringLiteral(CONFLUX_QML_SOURCE_DIR))
+                .absoluteFilePath(
+                    QString("../artifacts/bulk-overlay-review-%1x%2.png").arg(width).arg(height))));
+        click(findItem(window->contentItem(), "installBulkContent"));
+        QTRY_COMPARE(accepted.size(), 1);
+        QCOMPARE(accepted.first().toMap().value("id").toString(), "alternative");
+        QCoreApplication::processEvents();
+        QTest::qWait(30);
+        const auto screenshot =
+            QDir(QStringLiteral(CONFLUX_QML_SOURCE_DIR))
+                .absoluteFilePath(QString("../artifacts/bulk-overlay-%1x%2.png").arg(width).arg(height));
+        QVERIFY(window->grabWindow().save(screenshot));
+        // A late lookup must not replace a draft while the user edits the list.
+        search->delayed = true;
+        click(findItem(window->contentItem(), "editBulkContentList"));
+        click(findItem(window->contentItem(), "findBulkContent"));
+        QTRY_VERIFY(bool(search->completion));
+        click(findItem(window->contentItem(), "editBulkContentList"));
+        input = findItem(window->contentItem(), "bulkContentInput");
+        QVERIFY(input);
+        input->forceActiveFocus();
+        input->setProperty("text", "modabc new draft");
+        auto complete = std::move(search->completion);
+        complete();
+        QTRY_VERIFY(!model.busy());
+        QCOMPARE(input->property("text").toString(), QString("modabc new draft"));
+        QCOMPARE(model.input(), QString("modabc new draft"));
+        QVERIFY(dialog->property("editingInput").toBool());
+        QCOMPARE(accepted.size(), 1);
+        click(findItem(window->contentItem(), "finishOptionalDependencies"));
+        QTRY_VERIFY(!model.visible());
+        QStringList errors;
+        for (const auto &args : warnings)
+            for (const auto &error : args.first().value<QList<QQmlError>>())
+                errors << error.toString();
+        QVERIFY2(errors.isEmpty(), qPrintable(errors.join('\n')));
     }
     void individualAuthorLinksHaveIndependentHoverAndClickTargets_data() {
         QTest::addColumn<int>("scale");

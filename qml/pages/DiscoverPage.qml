@@ -24,6 +24,7 @@ Item {
     readonly property bool compactFilters: width - 56 < 720 + filterPanelWidth + 18
     onCompactFiltersChanged: filterPopup.close()
     signal createRequested()
+    signal pasteRequested()
     signal workspaceRequested()
     signal showcaseRequested(var project, string tab)
     signal authorRequested(var author)
@@ -72,6 +73,7 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true; spacing: 8
                     PaginationBar { Layout.fillWidth: true; Layout.minimumWidth: 0; catalogue: root.catalogue; contextBusy: root.browse.busy }
+                    ActionButton { objectName: "browsePasteContentList"; iconName: "plus"; hint: "Paste a content list"; compact: true; enabled: root.browse.ready && !root.browse.busy; Layout.alignment: Qt.AlignTop; onClicked: root.pasteRequested() }
                     ActionButton {
                         id: filtersButton; objectName: "browseFiltersButton"; visible: root.compactFilters
                         text: "Filters"; iconName: "filter"; compact: true; selected: filterPopup.opened

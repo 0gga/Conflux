@@ -16,6 +16,7 @@ Item {
     signal authorRequested(var author)
     signal showFilesRequested(string path)
     signal browseRequested()
+    signal pasteRequested()
     readonly property var rows: controller.rows
     readonly property int visibleSelected: rows.filter(function(row) { return root.controller.selected.indexOf(row.relativePath) !== -1 }).length
     ColumnLayout {
@@ -24,6 +25,7 @@ Item {
             Layout.fillWidth: true; spacing: 10
             SearchField { Layout.fillWidth: true; leadingIcon: "search"; placeholderText: "Search " + root.rows.length + " projects…"; text: root.controller.query; onTextEdited: root.controller.query = text }
             ActionButton { text: "Upload files"; iconName: "folder"; onClicked: upload.open() }
+            ActionButton { objectName: "pasteContentList"; iconName: "plus"; hint: "Paste a content list"; onClicked: root.pasteRequested() }
             ActionButton { text: "Browse content"; iconName: "compass"; primary: true; onClicked: root.browseRequested() }
         }
         Flow {

@@ -17,16 +17,20 @@
     },
     "src/DesktopSession.cpp": {
       "phase": "ui",
-      "sha256": "65992d7e2fedf7d403e38f52de532d74983c4004ead4a75490107e6922007e32",
+      "sha256": "fcd10d54f8b771845cb611cf14d312da3a9259de8b5e1ea538e991ffaa45ec10",
       "status": "pending",
-      "checks": [],
+      "checks": [
+        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending."
+      ],
       "findings": []
     },
     "src/DesktopSession.h": {
       "phase": "ui",
-      "sha256": "22e41af45610817e721e49e3791be6004cf056fcede9875a911de52a30492a53",
+      "sha256": "10286244a660f0dba4676ffc28eb38ddfccbcdd1db6947c143c4a495f0fa6b5b",
       "status": "pending",
-      "checks": [],
+      "checks": [
+        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending."
+      ],
       "findings": []
     },
     "src/domain/Catalogue.cpp": {
@@ -2379,9 +2383,11 @@
     },
     "qml/components/DependenciesDialog.qml": {
       "phase": "ui",
-      "sha256": "624959f38ed6612403daa2508e9bcd5563a64330a159fe5fc0e67ace8c39a35b",
+      "sha256": "96405c3a75720f0547fda722d30816976c4df40cd7404d1de6bb0f4a6462a991",
       "status": "pending",
-      "checks": [],
+      "checks": [
+        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending."
+      ],
       "findings": []
     },
     "qml/components/EmptyState.qml": {
@@ -2624,9 +2630,11 @@
     },
     "qml/Main.qml": {
       "phase": "ui",
-      "sha256": "4477d0111677e0c64a12130afe9e571e0796dbf3189e189d9c01e366ca3a7a4d",
+      "sha256": "addc8a37b1a91c4ea4bd02ba42f717f3a71955ddeda48f091beeac8524644a1d",
       "status": "pending",
-      "checks": [],
+      "checks": [
+        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending."
+      ],
       "findings": []
     },
     "qml/pack/ConfigEditorPanel.qml": {
@@ -2659,9 +2667,11 @@
     },
     "qml/pack/ContentPanel.qml": {
       "phase": "ui",
-      "sha256": "69c2fb095aea6f50cf072a1a6ada0661c6674d7f3287ea7cfca4e83ff6d1d255",
+      "sha256": "94e9081d96c0013cecd9f06d1944696ad01e5b751379ba2854a09c7e42ec591c",
       "status": "pending",
-      "checks": [],
+      "checks": [
+        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending."
+      ],
       "findings": []
     },
     "qml/pack/ContentSelectionBar.qml": {
@@ -2715,9 +2725,11 @@
     },
     "qml/pages/DiscoverPage.qml": {
       "phase": "ui",
-      "sha256": "2bf80240ad1f711f894aa7997df7236729eff018149209ab4b0eae26cba54dca",
+      "sha256": "16415e451228227af13aadebe12b45968b0140caf8a51bcad2c5e8013a5f8c74",
       "status": "pending",
-      "checks": [],
+      "checks": [
+        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending."
+      ],
       "findings": []
     },
     "qml/pages/LibraryPage.qml": {
@@ -2729,9 +2741,11 @@
     },
     "qml/pages/PackPage.qml": {
       "phase": "ui",
-      "sha256": "a32fdb9f63c549fa6335fd61eff60631ef7810dd9cdc016096106cd0491a2197",
+      "sha256": "86b49f9713c95db540ffbae4c9d9dc06094feef0d03e4fa84e814668b242232e",
       "status": "pending",
-      "checks": [],
+      "checks": [
+        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending."
+      ],
       "findings": []
     },
     "qml/pages/SettingsPage.qml": {
@@ -2844,6 +2858,42 @@
       "sha256": "8ba85d928f90af636effa757bdd43981652029e331f8a99e8f25690d95960125",
       "status": "pending",
       "checks": [],
+      "findings": []
+    },
+    "src/features/explore/BulkContentAdd.cpp": {
+      "phase": "non-ui",
+      "sha256": "262b3e6e0688b9abd5c774fc8e07d171b0dadd453d5a90057b29e0c60b339b22",
+      "status": "reviewed",
+      "checks": [
+        "27 October2026 bulk feature review: bounded parser/ranking, provider identity,4 active requests,16 candidates/500 entries, scoped generation/duplicate delivery, owner lifetime, original-instance accepted jobs, release policy and existing per-mod mutation/dependency ports.20 focused outcomes including a real loopback file install and required-dependency failure isolation pass. Full measured coverage remains uncollected for these additions."
+      ],
+      "findings": []
+    },
+    "src/features/explore/BulkContentAdd.h": {
+      "phase": "non-ui",
+      "sha256": "3e582ee056002fe0239768fd3c89cf5ddb8e6f8c5a89bbf5ebd1abb70ea0c943",
+      "status": "reviewed",
+      "checks": [
+        "27 October2026 bulk feature review: bounded parser/ranking, provider identity,4 active requests,16 candidates/500 entries, scoped generation/duplicate delivery, owner lifetime, original-instance accepted jobs, release policy and existing per-mod mutation/dependency ports.20 focused outcomes including a real loopback file install and required-dependency failure isolation pass. Full measured coverage remains uncollected for these additions."
+      ],
+      "findings": []
+    },
+    "src/features/explore/BulkContentInput.cpp": {
+      "phase": "non-ui",
+      "sha256": "f97f6797f7af98130ce2cfff0336f5a5c88cd773c3100430138ea9593ff10483",
+      "status": "reviewed",
+      "checks": [
+        "27 October2026 bulk feature review: bounded parser/ranking, provider identity,4 active requests,16 candidates/500 entries, scoped generation/duplicate delivery, owner lifetime, original-instance accepted jobs, release policy and existing per-mod mutation/dependency ports.20 focused outcomes including a real loopback file install and required-dependency failure isolation pass. Full measured coverage remains uncollected for these additions."
+      ],
+      "findings": []
+    },
+    "src/features/explore/BulkContentInput.h": {
+      "phase": "non-ui",
+      "sha256": "195f9e7febc413879c503a359d4bc9f17f33226666dc0c32d6195ebe8996d212",
+      "status": "reviewed",
+      "checks": [
+        "27 October2026 bulk feature review: bounded parser/ranking, provider identity,4 active requests,16 candidates/500 entries, scoped generation/duplicate delivery, owner lifetime, original-instance accepted jobs, release policy and existing per-mod mutation/dependency ports.20 focused outcomes including a real loopback file install and required-dependency failure isolation pass. Full measured coverage remains uncollected for these additions."
+      ],
       "findings": []
     }
   }

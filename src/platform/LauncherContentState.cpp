@@ -96,7 +96,7 @@ QVariantList LauncherContentState::read(const QVariantMap &pack, QString *error)
             const auto fail = [&] {
                 rows.clear();
                 if (error)
-                    *error = "Could not read Modrinth content locks. No content was changed.";
+                    *error = "Could not read Modrinth content locks.";
             };
             if (!query.exec() || !query.next())
                 fail();
@@ -150,7 +150,7 @@ QVariantList LauncherContentState::read(const QVariantMap &pack, QString *error)
             if (!db.rollback())
                 fail();
         } else if (error)
-            *error = "Could not open Modrinth content locks. No content was changed.";
+            *error = "Could not open Modrinth content locks.";
     }
     QSqlDatabase::removeDatabase(connection);
     return rows;

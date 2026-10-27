@@ -1527,11 +1527,12 @@
     },
     "src/platform/CurseforgeContentState.cpp": {
       "phase": "non-ui",
-      "sha256": "f7aaaa910adfdd26ab17aa11fef6be004a1707357375184aaec7efe6fcfbc444",
+      "sha256": "214739194629f221f2fbf36b2094f91ff47fc1bda9fa62cf01d3404487096c72",
       "status": "reviewed",
       "checks": [
         "Validated bounded lossless JSON BooleanSpans traversal; escaped paths, duplicate-field rejection, indexed exact matches and deduplicated sorted patches preserve unrelated bytes",
-        "Only isLocked values change; locking checks hashes while unlock recovery deliberately permits changed/missing files. Negative addon read identity and Windows path aliases require focused fixtures."
+        "Only isLocked values change; locking checks hashes while unlock recovery deliberately permits changed/missing files. Negative addon read identity and Windows path aliases require focused fixtures.",
+        "27 October2026 AUD-40: read diagnostics contain no enclosing mutation outcome claim;24 real native acknowledged update/disable/remove/import source-failure fixtures,16 failures reproduced/corrected,26 focused outcomes pass with byte checks, two verification reads, non-replayable diagnostics and source-repair recovery. Mutation-only rejection guards retained."
       ],
       "findings": [
         "AUD-33"
@@ -1669,12 +1670,13 @@
     },
     "src/platform/LauncherContentState.cpp": {
       "phase": "non-ui",
-      "sha256": "a662232cffde1bdca0aebae9896138f18a334815d8c7134c4607766d3aa62000",
+      "sha256": "27a330220c075a1cf1ca53c77c5fb3dcb06a2b4073efb16aa08422a7204c0801",
       "status": "reviewed",
       "checks": [
         "Read-only SQLite snapshot and canonical unique profile scope, relative/absolute paths, valid empty instances, explicit discovered database location and strict invalid-locator rejection reviewed",
         "Missing/untracked/foreign/ambiguous authority fails without partial rows; reused errors clear.48 native lock/60 transaction outcomes include real-backend model retention/recovery and external-profile lock writes; per-file identity/path normalization remains AUD-33.",
-        "Modrinth profile scope uses shared actual-directory identity with kind/empty/NUL/error checks and Windows extended-length paths.6 native read/write scope failures reproduced;59 source-lock outcomes verify valid aliases, distinct Unicode names, byte preservation, invalid directory kinds and long Unicode external profiles. Other path/cache policies remain AUD-41."
+        "Modrinth profile scope uses shared actual-directory identity with kind/empty/NUL/error checks and Windows extended-length paths.6 native read/write scope failures reproduced;59 source-lock outcomes verify valid aliases, distinct Unicode names, byte preservation, invalid directory kinds and long Unicode external profiles. Other path/cache policies remain AUD-41.",
+        "27 October2026 AUD-40: read diagnostics contain no enclosing mutation outcome claim;24 real native acknowledged update/disable/remove/import source-failure fixtures,16 failures reproduced/corrected,26 focused outcomes pass with byte checks, two verification reads, non-replayable diagnostics and source-repair recovery. Mutation-only rejection guards retained."
       ],
       "findings": [
         "AUD-33",

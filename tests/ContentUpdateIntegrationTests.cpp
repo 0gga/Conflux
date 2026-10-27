@@ -44,6 +44,256 @@ class ContentUpdateIntegrationTests : public QObject {
         return read(path);
     }
   private slots:
+    void sourceReadFailureAfterCommit_data() {
+        QTest::addColumn<QString>("provider");
+        QTest::addColumn<QString>("operation");
+        QTest::addColumn<QString>("fault");
+        for (const auto &provider : {QString("curseforge"), QString("modrinth")})
+            for (const auto &operation : {"update", "disable", "remove", "import"})
+                for (const auto &fault : {"missing", "invalid", "scope"})
+                    QTest::newRow(qPrintable(provider + '-' + operation + '-' + fault))
+                        << provider << QString(operation) << QString(fault);
+    }
+    void sourceReadFailureAfterCommit() {
+        QFETCH(QString, provider);
+        QFETCH(QString, operation);
+        QFETCH(QString, fault);
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        const auto app = temp.path() + "/App";
+        const auto root = app + "/profiles/Fixture";
+        QVERIFY(QDir().mkpath(root));
+        const auto foreign = temp.path() + "/Foreign";
+        QVERIFY(QDir().mkpath(foreign));
+        QVariantMap pack{{"path", root},
+                         {"minecraft", "1.21.1"},
+                         {"loader", "fabric"},
+                         {"provider", provider},
+                         {"launcherInstanceId", "instance"}};
+        auto item = row("fixture");
+        auto old = releaseFromVariant(item.value("installedRelease").toMap());
+        auto next = releaseFromVariant(item.value("updateRelease").toMap());
+        const auto original = archive(temp.path() + "/old.jar", "mods", "fixture", 1);
+        const auto replacement = archive(temp.path() + "/new.jar", "mods", "fixture", 2);
+        const auto imported = archive(temp.path() + "/imported.jar", "mods", "imported", 1);
+        QVERIFY(!original.isEmpty() && !replacement.isEmpty() && !imported.isEmpty());
+        old.sha1 = hash(original);
+        next.sha1 = hash(replacement);
+        next.fileSize = replacement.size();
+        write(root + "/mods/" + old.filename, original);
+        item["sha1"] = old.sha1;
+        item["installedRelease"] = old.toVariant();
+        item["sourceIds"] = QVariantMap{{"modrinth", "fixture"}, {"curseforge", "33"}};
+        const auto source = provider == "curseforge" ? root + "/minecraftinstance.json" : app + "/app.db";
+        if (provider == "curseforge") {
+            write(source,
+                  QJsonDocument(
+                      QJsonObject{{"installedAddons",
+                                   QJsonArray{QJsonObject{
+                                       {"addonID", 33},
+                                       {"isLocked", false},
+                                       {"isEnabled", true},
+                                       {"fileNameOnDisk", old.filename},
+                                       {"modFolderPath", root + "/mods"},
+                                       {"installedFile",
+                                        QJsonObject{{"id", 333},
+                                                    {"hashes", QJsonArray{QJsonObject{
+                                                                   {"algo", 1}, {"value", old.sha1}}}}}}}}}})
+                      .toJson());
+        } else {
+            const auto connection = QUuid::createUuid().toString();
+            {
+                auto db = QSqlDatabase::addDatabase("QSQLITE", connection);
+                db.setDatabaseName(source);
+                QVERIFY(db.open());
+                QSqlQuery query(db);
+                for (const auto &sql :
+                     {"CREATE TABLE instances(id TEXT,path TEXT)",
+                      "CREATE TABLE instance_files(id TEXT,instance_id TEXT,relative_path TEXT,sha1 "
+                      "TEXT,enabled INTEGER)",
+                      "CREATE TABLE instance_content_entries(file_id TEXT,project_id TEXT,version_id TEXT)",
+                      "CREATE TABLE instance_content_locks(file_id TEXT)",
+                      "INSERT INTO instances VALUES('instance','Fixture')"})
+                    QVERIFY(query.exec(sql));
+                query.prepare("INSERT INTO instance_files VALUES('file','instance',?,?,1)");
+                query.addBindValue("mods/" + old.filename);
+                query.addBindValue(old.sha1);
+                QVERIFY(query.exec());
+                query.prepare("INSERT INTO instance_content_entries VALUES('file','fixture',?)");
+                query.addBindValue(old.id);
+                QVERIFY(query.exec());
+            }
+            QSqlDatabase::removeDatabase(connection);
+        }
+        const auto sourceBytes = read(source);
+        QVERIFY(!sourceBytes.isEmpty());
+        QTcpServer server;
+        QVERIFY(server.listen(QHostAddress::LocalHost));
+        next.url = "http://127.0.0.1:" + QString::number(server.serverPort()) + '/' + next.filename;
+        item["updateRelease"] = next.toVariant();
+        int downloads = 0;
+        connect(&server, &QTcpServer::newConnection, &server, [&] {
+            auto *socket = server.nextPendingConnection();
+            connect(socket, &QTcpSocket::readyRead, socket, [&, socket] {
+                const auto input = socket->property("request").toByteArray() + socket->readAll();
+                socket->setProperty("request", input);
+                if (!input.contains("\r\n\r\n") || socket->property("answered").toBool())
+                    return;
+                socket->setProperty("answered", true);
+                QCOMPARE(input.split(' ').value(1), ('/' + next.filename).toUtf8());
+                ++downloads;
+                socket->write("HTTP/1.1 200 OK\r\nContent-Length: " + QByteArray::number(replacement.size()) +
+                              "\r\nConnection: close\r\n\r\n" + replacement);
+                socket->disconnectFromHost();
+            });
+            connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+        });
+        struct Files final : IContentFileStore {
+            std::shared_ptr<NativeContentStore> native;
+            std::function<bool()> fault;
+            mutable std::atomic<int> writes{0}, verificationReads{0};
+            mutable std::atomic<bool> faultApplied{false};
+            ContentWriteResult acknowledge(ContentWriteResult result) const {
+                if (result.ok) {
+                    ++writes;
+                    faultApplied = fault();
+                }
+                return result;
+            }
+            QVariantList snapshot(const QVariantMap &pack, const QVariantList &rows) const override {
+                return native->snapshot(pack, rows);
+            }
+            ContentFileState reload(const QVariantMap &pack, const QVariantList &rows,
+                                    bool inspect) const override {
+                if (writes > 0)
+                    ++verificationReads;
+                return native->reload(pack, rows, inspect);
+            }
+            ContentWriteResult setEnabled(const QVariantMap &pack, const QVariantMap &row,
+                                          bool enabled) const override {
+                return acknowledge(native->setEnabled(pack, row, enabled));
+            }
+            ContentWriteResult remove(const QVariantMap &pack, const QVariantList &rows) const override {
+                return acknowledge(native->remove(pack, rows));
+            }
+            ContentWriteResult importFiles(const QVariantMap &pack, const QList<QUrl> &urls,
+                                           const QString &category) const override {
+                return acknowledge(native->importFiles(pack, urls, category));
+            }
+        };
+        struct Installer final : IContentInstaller {
+            std::shared_ptr<ContentInstaller> native;
+            std::shared_ptr<Files> files;
+            void install(const QVariantMap &pack, const QVariantList &rows,
+                         const QVector<ContentInstallRequest> &requests, Callback callback) override {
+                native->install(pack, rows, requests,
+                                [this, callback = std::move(callback)](ContentWriteResult result) {
+                                    callback(files->acknowledge(std::move(result)));
+                                });
+            }
+            void cancel() override {
+                native->cancel();
+            }
+            bool cancellable() const override {
+                return native->cancellable();
+            }
+        };
+        auto locks = std::make_shared<ContentLockRegistry>();
+        auto files = std::make_shared<Files>();
+        files->native = std::make_shared<NativeContentStore>(nullptr, temp.path() + "/backups", locks);
+        files->fault = [source, provider, fault, foreign] {
+            if (fault == "missing")
+                return QFile::remove(source);
+            if (provider == "modrinth" && fault == "scope") {
+                bool ok = false;
+                const auto connection = QUuid::createUuid().toString();
+                {
+                    auto db = QSqlDatabase::addDatabase("QSQLITE", connection);
+                    db.setDatabaseName(source);
+                    if (db.open()) {
+                        QSqlQuery query(db);
+                        query.prepare("UPDATE instances SET path=? WHERE id='instance'");
+                        query.addBindValue(foreign);
+                        ok = query.exec();
+                    }
+                }
+                QSqlDatabase::removeDatabase(connection);
+                return ok;
+            }
+            QFile file(source);
+            const QByteArray bytes = fault == "scope" ? "{\"installedAddons\":{}}" : "invalid metadata";
+            return file.open(QIODevice::WriteOnly | QIODevice::Truncate) && file.write(bytes) == bytes.size();
+        };
+        auto installer = std::make_shared<Installer>();
+        installer->files = files;
+        installer->native = std::make_shared<ContentInstaller>(files->native, nullptr, true);
+        ContentActions content(
+            files, std::make_shared<ContentCatalogueFixture>(), installer,
+            std::make_shared<SettingsContentPreferences>(temp.path() + "/preferences.ini"));
+        content.setLockRegistry(locks);
+        content.setContext(pack, {item});
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(content.inventory().size(), 1);
+        QCOMPARE(files->writes.load(), 0);
+        const auto key = content.inventory().first().toMap().value("relativePath").toString();
+        if (operation == "update")
+            content.update(key);
+        else if (operation == "disable")
+            content.setEnabled(key, false);
+        else if (operation == "remove")
+            content.remove(key);
+        else
+            content.importFiles({QUrl::fromLocalFile(temp.path() + "/imported.jar")}, "mods");
+        QTRY_VERIFY_WITH_TIMEOUT(!content.busy(), 15000);
+        QCOMPARE(files->writes.load(), 1);
+        QVERIFY(files->faultApplied);
+        QCOMPARE(files->verificationReads.load(), 2);
+        QCOMPARE(downloads, int(operation == "update"));
+        const auto checkFiles = [&] {
+            if (operation == "update") {
+                QVERIFY(!QFileInfo::exists(root + "/mods/" + old.filename));
+                QCOMPARE(read(root + "/mods/" + next.filename), replacement);
+            } else if (operation == "disable") {
+                QVERIFY(!QFileInfo::exists(root + "/mods/" + old.filename));
+                QCOMPARE(read(root + "/mods/" + old.filename + ".disabled"), original);
+            } else if (operation == "remove")
+                QVERIFY(!QFileInfo::exists(root + "/mods/" + old.filename));
+            else {
+                QCOMPARE(read(root + "/mods/" + old.filename), original);
+                QCOMPARE(read(root + "/mods/imported.jar"), imported);
+            }
+        };
+        checkFiles();
+        int done = 0, diagnostics = 0;
+        QString message;
+        for (const auto &value : content.operations()->entries()) {
+            const auto task = value.toMap();
+            if (task.value("action") == "Reading changes") {
+                ++diagnostics;
+                QCOMPARE(task.value("state").toString(), "failed");
+                QVERIFY(!task.value("retryable").toBool());
+                message = task.value("message").toString();
+            } else if (task.value("state") == "done")
+                ++done;
+            content.operations()->retry(task.value("id").toULongLong());
+        }
+        QCOMPARE(done, 1);
+        QCOMPARE(diagnostics, 1);
+        QCOMPARE(content.operations()->failedCount(), 1);
+        QVERIFY(message.contains("Changes were saved"));
+        QVERIFY(message.contains(provider == "modrinth" ? "Modrinth" : "CurseForge"));
+        QCOMPARE(content.notice(), message);
+        write(source, sourceBytes);
+        content.setContext(pack, content.inventory(), true);
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(files->writes.load(), 1);
+        QCOMPARE(downloads, int(operation == "update"));
+        QVERIFY(files->native->reload(pack, content.inventory()).error.isEmpty());
+        QCOMPARE(content.inventory().size(), operation == "remove" ? 0 : operation == "import" ? 2 : 1);
+        checkFiles();
+        QVERIFY2(!message.contains("No changes were made"), qPrintable(message));
+        QVERIFY2(!message.contains("No content was changed"), qPrintable(message));
+    }
     void realTransactionsKeepPartialSuccess_data() {
         QTest::addColumn<QString>("category");
         QTest::addColumn<int>("failureAt");

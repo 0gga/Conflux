@@ -132,7 +132,7 @@ QJsonArray addons(const QByteArray &bytes, QString *error) {
     if (parse.error != QJsonParseError::NoError || !doc.isObject() ||
         !doc.object().value("installedAddons").isArray()) {
         if (error)
-            *error = "Could not read CurseForge content locks. No changes were made.";
+            *error = "Could not read CurseForge content locks.";
         return {};
     }
     return doc.object().value("installedAddons").toArray();

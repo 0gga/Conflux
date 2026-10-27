@@ -15,6 +15,7 @@
 #include "features/status/OperationHistory.h"
 #include <QHash>
 #include <QObject>
+#include <QPointer>
 #include <QTimer>
 #include <memory>
 namespace studio {
@@ -32,12 +33,12 @@ class ContentActions final : public QObject {
     Q_PROPERTY(QString query READ query WRITE setQuery NOTIFY changed)
     Q_PROPERTY(QString category READ category WRITE setCategory NOTIFY changed)
     Q_PROPERTY(QString sort READ sort WRITE setSort NOTIFY changed)
-    Q_PROPERTY(bool busy READ busy NOTIFY changed)
-    Q_PROPERTY(bool cancellable READ cancellable NOTIFY changed)
+    Q_PROPERTY(bool busy READ busy NOTIFY statusChanged)
+    Q_PROPERTY(bool cancellable READ cancellable NOTIFY statusChanged)
     Q_PROPERTY(int updateCount READ updateCount NOTIFY changed)
     Q_PROPERTY(QString notice READ notice NOTIFY changed)
-    Q_PROPERTY(QString activity READ activity NOTIFY changed)
-    Q_PROPERTY(QString activityText READ activityText NOTIFY changed)
+    Q_PROPERTY(QString activity READ activity NOTIFY statusChanged)
+    Q_PROPERTY(QString activityText READ activityText NOTIFY statusChanged)
     Q_PROPERTY(QVariantList selection READ selection NOTIFY changed)
     Q_PROPERTY(QVariantList versions READ versions NOTIFY changed)
     Q_PROPERTY(QVariantList versionGroups READ versionGroups NOTIFY changed)
@@ -176,13 +177,16 @@ class ContentActions final : public QObject {
     Q_INVOKABLE void copyLink(const QString &);
     Q_INVOKABLE void cancel();
     void setProgress(const QString &message) {
+        const QPointer<ContentActions> guard(this);
         m_activityText = message;
         if (m_activeOperationId)
             m_operations.progress(m_activeOperationId, message);
-        emit changed();
+        if (guard)
+            emit statusChanged();
     }
   signals:
     void changed();
+    void statusChanged();
     void rowsChanged();
     void operationsChanged();
     void operationFailed(QString message);

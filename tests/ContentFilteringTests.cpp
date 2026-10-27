@@ -34,6 +34,53 @@ QVariantList inventory(int count) {
 class ContentFilteringTests final : public QObject {
     Q_OBJECT
   private slots:
+    void progressBurstsDoNotRefilterLoadedRows_data() {
+        QTest::addColumn<int>("count");
+        QTest::newRow("owner-sized-310") << 310;
+        QTest::newRow("large-3000") << 3000;
+    }
+    void progressBurstsDoNotRefilterLoadedRows() {
+        QFETCH(int, count);
+        QTemporaryDir temp;
+        auto catalogue = std::make_shared<ContentCatalogueFixture>();
+        ContentActions content(std::make_shared<ContentFileFixture>(), catalogue,
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        content.setContext({{"path", temp.path()}}, inventory(count));
+        QTRY_VERIFY(!content.busy());
+        content.setQuery("1211");
+        content.select(content.rows().first().toMap().value("relativePath").toString(), true);
+        const auto before = content.rows();
+        const auto selection = content.selection();
+        const auto calls = catalogue->refreshCount;
+        const QPersistentModelIndex retained(content.model()->index(0, 0));
+        const auto property =
+            content.metaObject()->property(content.metaObject()->indexOfProperty("activityText"));
+        QSignalSpy progress(&content, property.notifySignal());
+        QSignalSpy general(&content, &ContentActions::changed), rows(&content, &ContentActions::rowsChanged),
+            reset(content.model(), &QAbstractItemModel::modelReset);
+        QElapsedTimer elapsed;
+        elapsed.start();
+        for (int i = 0; i < 1000; ++i)
+            content.setProgress(QString("Downloading %1").arg(i));
+        const auto milliseconds = elapsed.elapsed();
+        qInfo() << count << "loaded rows / 1000 progress messages ms" << milliseconds
+                << "general notifications" << general.size();
+        QCOMPARE(content.activityText(), "Downloading 999");
+        QCOMPARE(progress.size(), 1000);
+        QCOMPARE(content.rows(), before);
+        QCOMPARE(content.selection(), selection);
+        QCOMPARE(catalogue->refreshCount, calls);
+        QCOMPARE(rows.size(), 0);
+        QCOMPARE(reset.size(), 0);
+        QVERIFY(retained.isValid());
+        QCOMPARE(general.size(), 0);
+        QVERIFY(test_performance::releaseBudgetMet(milliseconds, 150));
+        content.setQuery("no literal match");
+        QVERIFY(content.rows().isEmpty());
+        QVERIFY(general.size() > 0);
+        QVERIFY(progress.size() > 1000); // Broader state changes still notify the status property.
+    }
     void individualAuthorsTagsAndUnknownEnvironmentRemainFilterable() {
         auto item = inventory(1).first().toMap();
         item["author"] = "Alice, Bob";

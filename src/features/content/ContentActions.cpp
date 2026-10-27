@@ -44,6 +44,7 @@ ContentActions::ContentActions(std::shared_ptr<const IContentFileStore> files,
     m_policyRefresh.setSingleShot(true);
     m_policyRefresh.setInterval(150);
     connect(&m_policyRefresh, &QTimer::timeout, this, [this] { refresh(true); });
+    connect(this, &ContentActions::changed, this, &ContentActions::statusChanged);
     clearFilters();
 }
 void ContentActions::setReleasePolicy(std::shared_ptr<PackReleasePolicy> policy) {

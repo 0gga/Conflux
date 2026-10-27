@@ -27,6 +27,7 @@
 #include <QThreadPool>
 #include <QtTest>
 #include <atomic>
+#include <optional>
 #include <stdexcept>
 using namespace studio;
 class ContentActionsTests : public QObject {
@@ -91,6 +92,120 @@ class ContentActionsTests : public QObject {
                 {"updateRelease", next.toVariant()}};
     }
   private slots:
+    void progressNotifiesCancellationPhaseChanges() {
+        QTemporaryDir temp;
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        ContentActions content(std::make_shared<ContentFileFixture>(),
+                               std::make_shared<ContentCatalogueFixture>(), installer,
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        auto item = row("Alpha", "Author");
+        auto release = item.value("updateRelease").toMap();
+        release["filename"] = "Alpha-next.jar";
+        item["updateRelease"] = release;
+        content.setContext({{"path", temp.path()}}, {item});
+        QTRY_VERIFY(!content.busy());
+        content.update("mods/Alpha.jar");
+        QTRY_VERIFY(bool(installer->completion));
+        const auto property =
+            content.metaObject()->property(content.metaObject()->indexOfProperty("cancellable"));
+        QSignalSpy notifications(&content, property.notifySignal());
+        const bool downloading = content.cancellable();
+        content.setProgress("Downloading content");
+        const auto downloadNotifications = notifications.size();
+        auto complete =
+            std::move(installer->completion); // The port now exposes a non-cancellable commit phase.
+        const bool committing = content.cancellable();
+        content.setProgress("Applying verified content");
+        const auto commitNotifications = notifications.size() - downloadNotifications;
+        complete({true, {}});
+        QTRY_VERIFY(!content.busy());
+        qInfo() << "Cancellation phase notifications: download" << downloadNotifications << "commit"
+                << commitNotifications;
+        QVERIFY(downloading);
+        QVERIFY(!committing);
+        QCOMPARE(downloadNotifications, 1);
+        QCOMPARE(commitNotifications, 1);
+        QCOMPARE(content.operations()->failedCount(), 0);
+    }
+    void progressObserverCannotNotifyReplacementOwner() {
+        QTemporaryDir temp;
+        auto files = std::make_shared<ContentFileFixture>();
+        auto catalogue = std::make_shared<ContentCatalogueFixture>();
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        auto preferences = std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini");
+        // Reuse storage deterministically: a stale notification must not reach the new QObject.
+        std::optional<ContentActions> content;
+        content.emplace(files, catalogue, installer, preferences);
+        auto item = row("Alpha", "Author");
+        auto release = item.value("updateRelease").toMap();
+        release["filename"] = "Alpha-next.jar";
+        item["updateRelease"] = release;
+        content->setContext({{"path", temp.path()}}, {item});
+        QTRY_VERIFY(!content->busy());
+        content->update("mods/Alpha.jar");
+        QTRY_VERIFY(bool(installer->completion));
+        auto *history = content->operations();
+        auto *original = &*content;
+        bool replaced = false;
+        int replacementNotifications = 0;
+        connect(history, &OperationHistory::changed, this, [&] {
+            if (replaced)
+                return;
+            for (const auto &value : history->entries())
+                if (value.toMap().value("message") == "Replace from progress") {
+                    replaced = true;
+                    content.reset();
+                    content.emplace(files, catalogue, installer, preferences);
+                    connect(&*content, &ContentActions::changed, this, [&] { ++replacementNotifications; });
+                    return;
+                }
+        });
+        original->setProgress("Replace from progress");
+        QVERIFY(replaced);
+        QCOMPARE(&*content, original);
+        QCOMPARE(content->activityText(), QString{});
+        auto complete = std::move(installer->completion);
+        complete({false, "Old operation finishes after replacement"});
+        QCoreApplication::processEvents();
+        QCOMPARE(replacementNotifications, 0);
+        QVERIFY(content->inventory().isEmpty());
+        QVERIFY(!content->busy());
+    }
+    void progressObserverCanDisposeContentActions() {
+        QTemporaryDir temp;
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        auto content = std::make_unique<ContentActions>(
+            std::make_shared<ContentFileFixture>(), std::make_shared<ContentCatalogueFixture>(), installer,
+            std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        auto item = row("Alpha", "Author");
+        auto release = item.value("updateRelease").toMap();
+        release["filename"] = "Alpha-next.jar";
+        release["gameVersions"] = QStringList{"1.21.1"};
+        release["loaders"] = QStringList{"fabric"};
+        item["updateRelease"] = release;
+        content->setContext({{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "fabric"}}, {item});
+        QTRY_VERIFY(!content->busy());
+        content->update("mods/Alpha.jar");
+        QTRY_VERIFY(bool(installer->completion));
+        auto *history = content->operations();
+        bool disposed = false;
+        connect(history, &OperationHistory::changed, this, [&] {
+            if (disposed)
+                return;
+            for (const auto &value : history->entries())
+                if (value.toMap().value("message") == "Dispose from progress") {
+                    disposed = true;
+                    content.reset();
+                    return;
+                }
+        });
+        content->setProgress("Dispose from progress");
+        QVERIFY(disposed);
+        QVERIFY(!content);
+        auto complete = std::move(installer->completion);
+        complete({false, "Fixture completes after its consumer closes"});
+        QCoreApplication::processEvents();
+    }
     void contextDispatchStopsAfterReentrantNavigation() {
         QTemporaryDir temp;
         auto files = std::make_shared<RefreshFiles>();

@@ -277,13 +277,14 @@
     },
     "src/features/content/ContentActions.cpp": {
       "phase": "non-ui",
-      "sha256": "a3f10b6e64750b95b94831356a93d00599f2bb9ae6c21433d261e270c17c3a05",
+      "sha256": "3505934a9da8823f9456226223871c17f2d110c0abebc8c7619d5289fe381a05",
       "status": "reviewed",
       "checks": [
         "Complete1100-line coordinator reviewed: captured context, metadata/update generations, literal filtered index, lock preferences/source state, optimistic projection, claims, queue/history and per-item installation",
         "Original-instance install/cleanup/recovery and post-commit inventory guards inspected. Locked recovery captures/seeds project target before enqueue, including reentrant navigation. Remaining post-notification/metadata callback lifetime and measured coordinator/index boundaries remain backlogged.",
         "Source path locks aggregate any locked entry using the registry logical key; duplicate order cannot erase protection.24 model data cases cover providers, case/disabled aliases, filters, unrelated locks and authoritative unlock clearing. Remaining notification reentrancy stays AUD-07.",
-        "Context/filter-reset and refresh/busy notifications revalidate captured lifetime/generation before continuing publication or worker dispatch. Original2 redundant-read failures and2 disposal access violations reproduced;142 content-action outcomes pass. Remaining queue/history/metadata continuations remain AUD-07."
+        "Context/filter-reset and refresh/busy notifications revalidate captured lifetime/generation before continuing publication or worker dispatch. Original2 redundant-read failures and2 disposal access violations reproduced;142 content-action outcomes pass. Remaining queue/history/metadata continuations remain AUD-07.",
+        "27 October2026 scoped progress:1000 broad notifications/1033ms for3000 rows reproduced, same-storage replacement-owner stale notification plus access violation reproduced. QPointer protects the original owner and statusChanged scopes busy/cancellable/activity/activityText. Initial cancellation-notify omission reproduced/corrected. Final4 filtering/5 action outcomes pass with zero broad notifications, below1ms bursts, phase notifications and safe late completion; remaining AUD-07 continuations stay pending."
       ],
       "findings": [
         "AUD-07",
@@ -293,11 +294,12 @@
     },
     "src/features/content/ContentActions.h": {
       "phase": "non-ui",
-      "sha256": "6f061c3ea98e197df0c677ec754be084934d83b9ede29ec76c40214feaf562ee",
+      "sha256": "698250524eccf057eec0a65d4f0fd07670967c2bc41438a85c202c481bcb8fcd",
       "status": "reviewed",
       "checks": [
         "Facade contracts, state ownership and new narrow version reader boundary reviewed; broader command lifecycle findings remain explicit. ContentVersionTests.",
-        "Source review is separate from measured line/function/branch coverage; remaining states stay explicit."
+        "Source review is separate from measured line/function/branch coverage; remaining states stay explicit.",
+        "27 October2026 scoped progress:1000 broad notifications/1033ms for3000 rows reproduced, same-storage replacement-owner stale notification plus access violation reproduced. QPointer protects the original owner and statusChanged scopes busy/cancellable/activity/activityText. Initial cancellation-notify omission reproduced/corrected. Final4 filtering/5 action outcomes pass with zero broad notifications, below1ms bursts, phase notifications and safe late completion; remaining AUD-07 continuations stay pending."
       ],
       "findings": [
         "AUD-07",

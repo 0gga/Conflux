@@ -46,6 +46,67 @@ class ContentInteractionTests : public QObject {
         QQuickStyle::setStyle("Basic");
         qputenv("CONFLUX_STYLE_SETTINGS_DIR", styleStorage.path().toUtf8());
     }
+    void diagnosticActionsRemainContainedAndEmitCapturedScope_data() {
+        QTest::addColumn<int>("width");
+        QTest::newRow("desktop") << 620;
+        QTest::newRow("compact") << 320;
+    }
+    void diagnosticActionsRemainContainedAndEmitCapturedScope() {
+        QFETCH(int, width);
+        QQmlEngine engine;
+        QSignalSpy warnings(&engine, &QQmlEngine::warnings);
+        QQmlComponent component(&engine);
+        component.setData(
+            R"QML(
+import QtQuick
+import QtQuick.Controls
+import Conflux.Style
+import "pack"
+ApplicationWindow {
+ id: fixture
+ required property var issues
+ visible: true; color: Theme.colors.background
+ DiagnosticsBanner { objectName:"testedDiagnostics"; width:parent.width; issues:fixture.issues; expanded:true }
+}
+)QML",
+            QUrl::fromLocalFile(QStringLiteral(CONFLUX_QML_SOURCE_DIR) + "/diagnostics-test.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        const QVariantMap pack{{"path", "original"}, {"loader", "fabric"}, {"minecraft", "1.21.1"}};
+        QVariantList fixes;
+        for (const auto &kind : {QString("enable"), QString("disable"), QString("remove")})
+            fixes << QVariantMap{{"kind", kind},
+                                 {"label", kind},
+                                 {"pack", pack},
+                                 {"relativePath", "mods/local.jar"},
+                                 {"sha1", QString(40, 'a')}};
+        const QVariantList issues{
+            QVariantMap{{"message", "A required mod is disabled."}, {"fixes", fixes}},
+            QVariantMap{{"message", "A diagnostic without an action remains readable."}}};
+        std::unique_ptr<QObject> root(
+            component.createWithInitialProperties({{"issues", issues}, {"width", width}, {"height", 320}}));
+        QVERIFY2(root, qPrintable(component.errorString()));
+        auto *window = qobject_cast<QQuickWindow *>(root.get());
+        QVERIFY(window);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        auto *banner = root->findChild<QObject *>("testedDiagnostics");
+        QVERIFY(banner);
+        QSignalSpy commands(banner, SIGNAL(fixRequested(QVariant)));
+        QVERIFY(commands.isValid());
+        for (const auto &kind : {QString("enable"), QString("disable"), QString("remove")}) {
+            auto *button = findItem(window->contentItem(), "diagnosticAction-" + kind);
+            QVERIFY(button);
+            const auto bounds = button->mapRectToScene(button->boundingRect());
+            QVERIFY(bounds.left() >= 0);
+            QVERIFY(bounds.right() <= width);
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, bounds.center().toPoint());
+            QTRY_COMPARE(commands.size(), 1);
+            const auto action = commands.takeFirst().first().toMap();
+            QCOMPARE(action.value("kind").toString(), kind);
+            QCOMPARE(action.value("pack").toMap(), pack);
+            QCOMPARE(action.value("relativePath").toString(), QString("mods/local.jar"));
+        }
+        QCOMPARE(warnings.size(), 0);
+    }
     void pastedNamesReuseDependencyOverlay_data() {
         QTest::addColumn<int>("width");
         QTest::addColumn<int>("height");

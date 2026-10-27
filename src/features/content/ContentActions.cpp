@@ -794,6 +794,59 @@ void ContentActions::setEnabled(const QString &path, bool value) {
     operation.enabled = value;
     enqueue(operation);
 }
+bool ContentActions::applyDiagnosticAction(const QVariantMap &action) {
+    const auto kind = action.value("kind").toString();
+    if (kind != "enable" && kind != "disable" && kind != "remove")
+        return false;
+    const auto pack = action.value("pack").toMap();
+    const auto path = pack.value("path").toString();
+    const auto state = m_states.constFind(path);
+    const auto hash = action.value("sha1").toString();
+    const auto relativePath = action.value("relativePath").toString();
+    const auto validHash = [](const QString &value) {
+        if (value.size() != 40)
+            return false;
+        for (const auto c : value)
+            if (!((c >= '0' && c <= '9') || (c.toLower() >= 'a' && c.toLower() <= 'f')))
+                return false;
+        return true;
+    };
+    if (path.isEmpty() || state == m_states.cend() || relativePath.isEmpty() || !validHash(hash) ||
+        pack.value("minecraft") != state->pack.value("minecraft") ||
+        pack.value("loader") != state->pack.value("loader")) {
+        reject("This review is out of date. Refresh the instance before trying again.");
+        return false;
+    }
+    QVariantMap target;
+    for (const auto &value : withPreferences(state->pack, state->rows)) {
+        const auto row = value.toMap();
+        if (row.value("relativePath") != relativePath)
+            continue;
+        if (!target.isEmpty()) {
+            reject("This review is ambiguous. Refresh the instance before trying again.");
+            return false;
+        }
+        target = row;
+    }
+    if (target.isEmpty() || target.value("directory").toBool() ||
+        target.value("sha1").toString().compare(hash, Qt::CaseInsensitive) != 0) {
+        reject("This content has changed. Refresh the instance before trying again.");
+        return false;
+    }
+    if (target.value("locked").toBool()) {
+        reject("Unlock this content before changing it.", target.value("title").toString());
+        return false;
+    }
+    if (kind != "remove" && target.value("enabled").toBool() == (kind == "enable"))
+        return false;
+    ContentOperation operation;
+    operation.kind = kind == "remove" ? ContentOperation::Remove : ContentOperation::Enable;
+    operation.packPath = path;
+    operation.targets = {contentRowKey(target)};
+    operation.enabled = kind == "enable";
+    operation.expectedHashes.insert(contentRowKey(target), hash);
+    return enqueue(std::move(operation));
+}
 void ContentActions::remove(const QString &path) {
     const auto row = find(path);
     if (row.isEmpty())

@@ -42,6 +42,8 @@ qt_add_library(pack_storage STATIC src/platform/PackFileStore.h src/platform/Pac
 target_include_directories(pack_storage PUBLIC src)
 target_link_libraries(pack_storage PUBLIC Qt6::Core)
 qt_add_library(conflux_content STATIC
+    src/features/content/ContentDependencyGraph.h src/features/content/ContentDependencyGraph.cpp
+    src/features/content/ContentOperationState.h src/features/content/ContentOperationState.cpp
     src/services/PackContent.h src/services/PackContent.cpp
     src/features/content/ArchiveReader.h src/features/content/ArchiveReader.cpp
     src/features/content/ModMetadataReader.h src/features/content/ModMetadataReader.cpp
@@ -49,7 +51,7 @@ qt_add_library(conflux_content STATIC
     src/features/content/ConfigAssociation.h src/features/content/ConfigAssociation.cpp
     src/features/diagnostics/DiagnosticRule.h src/features/diagnostics/DiagnosticRules.cpp)
 target_include_directories(conflux_content PUBLIC src PRIVATE third_party)
-target_link_libraries(conflux_content PUBLIC pack_storage Qt6::Gui PRIVATE miniz)
+target_link_libraries(conflux_content PUBLIC pack_storage pack_foundation Qt6::Gui PRIVATE miniz)
 qt_add_library(conflux_config STATIC
     src/features/config/ConfigEditor.h src/features/config/ConfigEditor.cpp
     src/features/config/ConfigCodec.h src/features/config/JsonConfigCodec.cpp
@@ -97,9 +99,7 @@ target_sources(conflux_desktop PRIVATE
     src/features/content/ContentOperationExecutor.h src/features/content/ContentOperationExecutor.cpp
     src/features/content/ContentListModel.h src/features/content/ContentListModel.cpp
     src/features/content/ContentViewIndex.h src/features/content/ContentViewIndex.cpp
-    src/features/content/ContentDependencyGraph.h src/features/content/ContentDependencyGraph.cpp
     src/features/content/DependencyRemovals.h src/features/content/DependencyRemovals.cpp
-    src/features/content/ContentOperationState.h src/features/content/ContentOperationState.cpp
     src/features/content/ContentOperationReservations.h src/features/content/ContentOperationReservations.cpp
     src/features/content/ContentTargetIndex.h src/features/content/ContentTargetIndex.cpp
     src/features/content/ContentLockIntent.h src/features/content/ContentLockIntent.cpp

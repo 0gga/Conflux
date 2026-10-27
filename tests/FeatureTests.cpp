@@ -2,6 +2,7 @@
 #include "TestPerformance.h"
 #include "features/config/ConfigLibrary.h"
 #include "features/content/ConfigAssociation.h"
+#include "features/diagnostics/DiagnosticRule.h"
 #include "platform/ConfigOwnershipStore.h"
 #include <QDir>
 #include <QElapsedTimer>
@@ -40,6 +41,54 @@ class FeatureTests : public QObject {
     }
 #endif
   private slots:
+    void diagnosticsExposeTypedScopedActions() {
+        ContentSnapshot snapshot;
+        snapshot.pack = {{"path", "original-instance"}, {"minecraft", "1.21.1"}, {"loader", "fabric"}};
+        const QString sha(40, 'a');
+        QVariantMap child{{"title", "Child"}, {"fileName", "child.jar.disabled"},
+                          {"modId", "child"}, {"relativePath", "mods/child.jar.disabled"},
+                          {"sha1", sha},      {"category", "mods"},
+                          {"enabled", false}};
+        QVariantMap root{
+            {"title", "Root"},
+            {"fileName", "root.jar"},
+            {"modId", "root"},
+            {"relativePath", "mods/root.jar"},
+            {"sha1", sha},
+            {"category", "mods"},
+            {"enabled", true},
+            {"loaders", QStringList{"neoforge"}},
+            {"runtimeDependencies", QVariantList{QVariantMap{{"id", "child"}, {"required", true}}}}};
+        snapshot.files = {root, child};
+        const auto evaluate = [&] {
+            QVariantMap byCode;
+            for (const auto &rule : defaultDiagnosticRules())
+                for (const auto &value : rule->evaluate(snapshot)) {
+                    const auto entry = value.toMap();
+                    if (!entry.value("code").toString().isEmpty())
+                        byCode[entry.value("code").toString()] = entry;
+                }
+            return byCode;
+        };
+        auto issues = evaluate();
+        QCOMPARE(issues.size(), 2);
+        const auto missing = issues.value("disabled-required-content").toMap();
+        QCOMPARE(missing.value("category").toString(), QString("missing"));
+        const auto enable = missing.value("fixes").toList();
+        QCOMPARE(enable.size(), 1);
+        QCOMPARE(enable.first().toMap().value("kind").toString(), QString("enable"));
+        QCOMPARE(enable.first().toMap().value("pack").toMap(), snapshot.pack);
+        QCOMPARE(enable.first().toMap().value("sha1").toString(), sha);
+        const auto loader = issues.value("incompatible-loader").toMap().value("fixes").toList();
+        QCOMPARE(loader.size(), 2);
+        QCOMPARE(loader.first().toMap().value("kind").toString(), QString("disable"));
+        QCOMPARE(loader.last().toMap().value("kind").toString(), QString("remove"));
+        child["sha1"] = "unverified";
+        snapshot.files = {root, child};
+        QVERIFY(evaluate().value("disabled-required-content").toMap().value("fixes").toList().isEmpty());
+        snapshot.pack["loader"] = "neoforge";
+        QVERIFY(!evaluate().contains("incompatible-loader"));
+    }
     void globalProjectLinksOpenEvenWhenAnotherInstanceIsLoaded() {
         QTemporaryDir temp;
         DesktopSession session(nullptr, temp.path() + "/settings.ini", temp.path() + "/backups");

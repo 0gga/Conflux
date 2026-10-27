@@ -8,6 +8,7 @@ class ContentDependencyGraph final {
   public:
     explicit ContentDependencyGraph(const QVariantList &);
     QVariantMap relations(int position) const;
+    QVariantList disabledRequirements() const;
     QStringList descendants(const QStringList &roots) const;
     QStringList unused(const QStringList &candidates) const;
     bool individuallyUnused(const QString &key) const;

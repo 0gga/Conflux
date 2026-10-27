@@ -92,6 +92,73 @@ class ContentActionsTests : public QObject {
                 {"updateRelease", next.toVariant()}};
     }
   private slots:
+    void diagnosticActionsKeepOriginalInstanceAndRejectStaleReviews_data() {
+        QTest::addColumn<QString>("kind");
+        QTest::addColumn<QString>("fault");
+        for (const auto &kind : {QString("enable"), QString("disable"), QString("remove")})
+            for (const auto &fault :
+                 {QString("none"), QString("locked"), QString("stale-hash"), QString("external-edit"),
+                  QString("changed-loader"), QString("unseen-instance"), QString("invalid-hash")})
+                QTest::newRow(qPrintable(kind + "-" + fault)) << kind << fault;
+    }
+    void diagnosticActionsKeepOriginalInstanceAndRejectStaleReviews() {
+        QFETCH(QString, kind);
+        QFETCH(QString, fault);
+        QTemporaryDir temp;
+        const auto original = temp.path() + "/original", other = temp.path() + "/other";
+        const bool enabled = kind != "enable";
+        const auto relative = QString("mods/local.jar") + (enabled ? "" : ".disabled");
+        write(original + '/' + relative, "original");
+        write(other + '/' + relative, "other-instance");
+        auto reader = std::make_shared<NativePackFileStore>();
+        auto files = std::make_shared<NativeContentStore>(
+            std::make_shared<NativeInstalledModIdentity>(reader), temp.path() + "/backups");
+        ContentActions content(files, std::make_shared<ContentCatalogueFixture>(),
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        auto item = row("local", "Author", enabled);
+        item["relativePath"] = relative;
+        item["sha1"] = hash("original");
+        item.remove("sourceIds");
+        const QVariantMap pack{{"path", original}, {"minecraft", "1.21.1"}, {"loader", "fabric"}};
+        content.setContext(pack, {item});
+        QTRY_VERIFY(!content.busy());
+        if (fault == "locked")
+            content.setLocked(relative, true);
+        QVariantMap action{
+            {"kind", kind}, {"pack", pack}, {"relativePath", relative}, {"sha1", hash("original")}};
+        if (fault == "stale-hash")
+            action["sha1"] = hash("old");
+        if (fault == "invalid-hash")
+            action["sha1"] = "short";
+        if (fault == "changed-loader" || fault == "unseen-instance") {
+            auto context = pack;
+            if (fault == "changed-loader")
+                context["loader"] = "neoforge";
+            else
+                context["path"] = temp.path() + "/unseen";
+            action["pack"] = context;
+        }
+        if (fault == "external-edit")
+            write(original + '/' + relative, "external");
+        content.setContext({{"path", other}, {"minecraft", "1.21.1"}, {"loader", "fabric"}}, {});
+        QTRY_VERIFY(!content.busy());
+        const bool accepted = content.applyDiagnosticAction(action);
+        QCOMPARE(accepted, fault == "none" || fault == "external-edit");
+        QTRY_VERIFY(!content.busy());
+        if (fault == "none") {
+            QVERIFY(!QFileInfo::exists(original + '/' + relative));
+            if (kind != "remove")
+                QCOMPARE(read(original + (enabled ? "/mods/local.jar.disabled" : "/mods/local.jar")),
+                         QByteArray("original"));
+            QCOMPARE(content.operations()->failedCount(), 0);
+        } else {
+            QCOMPARE(read(original + '/' + relative),
+                     fault == "external-edit" ? QByteArray("external") : QByteArray("original"));
+            QCOMPARE(content.operations()->failedCount(), 1);
+        }
+        QCOMPARE(read(other + '/' + relative), QByteArray("other-instance"));
+    }
     void progressNotifiesCancellationPhaseChanges() {
         QTemporaryDir temp;
         auto installer = std::make_shared<ContentInstallerFixture>();

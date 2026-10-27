@@ -110,6 +110,26 @@ QVariantMap ContentDependencyGraph::relations(int position) const {
             {"isDependency", !hint.isEmpty()},
             {"dependencyHint", hint.join('\n')}};
 }
+QVariantList ContentDependencyGraph::disabledRequirements() const {
+    QVariantList result;
+    for (int i = 0; i < m_rows.size(); ++i) {
+        const auto row = m_rows[i].toMap();
+        if (row.value("enabled").toBool() || row.value("directory").toBool() || m_ambiguous.contains(i))
+            continue;
+        QStringList names;
+        for (const auto &edge : m_parents[i]) {
+            const auto parent = m_rows[edge.node].toMap();
+            if (edge.required && parent.value("enabled").toBool() && !m_ambiguous.contains(edge.node))
+                names << parent.value("title", parent.value("fileName")).toString();
+        }
+        names.removeAll(QString{});
+        names.removeDuplicates();
+        names.sort(Qt::CaseInsensitive);
+        if (!names.isEmpty())
+            result << QVariantMap{{"dependency", row}, {"requiredBy", names}};
+    }
+    return result;
+}
 QStringList ContentDependencyGraph::descendants(const QStringList &roots) const {
     QSet<int> selected, visited;
     QQueue<int> pending;

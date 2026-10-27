@@ -25,6 +25,24 @@ QString key(const QString &id) {
 class ContentDependencyGraphTests final : public QObject {
     Q_OBJECT
   private slots:
+    void disabledRequirementsOnlyIncludeEnabledRequiredParents() {
+        auto root = node("Root", {"Child"}), other = node("Other", {"Child"}), child = node("Child");
+        child["enabled"] = false;
+        auto relations = ContentDependencyGraph({root, other, child}).disabledRequirements();
+        QCOMPARE(relations.size(), 1);
+        QCOMPARE(relations.first().toMap().value("requiredBy").toStringList(),
+                 QStringList({"Other", "Root"}));
+        root["enabled"] = false;
+        other["runtimeDependencies"] = QVariantList{QVariantMap{{"id", "Child"}, {"required", false}}};
+        QVERIFY(ContentDependencyGraph({root, other, child}).disabledRequirements().isEmpty());
+        root["enabled"] = true;
+        child["enabled"] = true;
+        QVERIFY(ContentDependencyGraph({root, child}).disabledRequirements().isEmpty());
+        child["enabled"] = false;
+        auto duplicate = child;
+        duplicate["relativePath"] = "mods/duplicate.jar";
+        QVERIFY(ContentDependencyGraph({root, child, duplicate}).disabledRequirements().isEmpty());
+    }
     void sharedLockedAndTransitiveDependenciesAreKept() {
         auto a = node("A", {"B"}), b = node("B", {"C"}), c = node("C"), d = node("D", {"B"});
         ContentDependencyGraph before({a, b, c, d});

@@ -281,14 +281,15 @@
     },
     "src/features/content/ContentActions.cpp": {
       "phase": "non-ui",
-      "sha256": "3505934a9da8823f9456226223871c17f2d110c0abebc8c7619d5289fe381a05",
+      "sha256": "0eeeaccc57ff087c1713e2c33f09f89b42826148402542e6d7239b95eaa59e20",
       "status": "reviewed",
       "checks": [
         "Complete1100-line coordinator reviewed: captured context, metadata/update generations, literal filtered index, lock preferences/source state, optimistic projection, claims, queue/history and per-item installation",
         "Original-instance install/cleanup/recovery and post-commit inventory guards inspected. Locked recovery captures/seeds project target before enqueue, including reentrant navigation. Remaining post-notification/metadata callback lifetime and measured coordinator/index boundaries remain backlogged.",
         "Source path locks aggregate any locked entry using the registry logical key; duplicate order cannot erase protection.24 model data cases cover providers, case/disabled aliases, filters, unrelated locks and authoritative unlock clearing. Remaining notification reentrancy stays AUD-07.",
         "Context/filter-reset and refresh/busy notifications revalidate captured lifetime/generation before continuing publication or worker dispatch. Original2 redundant-read failures and2 disposal access violations reproduced;142 content-action outcomes pass. Remaining queue/history/metadata continuations remain AUD-07.",
-        "27 October2026 scoped progress:1000 broad notifications/1033ms for3000 rows reproduced, same-storage replacement-owner stale notification plus access violation reproduced. QPointer protects the original owner and statusChanged scopes busy/cancellable/activity/activityText. Initial cancellation-notify omission reproduced/corrected. Final4 filtering/5 action outcomes pass with zero broad notifications, below1ms bursts, phase notifications and safe late completion; remaining AUD-07 continuations stay pending."
+        "27 October2026 scoped progress:1000 broad notifications/1033ms for3000 rows reproduced, same-storage replacement-owner stale notification plus access violation reproduced. QPointer protects the original owner and statusChanged scopes busy/cancellable/activity/activityText. Initial cancellation-notify omission reproduced/corrected. Final4 filtering/5 action outcomes pass with zero broad notifications, below1ms bursts, phase notifications and safe late completion; remaining AUD-07 continuations stay pending.",
+        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open."
       ],
       "findings": [
         "AUD-07",
@@ -298,12 +299,13 @@
     },
     "src/features/content/ContentActions.h": {
       "phase": "non-ui",
-      "sha256": "698250524eccf057eec0a65d4f0fd07670967c2bc41438a85c202c481bcb8fcd",
+      "sha256": "ae6c23346c009eba07d9f9f36117472e681d38f12fab556355e265840a1a52cb",
       "status": "reviewed",
       "checks": [
         "Facade contracts, state ownership and new narrow version reader boundary reviewed; broader command lifecycle findings remain explicit. ContentVersionTests.",
         "Source review is separate from measured line/function/branch coverage; remaining states stay explicit.",
-        "27 October2026 scoped progress:1000 broad notifications/1033ms for3000 rows reproduced, same-storage replacement-owner stale notification plus access violation reproduced. QPointer protects the original owner and statusChanged scopes busy/cancellable/activity/activityText. Initial cancellation-notify omission reproduced/corrected. Final4 filtering/5 action outcomes pass with zero broad notifications, below1ms bursts, phase notifications and safe late completion; remaining AUD-07 continuations stay pending."
+        "27 October2026 scoped progress:1000 broad notifications/1033ms for3000 rows reproduced, same-storage replacement-owner stale notification plus access violation reproduced. QPointer protects the original owner and statusChanged scopes busy/cancellable/activity/activityText. Initial cancellation-notify omission reproduced/corrected. Final4 filtering/5 action outcomes pass with zero broad notifications, below1ms bursts, phase notifications and safe late completion; remaining AUD-07 continuations stay pending.",
+        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open."
       ],
       "findings": [
         "AUD-07",
@@ -312,11 +314,12 @@
     },
     "src/features/content/ContentDependencyGraph.cpp": {
       "phase": "non-ui",
-      "sha256": "81b508902b9868e54f9fd2b4cb680c110af743bd3f7cb2374b65cf90042766c0",
+      "sha256": "4ecd8885f33b84d36594bf9df79e24eaf5b96e23a6eb06c051734a0ea359ee87",
       "status": "reviewed",
       "checks": [
         "Exact provider/runtime references, ambiguity, cycles, reverse edges and closed unused subsets",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentDependencyGraphTests"
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentDependencyGraphTests",
+        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open."
       ],
       "findings": [
         "AUD-20"
@@ -324,11 +327,12 @@
     },
     "src/features/content/ContentDependencyGraph.h": {
       "phase": "non-ui",
-      "sha256": "1709181b16fd515d280821bd0c8d2974f58c3a22ad5038f24c434eef69760fca",
+      "sha256": "ca04d0222d43ae8154f2d7485e9f224218d969e98aacb4904d9f4af3a6b38ab3",
       "status": "reviewed",
       "checks": [
         "Exact provider/runtime references, ambiguity, cycles, reverse edges and closed unused subsets",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentDependencyGraphTests"
+        "Source review; measured uncovered paths remain explicit. Related regression sources: ContentDependencyGraphTests",
+        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open."
       ],
       "findings": [
         "AUD-20"
@@ -782,11 +786,12 @@
     },
     "src/features/diagnostics/DiagnosticRules.cpp": {
       "phase": "non-ui",
-      "sha256": "0acd15bf2083c1d0cbc60541e99cf2262b7b72d119249318887224081a677649",
+      "sha256": "09eff5029cc3108e6d847d0c0cb5ba11e2c665de650dda1770512699e6296408",
       "status": "reviewed",
       "checks": [
         "Independent duplicate/loader/pin/orphan/scan rules; qualified identities and snapshot purity need improvement",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests",
+        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open."
       ],
       "findings": [
         "AUD-11",
@@ -2683,9 +2688,11 @@
     },
     "qml/pack/DiagnosticsBanner.qml": {
       "phase": "ui",
-      "sha256": "9b17c7ed267ffbb2c9088e0e56adc6efef67a8dcb9075f1c03f5065bb089f2d7",
+      "sha256": "0e0f70658da9c6ae54963265558a2954929561e25e6bb25dbea5ffca42ef303c",
       "status": "pending",
-      "checks": [],
+      "checks": [
+        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open."
+      ],
       "findings": []
     },
     "qml/pack/FilePanel.qml": {
@@ -2741,10 +2748,11 @@
     },
     "qml/pages/PackPage.qml": {
       "phase": "ui",
-      "sha256": "86b49f9713c95db540ffbae4c9d9dc06094feef0d03e4fa84e814668b242232e",
+      "sha256": "930ff2d0eb0de85913bee2e44c9ba7a4898f2adc0aa8e336cbc88b78ab03e6dd",
       "status": "pending",
       "checks": [
-        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending."
+        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending.",
+        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open."
       ],
       "findings": []
     },

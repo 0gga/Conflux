@@ -147,6 +147,7 @@ class ContentActions final : public QObject {
     Q_INVOKABLE void hide(const QString &path, bool hidden = true);
     Q_INVOKABLE void refresh(bool checkUpdates = true);
     Q_INVOKABLE void setEnabled(const QString &, bool);
+    Q_INVOKABLE bool applyDiagnosticAction(const QVariantMap &);
     Q_INVOKABLE void remove(const QString &);
     Q_INVOKABLE void removeSelected();
     bool removeDependencies(const QVariantMap &, const QVariantList &);

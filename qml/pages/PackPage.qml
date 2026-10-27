@@ -85,6 +85,6 @@ Item {
         x: Math.max(28,Math.min(warningButton.mapToItem(root,0,0).x,root.width-width-28))
         onAboutToShow: { y = warningButton.mapToItem(root,0,warningButton.height).y+8 }
         background: Rectangle { color: Theme.colors.card; border.color: Theme.colors.border; radius: ControlStyle.panelRadius }
-        contentItem: DiagnosticsBanner { id: diagnostics; width: warningsPopup.width; issues: root.visibleIssues; expanded: true; onSettingsRequested: { warningsPopup.close(); root.warningSettingsRequested() } }
+        contentItem: DiagnosticsBanner { id: diagnostics; width: warningsPopup.width; issues: root.visibleIssues; expanded: true; onSettingsRequested: { warningsPopup.close(); root.warningSettingsRequested() } onFixRequested: function(fix) { if (root.session.content.applyDiagnosticAction(fix)) warningsPopup.close() } }
     }
 }

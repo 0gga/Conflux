@@ -151,11 +151,12 @@
     },
     "src/features/config/ConfigLibrary.cpp": {
       "phase": "non-ui",
-      "sha256": "66b1ff7cf94bcca5044e1397a098e68aed6b85acb0001536016d8e4041130b0c",
+      "sha256": "3d26182c6ea9bed6d00d921654d8b0b6b691610290165715e220c4c0e6a76b14",
       "status": "reviewed",
       "checks": [
         "Full source review of ownership port, explicit Identify validation, supported-format metadata, current context and derived file/mod ordering. FeatureTests and ContentInteractionTests exercise persistent mapping; repeated getter cost is an unmeasured candidate.",
-        "Review completion does not imply full measured test coverage."
+        "Review completion does not imply full measured test coverage.",
+        "27 October2026 AUD-29: measured2816-config repeated getters at3659ms/563200 ownership reads before; cached context/Identify publication and first-sorted-path lookup remove repeat reads/scans/sorts.8 focused outcomes pass, including refresh/instance/ownership invalidation, unsupported/automatic fields, duplicates and notification snapshot consistency. Warm reads below1ms; initial17ms construction remains synchronous."
       ],
       "findings": [
         "AUD-29"
@@ -163,11 +164,12 @@
     },
     "src/features/config/ConfigLibrary.h": {
       "phase": "non-ui",
-      "sha256": "1f87dba3508714e936d65871b5b8e5452e8e7278aca8b61fb8aa79c8d18b3e94",
+      "sha256": "85fff22000d3e0167f20962334bc9e22253f6517e69359650a984a8502cb1766",
       "status": "reviewed",
       "checks": [
         "Full source review of ownership port, explicit Identify validation, supported-format metadata, current context and derived file/mod ordering. FeatureTests and ContentInteractionTests exercise persistent mapping; repeated getter cost is an unmeasured candidate.",
-        "Review completion does not imply full measured test coverage."
+        "Review completion does not imply full measured test coverage.",
+        "27 October2026 AUD-29: measured2816-config repeated getters at3659ms/563200 ownership reads before; cached context/Identify publication and first-sorted-path lookup remove repeat reads/scans/sorts.8 focused outcomes pass, including refresh/instance/ownership invalidation, unsupported/automatic fields, duplicates and notification snapshot consistency. Warm reads below1ms; initial17ms construction remains synchronous."
       ],
       "findings": [
         "AUD-29"

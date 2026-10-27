@@ -1,5 +1,6 @@
 #pragma once
 #include "ConfigCodec.h"
+#include <QHash>
 #include <QObject>
 #include <QVariantList>
 #include <memory>
@@ -29,6 +30,8 @@ class ConfigLibrary final : public QObject {
     std::shared_ptr<IConfigOwnershipStore> m_store;
     QStringList m_extensions;
     QVariantMap m_pack;
-    QVariantList m_inventory;
+    QVariantList m_inventory, m_files, m_mods;
+    QHash<QString, qsizetype> m_fileIndices;
+    void rebuild();
 };
 } // namespace studio

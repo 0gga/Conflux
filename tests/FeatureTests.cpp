@@ -1,8 +1,10 @@
 #include "DesktopSession.h"
+#include "TestPerformance.h"
 #include "features/config/ConfigLibrary.h"
 #include "features/content/ConfigAssociation.h"
 #include "platform/ConfigOwnershipStore.h"
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -131,6 +133,164 @@ class FeatureTests : public QObject {
                  QString("Mod selected by you"));
         reopened.setContext({{"path", "pack"}}, {files.last()});
         QVERIFY(!reopened.file("config/odd.json").value("editable").toBool());
+    }
+    void configLibraryGettersReusePublishedSnapshot_data() {
+        QTest::addColumn<int>("count");
+        QTest::newRow("empty") << 0;
+        QTest::newRow("ordinary") << 100;
+        QTest::newRow("large-config-library") << 2816;
+    }
+    void configLibraryGettersReusePublishedSnapshot() {
+        QFETCH(int, count);
+        QTemporaryDir temp;
+        struct OwnershipReads final : IConfigOwnershipStore {
+            SettingsConfigOwnershipStore native;
+            mutable int reads = 0;
+            explicit OwnershipReads(const QString &path) : native(path) {}
+            QString owner(const QString &pack, const QString &path) const override {
+                ++reads;
+                return native.owner(pack, path);
+            }
+            void setOwner(const QString &pack, const QString &path, const QString &id) override {
+                native.setOwner(pack, path, id);
+            }
+        };
+        auto store = std::make_shared<OwnershipReads>(temp.path() + "/owners.ini");
+        const auto root = temp.path() + "/Instance";
+        QVariantList inventory;
+        QStringList paths;
+        const int modCount = count == 0 ? 0 : 310;
+        for (int i = 0; i < modCount; ++i)
+            inventory << QVariantMap{{"category", "mods"},
+                                     {"modId", QString("mod%1").arg(i)},
+                                     {"title", QString("Mod %1").arg(i, 4, 10, QChar('0'))}};
+        for (int i = 0; i < count; ++i) {
+            const auto path = QString("config/group%1/settings-%2.%3")
+                                  .arg(i % 16)
+                                  .arg(i)
+                                  .arg(QStringList{"json", "toml", "properties", "cfg"}[i % 4]);
+            paths << path;
+            inventory << QVariantMap{
+                {"category", "configs"}, {"relativePath", path}, {"fileName", QFileInfo(path).fileName()}};
+            if (i % 3 == 0)
+                store->setOwner(root, path, QString("mod%1").arg(i % modCount));
+        }
+        ConfigLibrary library(store);
+        QElapsedTimer clock;
+        clock.start();
+        library.setContext({{"path", root}}, inventory);
+        const auto published = library.files();
+        const auto publishedMods = library.mods();
+        const auto initialMs = clock.elapsed();
+        QCOMPARE(published.size(), count);
+        QCOMPARE(publishedMods.size(), modCount);
+        const int initialReads = store->reads;
+        clock.restart();
+        qsizetype fileCount = 0, modsCount = 0;
+        for (int i = 0; i < 100; ++i) {
+            fileCount += library.files().size();
+            modsCount += library.mods().size();
+            const auto path = count == 0 ? QString("missing.json") : paths[(i * 37) % count];
+            const auto file = library.file(path);
+            if (count == 0)
+                QVERIFY(file.isEmpty());
+            else
+                QCOMPARE(file.value("relativePath").toString(), path);
+        }
+        const auto warmMs = clock.elapsed();
+        qInfo() << count << "configs: initial ms" << initialMs << "initial ownership reads" << initialReads
+                << "100 files/mods/path reads ms" << warmMs << "extra ownership reads"
+                << store->reads - initialReads;
+        QCOMPARE(fileCount, count * 100);
+        QCOMPARE(modsCount, modCount * 100);
+        QCOMPARE(store->reads - initialReads, 0);
+        QVERIFY(test_performance::releaseBudgetMet(warmMs, 150));
+        auto detached = library.files();
+        if (!detached.isEmpty())
+            detached.first() = QVariantMap{{"title", "Caller edit"}};
+        QCOMPARE(library.files(), published);
+        QCOMPARE(library.mods(), publishedMods);
+    }
+    void configLibraryPublishesOwnershipChangesAndRefreshes() {
+        QTemporaryDir temp;
+        auto store = std::make_shared<SettingsConfigOwnershipStore>(temp.path() + "/owners.ini");
+        ConfigLibrary library(store);
+        const QVariantMap packA{{"path", temp.path() + "/A"}}, packB{{"path", temp.path() + "/B"}};
+        const QVariantMap alpha{
+            {"category", "mods"}, {"modId", "alpha"}, {"title", "Alpha"}, {"icon", "alpha.png"}};
+        const QVariantMap zulu{
+            {"category", "mods"}, {"modId", "zulu"}, {"title", "Zulu"}, {"enabled", false}};
+        const QVariantMap automatic{{"category", "configs"},      {"relativePath", "config/a.JSON"},
+                                    {"fileName", "a.JSON"},       {"relatedModId", "alpha"},
+                                    {"relatedModTitle", "Alpha"}, {"association", "Matched by file name"}};
+        const QVariantMap unknown{
+            {"category", "configs"}, {"relativePath", "config/b.toml"}, {"fileName", "b.toml"}};
+        const QVariantMap unsupported{
+            {"category", "configs"}, {"relativePath", "config/c.bin"}, {"fileName", "c.bin"}};
+        QVariantList inventory{alpha,
+                               zulu,
+                               automatic,
+                               unknown,
+                               unsupported,
+                               QVariantMap{{"category", "mods"}, {"modId", ""}, {"title", "Ignore"}},
+                               QVariantMap{{"category", "worlds"}, {"modId", "world"}}};
+        library.setContext(packA, inventory);
+        QSignalSpy changed(&library, &ConfigLibrary::changed);
+        connect(&library, &ConfigLibrary::changed, &library, [&] {
+            for (const auto &value : library.files())
+                QCOMPARE(library.file(value.toMap().value("relativePath").toString()), value.toMap());
+        });
+        QCOMPARE(library.mods().size(), 2);
+        QCOMPARE(library.mods().first().toMap().value("modId").toString(), "alpha");
+        QVERIFY(library.file("config/a.JSON").value("editable").toBool());
+        QVERIFY(!library.identify("missing", "alpha"));
+        QVERIFY(!library.identify("config/b.toml", "absent"));
+        QCOMPARE(changed.size(), 0);
+        QVERIFY(library.identify("config/b.toml", "zulu"));
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(library.file("config/b.toml").value("relatedModTitle").toString(), "Zulu");
+        QVERIFY(library.file("config/b.toml").value("editable").toBool());
+        QVERIFY(library.identify("config/c.bin", "alpha"));
+        QVERIFY(!library.file("config/c.bin").value("supported").toBool());
+        QVERIFY(!library.file("config/c.bin").value("editable").toBool());
+        const auto beforeRefresh = library.files();
+        store->setOwner(packA.value("path").toString(), "config/b.toml", "alpha");
+        QCOMPARE(library.files(), beforeRefresh);
+        library.setContext(
+            packA, inventory); // An explicit refresh accepts persisted changes even with identical input.
+        QCOMPARE(library.file("config/b.toml").value("relatedModTitle").toString(), "Alpha");
+        QCOMPARE(library.file("config/b.toml").value("icon").toString(), "alpha.png");
+        library.setContext(packB, inventory);
+        QVERIFY(!library.file("config/b.toml").value("editable").toBool());
+        QCOMPARE(library.file("config/a.JSON").value("association").toString(), "Matched by file name");
+        library.setContext(packA, inventory);
+        QVERIFY(library.file("config/b.toml").value("editable").toBool());
+        inventory.removeFirst(); // Missing owner must not inherit the cached editing permission.
+        library.setContext(packA, inventory);
+        QVERIFY(!library.file("config/b.toml").value("editable").toBool());
+        library.setContext({}, {});
+        QVERIFY(library.files().isEmpty());
+        QVERIFY(library.mods().isEmpty());
+        QVERIFY(library.file("config/b.toml").isEmpty());
+    }
+    void configLibraryPathLookupUsesFirstPublishedMatch() {
+        QTemporaryDir temp;
+        ConfigLibrary library(std::make_shared<SettingsConfigOwnershipStore>(temp.path() + "/owners.ini"));
+        library.setContext(
+            {{"path", "pack"}},
+            {QVariantMap{{"category", "mods"}, {"modId", "id"}, {"title", "Old title"}},
+             QVariantMap{{"category", "mods"}, {"modId", "id"}, {"title", "Last mod wins"}},
+             QVariantMap{
+                 {"category", "configs"}, {"relativePath", "config/same.json"}, {"fileName", "z.json"}},
+             QVariantMap{
+                 {"category", "configs"}, {"relativePath", "config/same.json"}, {"fileName", "a.json"}}});
+        QCOMPARE(library.mods().size(), 1);
+        QCOMPARE(library.mods().first().toMap().value("title").toString(), "Last mod wins");
+        QCOMPARE(library.files().size(), 2);
+        QCOMPARE(library.file("config/same.json"), library.files().first().toMap());
+        QCOMPARE(library.file("config/same.json").value("fileName").toString(), "a.json");
+        QVERIFY(library.identify("config/same.json", "id"));
+        QCOMPARE(library.file("config/same.json").value("relatedModTitle").toString(), "Last mod wins");
     }
     void mouseHistoryButtons() {
         NavigationHistory history;

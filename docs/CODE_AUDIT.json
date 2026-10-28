@@ -17,22 +17,24 @@
     },
     "src/DesktopSession.cpp": {
       "phase": "ui",
-      "sha256": "af4bf46a0a3eceffcf7230bdb4f42ab07c69b0fbb1caac55fe48fa7fce9110b4",
+      "sha256": "6f181f054016358b5750622c231792064ccd8c426b502792454025ad3b8d6708",
       "status": "pending",
       "checks": [
         "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending.",
         "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open.",
-        "28 October2026 local command palette: bounded prepared literal index, closed metadata batches produce no rebuilds, stable selected key through enrichment/removal, guarded navigation and three viewport focus/draft/containment scenarios pass.18 backend/5 UI outcomes; all53 Release suites pass212.14s. Full measured/exhaustive UI audit remains open."
+        "28 October2026 local command palette: bounded prepared literal index, closed metadata batches produce no rebuilds, stable selected key through enrichment/removal, guarded navigation and three viewport focus/draft/containment scenarios pass.18 backend/5 UI outcomes; all53 Release suites pass212.14s. Full measured/exhaustive UI audit remains open.",
+        "28 October2026 shortcut settings:31 backend/5 rendered outcomes cover persisted independent-process read, validation/conflicts, release-only capture, cancel/clear/reset, fault/reentrancy/lifetime and three viewport input/focus safety. All55 Release suites pass218.14s. Exhaustive measured/UI audit remains open."
       ],
       "findings": []
     },
     "src/DesktopSession.h": {
       "phase": "ui",
-      "sha256": "2b1dc4478c16b330df980f6834d6f8b04edadc760385cda388faa41c064b6016",
+      "sha256": "77a2703c76e4da788b04116c6af1c6f7fd9e93451bc9fdeaaba33a9b4dc4afad",
       "status": "pending",
       "checks": [
         "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending.",
-        "28 October2026 local command palette: bounded prepared literal index, closed metadata batches produce no rebuilds, stable selected key through enrichment/removal, guarded navigation and three viewport focus/draft/containment scenarios pass.18 backend/5 UI outcomes; all53 Release suites pass212.14s. Full measured/exhaustive UI audit remains open."
+        "28 October2026 local command palette: bounded prepared literal index, closed metadata batches produce no rebuilds, stable selected key through enrichment/removal, guarded navigation and three viewport focus/draft/containment scenarios pass.18 backend/5 UI outcomes; all53 Release suites pass212.14s. Full measured/exhaustive UI audit remains open.",
+        "28 October2026 shortcut settings:31 backend/5 rendered outcomes cover persisted independent-process read, validation/conflicts, release-only capture, cancel/clear/reset, fault/reentrancy/lifetime and three viewport input/focus safety. All55 Release suites pass218.14s. Exhaustive measured/UI audit remains open."
       ],
       "findings": []
     },
@@ -2447,9 +2449,11 @@
     },
     "qml/components/IconPaths.js": {
       "phase": "ui",
-      "sha256": "efc1e7ee54afd84270d5f191e70454f5e3a7a995595f1b246d60d0b4bd24e769",
+      "sha256": "40dbd69a738436aaf5eda3dac5a717f5d174fd79a7859c90015d89b1fd713f9f",
       "status": "pending",
-      "checks": [],
+      "checks": [
+        "28 October2026 shortcut settings:31 backend/5 rendered outcomes cover persisted independent-process read, validation/conflicts, release-only capture, cancel/clear/reset, fault/reentrancy/lifetime and three viewport input/focus safety. All55 Release suites pass218.14s. Exhaustive measured/UI audit remains open."
+      ],
       "findings": []
     },
     "qml/components/LibraryRow.qml": {
@@ -2650,11 +2654,12 @@
     },
     "qml/Main.qml": {
       "phase": "ui",
-      "sha256": "3498522a6ee476f81f662045a5f969521b7d028cf9264ff039cabd3897f1e333",
+      "sha256": "b98eb02e9fd21de6142b43023e784cb05c779eeb24c9e41ede1aee151c6359eb",
       "status": "pending",
       "checks": [
         "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending.",
-        "28 October2026 local command palette: bounded prepared literal index, closed metadata batches produce no rebuilds, stable selected key through enrichment/removal, guarded navigation and three viewport focus/draft/containment scenarios pass.18 backend/5 UI outcomes; all53 Release suites pass212.14s. Full measured/exhaustive UI audit remains open."
+        "28 October2026 local command palette: bounded prepared literal index, closed metadata batches produce no rebuilds, stable selected key through enrichment/removal, guarded navigation and three viewport focus/draft/containment scenarios pass.18 backend/5 UI outcomes; all53 Release suites pass212.14s. Full measured/exhaustive UI audit remains open.",
+        "28 October2026 shortcut settings:31 backend/5 rendered outcomes cover persisted independent-process read, validation/conflicts, release-only capture, cancel/clear/reset, fault/reentrancy/lifetime and three viewport input/focus safety. All55 Release suites pass218.14s. Exhaustive measured/UI audit remains open."
       ],
       "findings": []
     },
@@ -2776,9 +2781,11 @@
     },
     "qml/pages/SettingsPage.qml": {
       "phase": "ui",
-      "sha256": "73810566f93ebb82e18dc5c9e41ec763b133e48c3667cb6209324b46c8f5dcc2",
+      "sha256": "9ea987487250518a42057ceee63c0c79e622326d48de80843abae813d936da88",
       "status": "pending",
-      "checks": [],
+      "checks": [
+        "28 October2026 shortcut settings:31 backend/5 rendered outcomes cover persisted independent-process read, validation/conflicts, release-only capture, cancel/clear/reset, fault/reentrancy/lifetime and three viewport input/focus safety. All55 Release suites pass218.14s. Exhaustive measured/UI audit remains open."
+      ],
       "findings": []
     },
     "qml/pages/ShowcasePage.qml": {
@@ -2946,6 +2953,42 @@
       "status": "reviewed",
       "checks": [
         "28 October2026 local command palette: bounded prepared literal index, closed metadata batches produce no rebuilds, stable selected key through enrichment/removal, guarded navigation and three viewport focus/draft/containment scenarios pass.18 backend/5 UI outcomes; all53 Release suites pass212.14s. Full measured/exhaustive UI audit remains open."
+      ],
+      "findings": []
+    },
+    "qml/components/ShortcutCaptureDialog.qml": {
+      "phase": "ui",
+      "sha256": "b59ec4a88aae87d00232cbb8bb83d820479af1b5308f64e0130b8998624a0ff8",
+      "status": "pending",
+      "checks": [
+        "28 October2026 shortcut settings:31 backend/5 rendered outcomes cover persisted independent-process read, validation/conflicts, release-only capture, cancel/clear/reset, fault/reentrancy/lifetime and three viewport input/focus safety. All55 Release suites pass218.14s. Exhaustive measured/UI audit remains open."
+      ],
+      "findings": []
+    },
+    "qml/settings/ShortcutSettings.qml": {
+      "phase": "ui",
+      "sha256": "3db3e535c84c7dac53410d0032ce3ff83f33dc83f1844cdbb2dc043bda1ed233",
+      "status": "pending",
+      "checks": [
+        "28 October2026 shortcut settings:31 backend/5 rendered outcomes cover persisted independent-process read, validation/conflicts, release-only capture, cancel/clear/reset, fault/reentrancy/lifetime and three viewport input/focus safety. All55 Release suites pass218.14s. Exhaustive measured/UI audit remains open."
+      ],
+      "findings": []
+    },
+    "src/features/preferences/ShortcutPreferences.cpp": {
+      "phase": "non-ui",
+      "sha256": "4ebd86e5c4043947f51e4ebfa9f185eb777035eb0ebe4d7baf50e5a0bd85d22b",
+      "status": "reviewed",
+      "checks": [
+        "28 October2026 shortcut settings:31 backend/5 rendered outcomes cover persisted independent-process read, validation/conflicts, release-only capture, cancel/clear/reset, fault/reentrancy/lifetime and three viewport input/focus safety. All55 Release suites pass218.14s. Exhaustive measured/UI audit remains open."
+      ],
+      "findings": []
+    },
+    "src/features/preferences/ShortcutPreferences.h": {
+      "phase": "non-ui",
+      "sha256": "9a5b9043b2a02c1e6b20e7d3ac4efaf9972db85b5e0a7d4c2de55802f5b44b93",
+      "status": "reviewed",
+      "checks": [
+        "28 October2026 shortcut settings:31 backend/5 rendered outcomes cover persisted independent-process read, validation/conflicts, release-only capture, cancel/clear/reset, fault/reentrancy/lifetime and three viewport input/focus safety. All55 Release suites pass218.14s. Exhaustive measured/UI audit remains open."
       ],
       "findings": []
     }

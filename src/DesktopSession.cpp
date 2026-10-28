@@ -35,7 +35,7 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
                                                                          m_dependencySource, m_contentFiles)),
       m_optionalSource(std::make_shared<OptionalDependencySource>()),
       m_running(std::make_shared<InstanceProcessSource>(), this), m_navigation(this), m_commands(this),
-      m_input(m_navigation, this),
+      m_shortcuts(m_browseStore, this), m_input(m_navigation, this),
       m_warnings(std::make_shared<SettingsWarningPreferenceStore>(settingsFile), this),
       m_workspace(defaultPackInspector(), this), m_browser(m_fileStore, this), m_logs(m_fileStore, this),
       m_worlds(m_fileStore, this),
@@ -65,6 +65,10 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
                                                    m_reviewedIdentities),
                 m_releasePolicy, m_reviewedIdentities, this),
       m_changes(this) {
+    connect(&m_shortcuts, &ShortcutPreferences::captureChanged, this, [this] {
+        if (m_shortcuts.capturing())
+            m_commands.dismiss();
+    });
     m_commands.setNavigator([this](QVariantMap route) { return m_navigation.go(std::move(route)); });
     auto updateCommands = [this] {
         m_commands.setContext(m_workspace.pack(), m_content.inventory(), m_workspace.files());

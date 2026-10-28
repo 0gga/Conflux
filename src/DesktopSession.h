@@ -13,6 +13,7 @@
 #include "features/navigation/NavigationHistory.h"
 #include "features/navigation/NavigationInput.h"
 #include "features/preferences/BrowsePreferences.h"
+#include "features/preferences/ShortcutPreferences.h"
 #include "features/preferences/WarningPreferences.h"
 #include "features/showcase/ProjectShowcase.h"
 #include "features/showcase/ReleaseFilters.h"
@@ -34,6 +35,7 @@ class DesktopSession final : public QObject {
     Q_PROPERTY(studio::RunningInstances *running READ running CONSTANT)
     Q_PROPERTY(studio::NavigationHistory *navigation READ navigation CONSTANT)
     Q_PROPERTY(studio::CommandPalette *commands READ commands CONSTANT)
+    Q_PROPERTY(studio::ShortcutPreferences *shortcuts READ shortcuts CONSTANT)
     Q_PROPERTY(studio::WarningPreferences *warnings READ warnings CONSTANT)
     Q_PROPERTY(studio::PackWorkspace *workspace READ workspace CONSTANT)
     Q_PROPERTY(studio::PackFileBrowser *files READ files CONSTANT)
@@ -63,6 +65,9 @@ class DesktopSession final : public QObject {
     }
     CommandPalette *commands() {
         return &m_commands;
+    }
+    ShortcutPreferences *shortcuts() {
+        return &m_shortcuts;
     }
     WarningPreferences *warnings() {
         return &m_warnings;
@@ -154,6 +159,7 @@ class DesktopSession final : public QObject {
     RunningInstances m_running;
     NavigationHistory m_navigation;
     CommandPalette m_commands;
+    ShortcutPreferences m_shortcuts;
     NavigationInput m_input;
     WarningPreferences m_warnings;
     PackWorkspace m_workspace;

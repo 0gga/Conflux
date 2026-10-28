@@ -523,3 +523,12 @@ This is the first local PW-09 slice. Explicit online lookup, full-text file sear
 ## Diagnostic snapshot storage sharing
 
 ContentActions.diagnosticIssues retains the latest m_rows list even when a refresh produces equal values in new storage. Semantic row/context changes still recompute the pure diagnostics; an equal refresh preserves the cached output and shares the new input storage so following reads use QList's shared-data equality shortcut. This removes repeated full-inventory comparisons after an unchanged refresh while keeping captured file/loader descriptors current. The existing ContentViewIndex already uses a shared-list identity guard.
+
+
+## Configurable window shortcuts
+
+ShortcutPreferences separates binding validation/capture state from QML and persists only keyboard/shortcuts overrides through IBrowseSettingsStore. Defaults retain Alt+Left/Alt+Right, Ctrl+K, Ctrl+N and Ctrl+Shift+P. Native labels use QKeySequence while storage uses PortableText. Five known actions are validated together at load so swapped bindings remain valid; malformed/duplicate stored maps fall back quietly, unknown settings are preserved, and unassigned actions remain possible. Common system/editing keys and multi-stroke sequences are rejected, as are duplicates.
+
+Recording is explicit and modal. Modifier-only presses do not assign anything; a valid primary-key release commits, Escape cancels, and Clear unassigns. Main disables its normal window shortcuts during recording and suppresses auto-repeat; close first cancels a recorder. DesktopSession dismisses the palette before a recorder opens. The recorder permits Tab focus traversal to Cancel/Clear and keeps the prior input draft/focus stable. Binding changes update the existing keyed model rather than replacing row controls. A capture generation protects a new capture opened by save observers from completion of an older one; owner guards protect synchronous store callbacks and notifications. Thrown save faults stay inline and retryable. The existing generic settings adapter's deferred/status-only persistence behavior remains a separate follow-up.
+
+Settings adds Shortcuts under General, with per-action capture/reset and Reset all. Main's actual shortcut sequences and hints bind to the live binding map. The recorder has no filesystem/mod operations or global keyboard hook. UI tests target offscreen windows; the independent persistence helper is a hidden console child.

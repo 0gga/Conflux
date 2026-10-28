@@ -11,6 +11,7 @@ Item {
     required property var catalogue
     required property var browsePreferences
     property var installationPreferences: null
+    property var shortcutPreferences: null
     property string tab: "appearance"
     signal tabRequested(string key)
     readonly property bool compact: width < 650
@@ -24,7 +25,7 @@ Item {
                 ColumnLayout {
                 width: categoryScroll.availableWidth; spacing: 6
                 Repeater {
-                    model: [{category:"GENERAL",key:"appearance",label:"Appearance",icon:"settings"},{category:"MODPACKS",key:"warnings",label:"Warnings",icon:"warning"},{category:"",key:"browse",label:"Browsing",icon:"compass"},{category:"",key:"installation",label:"Installation",icon:"download"},{category:"SERVICES",key:"connections",label:"Connections",icon:"compass"}]
+                    model: [{category:"GENERAL",key:"appearance",label:"Appearance",icon:"settings"},{category:"",key:"shortcuts",label:"Shortcuts",icon:"keyboard"},{category:"MODPACKS",key:"warnings",label:"Warnings",icon:"warning"},{category:"",key:"browse",label:"Browsing",icon:"compass"},{category:"",key:"installation",label:"Installation",icon:"download"},{category:"SERVICES",key:"connections",label:"Connections",icon:"compass"}]
                     delegate: ColumnLayout {
                         required property var modelData
                         Layout.fillWidth: true; spacing: 8
@@ -44,6 +45,7 @@ Item {
                         width: scroll.availableWidth; spacing: 16
                         BrowseSettings { visible: root.tab === "browse"; Layout.fillWidth: true; preferences: root.browsePreferences; catalogue: root.catalogue }
                         Loader { active: root.installationPreferences !== null && root.tab === "installation"; visible: active; Layout.fillWidth: true; sourceComponent: InstallationSettings { preferences: root.installationPreferences } }
+                        Loader { active: root.shortcutPreferences !== null && root.tab === "shortcuts"; visible: active; Layout.fillWidth: true; sourceComponent: ShortcutSettings { preferences: root.shortcutPreferences } }
                         WarningSettings { visible: root.tab === "warnings"; Layout.fillWidth: true; preferences: root.warnings }
                         ConnectionSettings { visible: root.tab === "connections"; Layout.fillWidth: true; app: root.app }
                     }

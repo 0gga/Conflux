@@ -13,6 +13,7 @@ ApplicationWindow {
     property bool closeRequested: false
     property bool closeAfterOperations: false
     onClosing: function(close) {
+        if (session.shortcuts.capturing) { close.accepted = false; session.shortcuts.cancelCapture(); return }
         if (session.editor.dirty) { close.accepted = false; closeRequested = true; unsaved.open() }
         else {
             session.browse.cancelPending()
@@ -86,12 +87,12 @@ ApplicationWindow {
         function onBlocked() { unsaved.open() }
     }
     Connections { target: window.session.editor; function onSaved() { if (window.closeRequested || window.session.navigation.hasPending) window.finishLeaving() } }
-    Shortcut { enabled: !commandPalette.visible; sequence: "Alt+Left"; onActivated: window.session.navigation.back() }
-    Shortcut { enabled: !commandPalette.visible; sequence: "Alt+Right"; onActivated: window.session.navigation.forward() }
-    Shortcut { enabled: !commandPalette.visible; sequence: "Ctrl+K"; onActivated: { if (window.navigate("discover")) discovery.focusSearch() } }
-    Shortcut { sequence: "Ctrl+N"; enabled: !commandPalette.visible && !window.session.editor.dirty && !window.session.editor.busy; onActivated: newPack.open() }
+    Shortcut { autoRepeat: false; enabled: !!window.session.shortcuts.bindings.back && !window.session.shortcuts.capturing && !commandPalette.visible; sequence: window.session.shortcuts.bindings.back; onActivated: window.session.navigation.back() }
+    Shortcut { autoRepeat: false; enabled: !!window.session.shortcuts.bindings.forward && !window.session.shortcuts.capturing && !commandPalette.visible; sequence: window.session.shortcuts.bindings.forward; onActivated: window.session.navigation.forward() }
+    Shortcut { autoRepeat: false; enabled: !!window.session.shortcuts.bindings.discover && !window.session.shortcuts.capturing && !commandPalette.visible; sequence: window.session.shortcuts.bindings.discover; onActivated: { if (window.navigate("discover")) discovery.focusSearch() } }
+    Shortcut { autoRepeat: false; sequence: window.session.shortcuts.bindings.newPack; enabled: !!window.session.shortcuts.bindings.newPack && !window.session.shortcuts.capturing && !commandPalette.visible && !window.session.editor.dirty && !window.session.editor.busy; onActivated: newPack.open() }
 
-    Shortcut { sequence: "Ctrl+Shift+P"; onActivated: { if (window.session.commands.visible) window.session.commands.dismiss(); else window.session.commands.open() } }
+    Shortcut { autoRepeat: false; enabled: !!window.session.shortcuts.bindings.palette && !window.session.shortcuts.capturing; sequence: window.session.shortcuts.bindings.palette; onActivated: { if (window.session.commands.visible) window.session.commands.dismiss(); else window.session.commands.open() } }
 
     WindowResizeEdges { anchors.fill: parent; targetWindow: window; z: 100 }
     Overlay.overlay.transform: Scale { xScale: window.interfaceScale; yScale: window.interfaceScale }
@@ -144,8 +145,8 @@ ApplicationWindow {
                 WindowDragArea { objectName: "windowDragArea"; anchors.fill: parent; targetWindow: window }
                 RowLayout {
                     anchors.fill: parent; anchors.leftMargin: 20; anchors.rightMargin: 8
-                    ActionButton { objectName: "navigationBackButton"; iconName: "back"; hint: "Back · Alt+Left"; enabled: window.session.navigation.canBack; subtle: true; onClicked: window.session.navigation.back() }
-                    ActionButton { iconName: "forward"; hint: "Forward · Alt+Right"; enabled: window.session.navigation.canForward; subtle: true; onClicked: window.session.navigation.forward() }
+                    ActionButton { objectName: "navigationBackButton"; iconName: "back"; hint: "Back" + (window.session.shortcuts.bindings.back ? " · " + window.session.shortcuts.bindings.back : ""); enabled: window.session.navigation.canBack; subtle: true; onClicked: window.session.navigation.back() }
+                    ActionButton { iconName: "forward"; hint: "Forward" + (window.session.shortcuts.bindings.forward ? " · " + window.session.shortcuts.bindings.forward : ""); enabled: window.session.navigation.canForward; subtle: true; onClicked: window.session.navigation.forward() }
                     Rectangle { Layout.leftMargin: 8; Layout.rightMargin: 12; implicitWidth: 1; implicitHeight: 18; color: Theme.colors.border }
                     Text {
                         id: titleLabel
@@ -156,7 +157,7 @@ ApplicationWindow {
                         HoverHandler { id: titleHover }
                         RoundedToolTip { showWhen: titleHover.hovered && titleLabel.truncated; text: window.pageTitle }
                     }
-                    ActionButton { objectName: "openCommandPalette"; iconName: "search"; hint: "Search Conflux · Ctrl+Shift+P"; subtle: true; compact: true; onClicked: window.session.commands.open() }
+                    ActionButton { objectName: "openCommandPalette"; iconName: "search"; hint: "Search Conflux" + (window.session.shortcuts.bindings.palette ? " · " + window.session.shortcuts.bindings.palette : ""); subtle: true; compact: true; onClicked: window.session.commands.open() }
                     OperationHud { availableWidth: window.width/window.interfaceScale; availableHeight: window.height/window.interfaceScale; content: window.session.content; running: window.session.running; onInstanceRequested: function(path) { window.session.navigation.go({page:"workspace",packPath:path}) } }
                     WindowControls { Layout.alignment: Qt.AlignVCenter; targetWindow: window }
                 }
@@ -177,7 +178,7 @@ ApplicationWindow {
                     onShowcaseRequested: function(path, tab) { window.session.navigation.go({page:"showcase",packPath:window.app.activePack.path,modPath:path,showcaseTab:tab || "description"}) }
                     onAuthorRequested: function(author) { window.session.navigation.go({page:"discover",packPath:window.app.activePack.path,author:author}) }
                 }
-                SettingsPage { app: window.app; catalogue: window.session.catalogue; warnings: window.session.warnings; browsePreferences: window.session.browsePreferences; installationPreferences: window.session.installationPreferences; tab: window.session.navigation.route.settingsTab || "appearance"; onTabRequested: function(key) { window.session.navigation.go({page:"settings",settingsTab:key}) } }
+                SettingsPage { app: window.app; catalogue: window.session.catalogue; warnings: window.session.warnings; browsePreferences: window.session.browsePreferences; installationPreferences: window.session.installationPreferences; shortcutPreferences: window.session.shortcuts; tab: window.session.navigation.route.settingsTab || "appearance"; onTabRequested: function(key) { window.session.navigation.go({page:"settings",settingsTab:key}) } }
                 ShowcasePage { releasePolicy: window.session.releasePolicy; app: window.app; browse: window.session.browse; showcase: window.session.showcase; releaseFilters: window.session.releaseFilters; contentController: window.session.content; tab: window.session.navigation.route.showcaseTab || "description"; onTabRequested: function(key) { const route = Object.assign({},window.session.navigation.route); route.showcaseTab = key; window.session.navigation.go(route) } }
             }
         }
@@ -204,6 +205,7 @@ ApplicationWindow {
         }
     }
     CreatePackDialog { id: newPack; app: window.app; catalogue: window.session.catalogue }
+    ShortcutCaptureDialog { preferences: window.session.shortcuts }
     CommandPaletteDialog { id: commandPalette; commands: window.session.commands }
     DependenciesDialog { objectName: "bulkContentDialog"; suggestions: window.session.bulkAdd; selectionMode: true }
     OptionalDependenciesDialog { suggestions: window.session.optionalDependencies; presentationEnabled: !window.session.dependencyRemovals.visible && !window.session.bulkAdd.visible }

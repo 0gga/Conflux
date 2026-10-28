@@ -46,11 +46,7 @@ ApplicationWindow {
         const route = session.navigation.route
         if (route.packPath && route.packPath !== app.activePack.path && !app.navigationBusy) app.openLibraryPack(route.packPath)
     }
-    function navigate(page) {
-        const target = {page: page}
-        if ((page === "workspace" || page === "discover") && app.activePack.path) target.packPath = app.activePack.path
-        return session.navigation.go(target)
-    }
+    function navigate(page) { return session.commands.navigate(page === "workspace" ? "content" : page) }
     function packRoute(section, extra) {
         const target = {page:"workspace",packPath:app.activePack.path,section:section}
         if (extra) for (const key in extra) target[key] = extra[key]
@@ -90,10 +86,12 @@ ApplicationWindow {
         function onBlocked() { unsaved.open() }
     }
     Connections { target: window.session.editor; function onSaved() { if (window.closeRequested || window.session.navigation.hasPending) window.finishLeaving() } }
-    Shortcut { sequence: "Alt+Left"; onActivated: window.session.navigation.back() }
-    Shortcut { sequence: "Alt+Right"; onActivated: window.session.navigation.forward() }
-    Shortcut { sequence: "Ctrl+K"; onActivated: { if (window.navigate("discover")) discovery.focusSearch() } }
-    Shortcut { sequence: "Ctrl+N"; enabled: !window.session.editor.dirty && !window.session.editor.busy; onActivated: newPack.open() }
+    Shortcut { enabled: !commandPalette.visible; sequence: "Alt+Left"; onActivated: window.session.navigation.back() }
+    Shortcut { enabled: !commandPalette.visible; sequence: "Alt+Right"; onActivated: window.session.navigation.forward() }
+    Shortcut { enabled: !commandPalette.visible; sequence: "Ctrl+K"; onActivated: { if (window.navigate("discover")) discovery.focusSearch() } }
+    Shortcut { sequence: "Ctrl+N"; enabled: !commandPalette.visible && !window.session.editor.dirty && !window.session.editor.busy; onActivated: newPack.open() }
+
+    Shortcut { sequence: "Ctrl+Shift+P"; onActivated: { if (window.session.commands.visible) window.session.commands.dismiss(); else window.session.commands.open() } }
 
     WindowResizeEdges { anchors.fill: parent; targetWindow: window; z: 100 }
     Overlay.overlay.transform: Scale { xScale: window.interfaceScale; yScale: window.interfaceScale }
@@ -123,11 +121,11 @@ ApplicationWindow {
                 }
                 }
                 Repeater {
-                    model: [{key:"library", label:"Library", icon:"library"}, {key:"discover", label:"Explore content", icon:"compass"}]
+                    model: window.session.commands.primaryNavigation
                     delegate: NavigationButton {
                         required property var modelData
                         Layout.fillWidth: true
-                        text: window.compactNavigation ? "" : modelData.label; hint: modelData.label; iconName: modelData.icon
+                        text: window.compactNavigation ? "" : modelData.title; hint: modelData.title; iconName: modelData.iconName
                         objectName: "sidebar-" + modelData.key
                         selected: window.page === modelData.key || (modelData.key === "library" && (window.page === "workspace" || (window.page === "showcase" && !!window.session.navigation.route.modPath))) || (modelData.key === "discover" && window.page === "showcase" && !window.session.navigation.route.modPath)
                         onClicked: window.navigate(modelData.key)
@@ -158,6 +156,7 @@ ApplicationWindow {
                         HoverHandler { id: titleHover }
                         RoundedToolTip { showWhen: titleHover.hovered && titleLabel.truncated; text: window.pageTitle }
                     }
+                    ActionButton { objectName: "openCommandPalette"; iconName: "search"; hint: "Search Conflux · Ctrl+Shift+P"; subtle: true; compact: true; onClicked: window.session.commands.open() }
                     OperationHud { availableWidth: window.width/window.interfaceScale; availableHeight: window.height/window.interfaceScale; content: window.session.content; running: window.session.running; onInstanceRequested: function(path) { window.session.navigation.go({page:"workspace",packPath:path}) } }
                     WindowControls { Layout.alignment: Qt.AlignVCenter; targetWindow: window }
                 }
@@ -205,6 +204,7 @@ ApplicationWindow {
         }
     }
     CreatePackDialog { id: newPack; app: window.app; catalogue: window.session.catalogue }
+    CommandPaletteDialog { id: commandPalette; commands: window.session.commands }
     DependenciesDialog { objectName: "bulkContentDialog"; suggestions: window.session.bulkAdd; selectionMode: true }
     OptionalDependenciesDialog { suggestions: window.session.optionalDependencies; presentationEnabled: !window.session.dependencyRemovals.visible && !window.session.bulkAdd.visible }
     DependenciesDialog { objectName: "dependencyRemovalDialog"; suggestions: window.session.dependencyRemovals; removalMode: true; presentationEnabled: !window.session.bulkAdd.visible }

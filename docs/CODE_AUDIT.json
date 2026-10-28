@@ -17,20 +17,22 @@
     },
     "src/DesktopSession.cpp": {
       "phase": "ui",
-      "sha256": "9c311cf2ca829cbf52f9beaec79b8e904cab2c22ab40cf522af6e200a6f39fd0",
+      "sha256": "af4bf46a0a3eceffcf7230bdb4f42ab07c69b0fbb1caac55fe48fa7fce9110b4",
       "status": "pending",
       "checks": [
         "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending.",
-        "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open."
+        "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open.",
+        "28 October2026 local command palette: bounded prepared literal index, closed metadata batches produce no rebuilds, stable selected key through enrichment/removal, guarded navigation and three viewport focus/draft/containment scenarios pass.18 backend/5 UI outcomes; all53 Release suites pass212.14s. Full measured/exhaustive UI audit remains open."
       ],
       "findings": []
     },
     "src/DesktopSession.h": {
       "phase": "ui",
-      "sha256": "10286244a660f0dba4676ffc28eb38ddfccbcdd1db6947c143c4a495f0fa6b5b",
+      "sha256": "2b1dc4478c16b330df980f6834d6f8b04edadc760385cda388faa41c064b6016",
       "status": "pending",
       "checks": [
-        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending."
+        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending.",
+        "28 October2026 local command palette: bounded prepared literal index, closed metadata batches produce no rebuilds, stable selected key through enrichment/removal, guarded navigation and three viewport focus/draft/containment scenarios pass.18 backend/5 UI outcomes; all53 Release suites pass212.14s. Full measured/exhaustive UI audit remains open."
       ],
       "findings": []
     },
@@ -1325,9 +1327,11 @@
     },
     "src/main.cpp": {
       "phase": "ui",
-      "sha256": "1da9ba26b6768b4da6cd44ebe296d7277adafde023582cf3b1dff0fe8c42e6fa",
+      "sha256": "174a9eaa34007256c6db8f156719b3654e9db4855ecf9c1592df45608d50bce3",
       "status": "pending",
-      "checks": [],
+      "checks": [
+        "28 October2026 local command palette: bounded prepared literal index, closed metadata batches produce no rebuilds, stable selected key through enrichment/removal, guarded navigation and three viewport focus/draft/containment scenarios pass.18 backend/5 UI outcomes; all53 Release suites pass212.14s. Full measured/exhaustive UI audit remains open."
+      ],
       "findings": []
     },
     "src/platform/AssetInstaller.cpp": {
@@ -2645,10 +2649,11 @@
     },
     "qml/Main.qml": {
       "phase": "ui",
-      "sha256": "addc8a37b1a91c4ea4bd02ba42f717f3a71955ddeda48f091beeac8524644a1d",
+      "sha256": "3498522a6ee476f81f662045a5f969521b7d028cf9264ff039cabd3897f1e333",
       "status": "pending",
       "checks": [
-        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending."
+        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending.",
+        "28 October2026 local command palette: bounded prepared literal index, closed metadata batches produce no rebuilds, stable selected key through enrichment/removal, guarded navigation and three viewport focus/draft/containment scenarios pass.18 backend/5 UI outcomes; all53 Release suites pass212.14s. Full measured/exhaustive UI audit remains open."
       ],
       "findings": []
     },
@@ -2913,6 +2918,33 @@
       "status": "reviewed",
       "checks": [
         "27 October2026 bulk feature review: bounded parser/ranking, provider identity,4 active requests,16 candidates/500 entries, scoped generation/duplicate delivery, owner lifetime, original-instance accepted jobs, release policy and existing per-mod mutation/dependency ports.20 focused outcomes including a real loopback file install and required-dependency failure isolation pass. Full measured coverage remains uncollected for these additions."
+      ],
+      "findings": []
+    },
+    "qml/components/CommandPaletteDialog.qml": {
+      "phase": "ui",
+      "sha256": "a9748745f1a53eedd4b5a3e02818b97e569d632a3bf810c5998d743231d6d414",
+      "status": "pending",
+      "checks": [
+        "28 October2026 local command palette: bounded prepared literal index, closed metadata batches produce no rebuilds, stable selected key through enrichment/removal, guarded navigation and three viewport focus/draft/containment scenarios pass.18 backend/5 UI outcomes; all53 Release suites pass212.14s. Full measured/exhaustive UI audit remains open."
+      ],
+      "findings": []
+    },
+    "src/features/navigation/CommandPalette.cpp": {
+      "phase": "non-ui",
+      "sha256": "b76216f6a451a621977f2ea720d068ccad45fa0ada8e7af9521c079d80499cc6",
+      "status": "reviewed",
+      "checks": [
+        "28 October2026 local command palette: bounded prepared literal index, closed metadata batches produce no rebuilds, stable selected key through enrichment/removal, guarded navigation and three viewport focus/draft/containment scenarios pass.18 backend/5 UI outcomes; all53 Release suites pass212.14s. Full measured/exhaustive UI audit remains open."
+      ],
+      "findings": []
+    },
+    "src/features/navigation/CommandPalette.h": {
+      "phase": "non-ui",
+      "sha256": "4d24a51a2a8a7a327853d8d395cd4cb225d402892a9834c5611e1fa1ab71fba2",
+      "status": "reviewed",
+      "checks": [
+        "28 October2026 local command palette: bounded prepared literal index, closed metadata batches produce no rebuilds, stable selected key through enrichment/removal, guarded navigation and three viewport focus/draft/containment scenarios pass.18 backend/5 UI outcomes; all53 Release suites pass212.14s. Full measured/exhaustive UI audit remains open."
       ],
       "findings": []
     }

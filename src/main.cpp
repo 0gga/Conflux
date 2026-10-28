@@ -83,6 +83,7 @@ int main(int argc, char *argv[]) {
     QObject::connect(&controller, &studio::ApplicationController::stateChanged, &session,
                      [&controller, &session] {
                          session.running()->setPacks(controller.installations() + controller.packs());
+                         session.commands()->setLibraryPacks(controller.libraryPacks());
                      });
     controller.refreshLibrary();
     if (verification.enabled())

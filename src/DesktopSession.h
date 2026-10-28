@@ -9,6 +9,7 @@
 #include "features/explore/BrowseInstalls.h"
 #include "features/explore/BulkContentAdd.h"
 #include "features/launch/WorldLaunch.h"
+#include "features/navigation/CommandPalette.h"
 #include "features/navigation/NavigationHistory.h"
 #include "features/navigation/NavigationInput.h"
 #include "features/preferences/BrowsePreferences.h"
@@ -32,6 +33,7 @@ class DesktopSession final : public QObject {
     Q_OBJECT
     Q_PROPERTY(studio::RunningInstances *running READ running CONSTANT)
     Q_PROPERTY(studio::NavigationHistory *navigation READ navigation CONSTANT)
+    Q_PROPERTY(studio::CommandPalette *commands READ commands CONSTANT)
     Q_PROPERTY(studio::WarningPreferences *warnings READ warnings CONSTANT)
     Q_PROPERTY(studio::PackWorkspace *workspace READ workspace CONSTANT)
     Q_PROPERTY(studio::PackFileBrowser *files READ files CONSTANT)
@@ -58,6 +60,9 @@ class DesktopSession final : public QObject {
     }
     NavigationHistory *navigation() {
         return &m_navigation;
+    }
+    CommandPalette *commands() {
+        return &m_commands;
     }
     WarningPreferences *warnings() {
         return &m_warnings;
@@ -148,6 +153,7 @@ class DesktopSession final : public QObject {
     std::shared_ptr<OptionalDependencySource> m_optionalSource;
     RunningInstances m_running;
     NavigationHistory m_navigation;
+    CommandPalette m_commands;
     NavigationInput m_input;
     WarningPreferences m_warnings;
     PackWorkspace m_workspace;

@@ -62,6 +62,7 @@ target_link_libraries(conflux_config PUBLIC pack_storage PRIVATE Qt6::Concurrent
 qt_add_library(conflux_desktop STATIC
     src/DesktopSession.h src/DesktopSession.cpp
     src/features/content/ContentUpdates.cpp
+    src/features/navigation/CommandPalette.h src/features/navigation/CommandPalette.cpp
     src/features/navigation/NavigationHistory.h src/features/navigation/NavigationHistory.cpp
     src/features/navigation/NavigationInput.h src/features/navigation/NavigationInput.cpp
     src/features/preferences/WarningPreferences.h src/features/preferences/WarningPreferences.cpp
@@ -167,6 +168,7 @@ qt_add_qml_module(modpack-studio URI ModpackStudio VERSION 1.0
     qml/components/SmoothScroll.qml qml/components/SmoothListView.qml
     qml/components/ContentListView.qml qml/components/ContentGridView.qml qml/components/ContentScrollBar.qml qml/components/ScrollViewportCorners.qml qml/components/ContentStatistic.qml
     qml/showcase/DescriptionView.qml qml/showcase/GalleryView.qml qml/showcase/GalleryViewer.qml
+    qml/components/CommandPaletteDialog.qml
     qml/components/FocusPopup.qml qml/components/FocusDialog.qml
     qml/components/OptionalDependenciesDialog.qml qml/components/DependenciesDialog.qml qml/settings/InstallationSettings.qml
     qml/components/OperationHud.qml qml/components/RoundedToolTip.qml qml/components/PopupButton.qml qml/components/ChoiceFilter.qml qml/components/FilterChip.qml
@@ -230,6 +232,13 @@ if(BUILD_TESTING)
     qt_add_executable(content-dependency-tests tests/ContentDependencyTests.cpp)
     target_link_libraries(content-dependency-tests PRIVATE conflux_desktop miniz Qt6::Test)
     conflux_add_test(content-dependencies content-dependency-tests)
+    qt_add_executable(command-palette-tests tests/CommandPaletteTests.cpp)
+    target_link_libraries(command-palette-tests PRIVATE conflux_desktop Qt6::Test)
+    conflux_add_test(command-palette command-palette-tests)
+    qt_add_executable(command-palette-interaction-tests tests/CommandPaletteInteractionTests.cpp)
+    target_link_libraries(command-palette-interaction-tests PRIVATE conflux_desktop conflux_styleplugin Qt6::Quick Qt6::QuickControls2 Qt6::Test)
+    target_compile_definitions(command-palette-interaction-tests PRIVATE CONFLUX_QML_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml" CONFLUX_TEST_ARTIFACT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts")
+    conflux_add_test(command-palette-interaction command-palette-interaction-tests)
     qt_add_executable(content-dependency-graph-tests tests/ContentDependencyGraphTests.cpp)
     target_link_libraries(content-dependency-graph-tests PRIVATE conflux_desktop Qt6::Test)
     conflux_add_test(content-dependency-graph content-dependency-graph-tests)

@@ -1,9 +1,15 @@
 #include "ApplicationController.h"
+#include "ContentFixtures.h"
+#include "TestPerformance.h"
 #include "Theme.h"
+#include "features/content/ContentActions.h"
+#include "features/preferences/ContentPreferences.h"
 #include "features/workspace/PackWorkspace.h"
 #include "miniz.h"
+#include "platform/NativeContentStore.h"
 #include "services/PackContent.h"
 #include <QBuffer>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QImage>
@@ -433,7 +439,82 @@ version = "1"
                               {"dependencyRefs", QVariantList{dep}}};
         const auto result = PackContent::scan({{"path", path}, {"mods", QVariantList{mod}}});
         QVERIFY(result.diagnostics.join(' ').contains("file is missing"));
-        QVERIFY(result.diagnostics.join(' ').contains("dependency dependency is missing"));
+        // A missing/unverified parent cannot establish installed dependency requirements.
+        QVERIFY(!result.diagnostics.join(' ').contains("required dependency"));
+    }
+    void indexedInventoryMakesRealArchiveDiagnosticsActionable() {
+        const auto path = storage.path() + "/indexed-diagnostics";
+        QDir().mkpath(path + "/mods");
+        jar(path + "/mods/parent.jar",
+            R"({"id":"parent","name":"Parent","version":"1","depends":{"child":"*"}})");
+        const auto fileHash = [](const QString &path) {
+            QFile file(path);
+            if (!file.open(QIODevice::ReadOnly))
+                return QString{};
+            return QString::fromLatin1(
+                QCryptographicHash::hash(file.readAll(), QCryptographicHash::Sha1).toHex());
+        };
+        const auto parentHash = fileHash(path + "/mods/parent.jar");
+        QVariantMap parent{{"provider", "modrinth"},
+                           {"projectId", "parent"},
+                           {"id", "parent-version"},
+                           {"projectTitle", "Parent"},
+                           {"sha1", parentHash},
+                           {"installPath", "mods/parent.jar"},
+                           {"dependencyRefs", QVariantList{QVariantMap{{"project_id", "dependency"},
+                                                                       {"dependency_type", "required"}}}}};
+        QVariantMap pack{
+            {"path", path}, {"minecraft", "1.21.1"}, {"loader", "fabric"}, {"mods", QVariantList{parent}}};
+        const auto initial = PackContent::scan(pack);
+        auto files = std::make_shared<NativeContentStore>(nullptr, storage.path() + "/diagnostic-backups");
+        ContentActions content(
+            files, std::make_shared<ContentCatalogueFixture>(), std::make_shared<ContentInstallerFixture>(),
+            std::make_shared<SettingsContentPreferences>(storage.path() + "/diagnostic-prefs.ini"));
+        content.setContext(pack, initial.files);
+        QTRY_VERIFY(!content.busy());
+        auto issues = content.diagnosticIssues();
+        QVariantMap review;
+        for (const auto &value : issues)
+            if (value.toMap().value("code") == "missing-required-content")
+                review = value.toMap();
+        QVERIFY(!review.isEmpty());
+        QCOMPARE(review.value("fixes").toList().first().toMap().value("sha1").toString(), parentHash);
+        QSignalSpy requested(&content, &ContentActions::dependencyReviewRequested);
+        QVERIFY(content.applyDiagnosticAction(review.value("fixes").toList().first().toMap()));
+        QCOMPARE(requested.size(), 1);
+        QCOMPARE(requested.first()[2].toList().first().toMap().value("projectId").toString(),
+                 QString("dependency"));
+        QElapsedTimer timer;
+        timer.start();
+        for (int i = 0; i < 1000; ++i)
+            QCOMPARE(content.diagnosticIssues(), issues);
+        qInfo() << "1000 cached diagnostic reads ms" << timer.elapsed();
+        QVERIFY(test_performance::releaseBudgetMet(timer.elapsed(), 100));
+        content.setQuery("no-match");
+        QCOMPARE(content.diagnosticIssues(), issues);
+        jar(path + "/mods/child.jar.disabled", R"({"id":"child","name":"Child","version":"1"})");
+        const auto childHash = fileHash(path + "/mods/child.jar.disabled");
+        const QVariantMap child{{"provider", "modrinth"}, {"projectId", "dependency"},
+                                {"id", "child-version"},  {"projectTitle", "Child"},
+                                {"sha1", childHash},      {"installPath", "mods/child.jar.disabled"}};
+        pack["mods"] = QVariantList{parent, child};
+        content.setContext(pack, PackContent::scan(pack).files, true);
+        QTRY_VERIFY(!content.busy());
+        QVariantMap enable;
+        for (const auto &value : content.diagnosticIssues()) {
+            QVERIFY(value.toMap().value("code") != "missing-required-content");
+            if (value.toMap().value("code") == "disabled-required-content")
+                enable = value.toMap();
+        }
+        QVERIFY(!enable.isEmpty());
+        const auto action = enable.value("fixes").toList().first().toMap();
+        QCOMPARE(action.value("sha1").toString(), childHash);
+        QVERIFY(content.applyDiagnosticAction(action));
+        QTRY_VERIFY(!content.busy());
+        QVERIFY(QFileInfo::exists(path + "/mods/child.jar"));
+        QVERIFY(!QFileInfo::exists(path + "/mods/child.jar.disabled"));
+        QCOMPARE(fileHash(path + "/mods/parent.jar"), parentHash);
+        QCOMPARE(content.operations()->failedCount(), 0);
     }
     void hiddenPacksPersistAndBannerUsesAllSources() {
         const auto path = storage.path() + "/curseforge/Pack";

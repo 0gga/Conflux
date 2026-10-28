@@ -17,10 +17,11 @@
     },
     "src/DesktopSession.cpp": {
       "phase": "ui",
-      "sha256": "fcd10d54f8b771845cb611cf14d312da3a9259de8b5e1ea538e991ffaa45ec10",
+      "sha256": "9c311cf2ca829cbf52f9beaec79b8e904cab2c22ab40cf522af6e200a6f39fd0",
       "status": "pending",
       "checks": [
-        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending."
+        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending.",
+        "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open."
       ],
       "findings": []
     },
@@ -281,7 +282,7 @@
     },
     "src/features/content/ContentActions.cpp": {
       "phase": "non-ui",
-      "sha256": "0eeeaccc57ff087c1713e2c33f09f89b42826148402542e6d7239b95eaa59e20",
+      "sha256": "ccf93da26b6f92c31c30223b5d41906f4bee84fbb6f06291db05d99e334e0986",
       "status": "reviewed",
       "checks": [
         "Complete1100-line coordinator reviewed: captured context, metadata/update generations, literal filtered index, lock preferences/source state, optimistic projection, claims, queue/history and per-item installation",
@@ -289,7 +290,8 @@
         "Source path locks aggregate any locked entry using the registry logical key; duplicate order cannot erase protection.24 model data cases cover providers, case/disabled aliases, filters, unrelated locks and authoritative unlock clearing. Remaining notification reentrancy stays AUD-07.",
         "Context/filter-reset and refresh/busy notifications revalidate captured lifetime/generation before continuing publication or worker dispatch. Original2 redundant-read failures and2 disposal access violations reproduced;142 content-action outcomes pass. Remaining queue/history/metadata continuations remain AUD-07.",
         "27 October2026 scoped progress:1000 broad notifications/1033ms for3000 rows reproduced, same-storage replacement-owner stale notification plus access violation reproduced. QPointer protects the original owner and statusChanged scopes busy/cancellable/activity/activityText. Initial cancellation-notify omission reproduced/corrected. Final4 filtering/5 action outcomes pass with zero broad notifications, below1ms bursts, phase notifications and safe late completion; remaining AUD-07 continuations stay pending.",
-        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open."
+        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open.",
+        "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open."
       ],
       "findings": [
         "AUD-07",
@@ -299,13 +301,14 @@
     },
     "src/features/content/ContentActions.h": {
       "phase": "non-ui",
-      "sha256": "ae6c23346c009eba07d9f9f36117472e681d38f12fab556355e265840a1a52cb",
+      "sha256": "928c98c3f23cbb0e0f7cfac1b5070c3656c7f5873bf827de733ede38cea366a6",
       "status": "reviewed",
       "checks": [
         "Facade contracts, state ownership and new narrow version reader boundary reviewed; broader command lifecycle findings remain explicit. ContentVersionTests.",
         "Source review is separate from measured line/function/branch coverage; remaining states stay explicit.",
         "27 October2026 scoped progress:1000 broad notifications/1033ms for3000 rows reproduced, same-storage replacement-owner stale notification plus access violation reproduced. QPointer protects the original owner and statusChanged scopes busy/cancellable/activity/activityText. Initial cancellation-notify omission reproduced/corrected. Final4 filtering/5 action outcomes pass with zero broad notifications, below1ms bursts, phase notifications and safe late completion; remaining AUD-07 continuations stay pending.",
-        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open."
+        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open.",
+        "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open."
       ],
       "findings": [
         "AUD-07",
@@ -314,12 +317,13 @@
     },
     "src/features/content/ContentDependencyGraph.cpp": {
       "phase": "non-ui",
-      "sha256": "4ecd8885f33b84d36594bf9df79e24eaf5b96e23a6eb06c051734a0ea359ee87",
+      "sha256": "2312d5070b0934482a8b147486c38f0819112e1898d5441adf84a86956699d02",
       "status": "reviewed",
       "checks": [
         "Exact provider/runtime references, ambiguity, cycles, reverse edges and closed unused subsets",
         "Source review; measured uncovered paths remain explicit. Related regression sources: ContentDependencyGraphTests",
-        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open."
+        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open.",
+        "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open."
       ],
       "findings": [
         "AUD-20"
@@ -327,12 +331,13 @@
     },
     "src/features/content/ContentDependencyGraph.h": {
       "phase": "non-ui",
-      "sha256": "ca04d0222d43ae8154f2d7485e9f224218d969e98aacb4904d9f4af3a6b38ab3",
+      "sha256": "cb5c381efa5bc93849e41b07f581cbfdef9c30a53c7d87f1e5cd3f76e03e3636",
       "status": "reviewed",
       "checks": [
         "Exact provider/runtime references, ambiguity, cycles, reverse edges and closed unused subsets",
         "Source review; measured uncovered paths remain explicit. Related regression sources: ContentDependencyGraphTests",
-        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open."
+        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open.",
+        "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open."
       ],
       "findings": [
         "AUD-20"
@@ -726,11 +731,12 @@
     },
     "src/features/content/OptionalDependencies.cpp": {
       "phase": "non-ui",
-      "sha256": "05de3827cc298ab3a5825b9d83e09af3f5de457fb56450453bfff23cea34d9ac",
+      "sha256": "684ea7a2a4805b554c5d21bb45e34b9799516e91b61f73bdea3bda922bdc89fe",
       "status": "reviewed",
       "checks": [
         "Reviewed scoped queued offers, stage revalidation, bounded identity/hash sets, inline failures and optional install intent. Dismissal/generation changes during dispatch still need explicit command preservation and error scoping.",
-        "Source review; uncovered states remain explicit. Related regression sources: OptionalDependencyTests OptionalDependencyInteractionTests"
+        "Source review; uncovered states remain explicit. Related regression sources: OptionalDependencyTests OptionalDependencyInteractionTests",
+        "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open."
       ],
       "findings": [
         "AUD-07"
@@ -738,11 +744,12 @@
     },
     "src/features/content/OptionalDependencies.h": {
       "phase": "non-ui",
-      "sha256": "41b932d32a4e393abfd139e9c91789976743278705d3bcdccdbc3c93319867de",
+      "sha256": "af61830ee931653d27c388baa0bb0477b5e54e37a567390846d373ae270616eb",
       "status": "reviewed",
       "checks": [
         "Reviewed scoped queued offers, stage revalidation, bounded identity/hash sets, inline failures and optional install intent. Dismissal/generation changes during dispatch still need explicit command preservation and error scoping.",
-        "Source review; uncovered states remain explicit. Related regression sources: OptionalDependencyTests OptionalDependencyInteractionTests"
+        "Source review; uncovered states remain explicit. Related regression sources: OptionalDependencyTests OptionalDependencyInteractionTests",
+        "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open."
       ],
       "findings": [
         "AUD-07"
@@ -773,11 +780,12 @@
     },
     "src/features/diagnostics/DiagnosticRule.h": {
       "phase": "non-ui",
-      "sha256": "4fd0c0b1dd6c794bf6a2063614e2e81188c97923dc72e775b2a01f12851c1bad",
+      "sha256": "3bc6bfc2247b5c2be4b0e32489b5ef2817e2cebb6b8b58735ccb3452864700fc",
       "status": "reviewed",
       "checks": [
         "Independent duplicate/loader/pin/orphan/scan rules; qualified identities and snapshot purity need improvement",
-        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests"
+        "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests",
+        "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open."
       ],
       "findings": [
         "AUD-11",
@@ -786,12 +794,13 @@
     },
     "src/features/diagnostics/DiagnosticRules.cpp": {
       "phase": "non-ui",
-      "sha256": "09eff5029cc3108e6d847d0c0cb5ba11e2c665de650dda1770512699e6296408",
+      "sha256": "3bf28faa92c94360064684da1567b4c86260240cb8386bc8c1cb20cf631963de",
       "status": "reviewed",
       "checks": [
         "Independent duplicate/loader/pin/orphan/scan rules; qualified identities and snapshot purity need improvement",
         "Source review; measured uncovered paths remain explicit. Related regression sources: FeatureTests",
-        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open."
+        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open.",
+        "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open."
       ],
       "findings": [
         "AUD-11",
@@ -2388,10 +2397,11 @@
     },
     "qml/components/DependenciesDialog.qml": {
       "phase": "ui",
-      "sha256": "96405c3a75720f0547fda722d30816976c4df40cd7404d1de6bb0f4a6462a991",
+      "sha256": "64a97919dedd8390fd91c56485a540f38e1693b7ceacd4410790ee230683d015",
       "status": "pending",
       "checks": [
-        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending."
+        "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending.",
+        "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open."
       ],
       "findings": []
     },
@@ -2688,10 +2698,11 @@
     },
     "qml/pack/DiagnosticsBanner.qml": {
       "phase": "ui",
-      "sha256": "0e0f70658da9c6ae54963265558a2954929561e25e6bb25dbea5ffca42ef303c",
+      "sha256": "0bf6fb34e887ac3d5a291ee2443300f76a4f1410a5d6e253b57fd52b9ec0a2b6",
       "status": "pending",
       "checks": [
-        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open."
+        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open.",
+        "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open."
       ],
       "findings": []
     },
@@ -2748,11 +2759,12 @@
     },
     "qml/pages/PackPage.qml": {
       "phase": "ui",
-      "sha256": "930ff2d0eb0de85913bee2e44c9ba7a4898f2adc0aa8e336cbc88b78ab03e6dd",
+      "sha256": "3646f35445ff34f1d584b930c5efb2cb620d0166222d793a1cebf0ebd23a3146",
       "status": "pending",
       "checks": [
         "27 October2026 bulk feature composition/shared overlay tested at1080x720,1080x480,420x320 with selection/cycling, keyboard and late draft preservation; existing dependency overlay regressions pass. Exhaustive UI phase remains pending.",
-        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open."
+        "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open.",
+        "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open."
       ],
       "findings": []
     },

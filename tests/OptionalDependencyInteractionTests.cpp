@@ -63,14 +63,19 @@ class OptionalDependencyInteractionTests final : public QObject {
         QTest::addColumn<int>("width");
         QTest::addColumn<int>("height");
         QTest::addColumn<int>("scale");
-        QTest::newRow("1080p-100") << 1080 << 720 << 100;
-        QTest::newRow("short-window-150") << 1080 << 480 << 150;
-        QTest::newRow("compact-100") << 420 << 320 << 100;
+        QTest::addColumn<bool>("requiredReview");
+        QTest::newRow("1080p-100") << 1080 << 720 << 100 << false;
+        QTest::newRow("short-window-150") << 1080 << 480 << 150 << false;
+        QTest::newRow("compact-100") << 420 << 320 << 100 << false;
+        QTest::newRow("required-1080p") << 1080 << 720 << 100 << true;
+        QTest::newRow("required-short") << 1080 << 480 << 150 << true;
+        QTest::newRow("required-compact") << 420 << 320 << 100 << true;
     }
     void modalActionsFitScaledWindowsAndStayExplicit() {
         QFETCH(int, width);
         QFETCH(int, height);
         QFETCH(int, scale);
+        QFETCH(bool, requiredReview);
         QTemporaryDir temp;
         auto store = std::make_shared<BrowseSettingsStore>(temp.path() + "/settings.ini");
         auto preferences = std::make_shared<InstallationPreferences>(store);
@@ -122,12 +127,21 @@ ApplicationWindow {
                                {"loader", "fabric"}};
         const QVariantList refs{QVariantMap{{"provider", "modrinth"}, {"projectId", "first"}},
                                 QVariantMap{{"provider", "curseforge"}, {"projectId", "22"}}};
-        model.offer(pack, {}, refs);
+        if (requiredReview)
+            preferences->setPromptOptionalDependencies(false);
+        const auto offer = [&](const QVariantMap &target) {
+            if (requiredReview)
+                model.review(target, {}, refs);
+            else
+                model.offer(target, {}, refs);
+        };
+        offer(pack);
         QTRY_COMPARE(source->calls, 2);
         auto *dialog = root->findChild<QObject *>("optionalDependenciesDialog");
         QVERIFY(dialog);
         QTRY_VERIFY(dialog->property("opened").toBool());
         QVERIFY(dialog->property("modal").toBool());
+        QCOMPARE(dialog->property("requiredReview").toBool(), requiredReview);
         QCOMPARE(installs, 0);
         auto *install = find(window->contentItem(), "installOptionalDependency");
         auto *done = find(window->contentItem(), "finishOptionalDependencies");
@@ -141,7 +155,11 @@ ApplicationWindow {
         const auto image = window->grabWindow();
         QVERIFY(!image.isNull());
         const auto file = QStringLiteral(CONFLUX_TEST_ARTIFACT_DIR) +
-                          QString("/optional-overlay-%1x%2-%3.png").arg(width).arg(height).arg(scale);
+                          QString(requiredReview ? "/required-review-overlay-%1x%2-%3.png"
+                                                 : "/optional-overlay-%1x%2-%3.png")
+                              .arg(width)
+                              .arg(height)
+                              .arg(scale);
         QVERIFY(image.save(file));
         QTest::mouseClick(
             window, Qt::LeftButton, Qt::NoModifier,
@@ -151,7 +169,7 @@ ApplicationWindow {
         auto secondPack = pack;
         secondPack["path"] = temp.path() + "/second-instance";
         secondPack["name"] = "Second fixture instance";
-        model.offer(secondPack, {}, refs);
+        offer(secondPack);
         QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
                           done->mapToScene(QPointF(done->width() / 2, done->height() / 2)).toPoint());
         QTRY_COMPARE(model.pack().value("path"), secondPack.value("path"));
@@ -159,7 +177,7 @@ ApplicationWindow {
         QTest::keyClick(window, Qt::Key_Escape);
         QTRY_VERIFY(!model.visible());
         QTRY_VERIFY(!dialog->property("opened").toBool());
-        model.offer(pack, {}, refs);
+        offer(pack);
         QTRY_VERIFY(dialog->property("opened").toBool());
         QTest::keyClick(window, Qt::Key_Escape);
         QTRY_VERIFY(!model.visible());

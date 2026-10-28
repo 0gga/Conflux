@@ -25,6 +25,64 @@ QString key(const QString &id) {
 class ContentDependencyGraphTests final : public QObject {
     Q_OBJECT
   private slots:
+    void missingRequirementsUseVerifiedProviderNamespaces_data() {
+        QTest::addColumn<QString>("provider");
+        QTest::addColumn<bool>("versionOnly");
+        QTest::newRow("modrinth-project") << QString("modrinth") << false;
+        QTest::newRow("modrinth-version") << QString("modrinth") << true;
+        QTest::newRow("curseforge-project") << QString("curseforge") << false;
+    }
+    void missingRequirementsUseVerifiedProviderNamespaces() {
+        QFETCH(QString, provider);
+        QFETCH(bool, versionOnly);
+        auto root = node("Root"), child = node("Child");
+        root["sha1"] = QString(40, 'a');
+        child["sha1"] = QString(40, 'b');
+        Release release;
+        release.provider = provider;
+        release.projectId = "root";
+        release.id = "root-version";
+        release.sha1 = root.value("sha1").toString();
+        const QJsonObject ref = provider == "curseforge"
+                                    ? QJsonObject{{"modId", 22}, {"relationType", 3}}
+                                    : QJsonObject{{"project_id", versionOnly ? "" : "22"},
+                                                  {"version_id", versionOnly ? "child-version" : ""},
+                                                  {"dependency_type", "required"}};
+        release.dependencyRefs = {ref, ref};
+        root["installedRelease"] = release.toVariant();
+        auto missing = ContentDependencyGraph({root}).missingRequirements();
+        QCOMPARE(missing.size(), 1);
+        QCOMPARE(missing.first().toMap().value("reference").toMap().value("provider").toString(), provider);
+        child["sourceIds"] = QVariantMap{{provider == "modrinth" ? "curseforge" : "modrinth", "22"}};
+        QCOMPARE(ContentDependencyGraph({root, child}).missingRequirements().size(), 1);
+        if (versionOnly) {
+            Release pin;
+            pin.provider = provider;
+            pin.projectId = "22";
+            pin.id = "child-version";
+            pin.sha1 = child.value("sha1").toString();
+            child["installedRelease"] = pin.toVariant();
+        } else
+            child["sourceIds"] = QVariantMap{{provider, "22"}};
+        child["enabled"] = false;
+        const ContentDependencyGraph installed({root, child});
+        QVERIFY(installed.missingRequirements().isEmpty());
+        QCOMPARE(installed.disabledRequirements().size(), 1);
+        root["enabled"] = false;
+        QVERIFY(ContentDependencyGraph({root}).missingRequirements().isEmpty());
+        root["enabled"] = true;
+        root["sha1"] = QString(40, 'c');
+        QVERIFY(ContentDependencyGraph({root}).missingRequirements().isEmpty());
+        root["sha1"] = release.sha1;
+        auto duplicate = root;
+        duplicate["relativePath"] = "mods/duplicate.jar";
+        QVERIFY(ContentDependencyGraph({root, duplicate}).missingRequirements().isEmpty());
+        release.dependencyRefs = {provider == "curseforge"
+                                      ? QJsonObject{{"modId", 22}, {"relationType", 2}}
+                                      : QJsonObject{{"project_id", "22"}, {"dependency_type", "optional"}}};
+        root["installedRelease"] = release.toVariant();
+        QVERIFY(ContentDependencyGraph({root}).missingRequirements().isEmpty());
+    }
     void disabledRequirementsOnlyIncludeEnabledRequiredParents() {
         auto root = node("Root", {"Child"}), other = node("Other", {"Child"}), child = node("Child");
         child["enabled"] = false;

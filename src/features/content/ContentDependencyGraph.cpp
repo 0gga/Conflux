@@ -56,6 +56,26 @@ ContentDependencyGraph::ContentDependencyGraph(const QVariantList &rows)
         };
         if (verified(row)) {
             const auto release = releaseFromVariant(row.value("installedRelease").toMap());
+            QSet<QString> missing;
+            const auto addProvider = [&](const QString &project, const QString &version, bool required) {
+                if (release.provider != "modrinth" && release.provider != "curseforge")
+                    return;
+                const auto identity = !project.isEmpty() ? "project:" + release.provider + ':' + project
+                                                         : "version:" + release.provider + ':' + version;
+                if (project.isEmpty() && version.isEmpty())
+                    return;
+                add(identity, required);
+                if (!required || !row.value("enabled").toBool() || m_ambiguous.contains(i) ||
+                    !identities.value(identity).isEmpty() || missing.contains(identity) ||
+                    (!version.isEmpty() &&
+                     !identities.value("version:" + release.provider + ':' + version).isEmpty()))
+                    return;
+                missing.insert(identity);
+                m_missing << QVariantMap{{"parent", row},
+                                         {"reference", QVariantMap{{"provider", release.provider},
+                                                                   {"projectId", project},
+                                                                   {"versionId", version}}}};
+            };
             for (const auto &value : release.dependencyRefs) {
                 const auto ref = value.toObject();
                 const auto kind = ref.value("dependency_type").toString();
@@ -68,14 +88,13 @@ ContentDependencyGraph::ContentDependencyGraph(const QVariantList &rows)
                                      : ref.value("modId").toInteger() > 0
                                          ? QString::number(ref.value("modId").toInteger())
                                          : QString{};
-                if (!project.isEmpty())
-                    add("project:" + release.provider + ':' + project, required);
-                else if (release.provider == "modrinth" && !ref.value("version_id").toString().isEmpty())
-                    add("version:modrinth:" + ref.value("version_id").toString(), required);
+                addProvider(project,
+                            release.provider == "modrinth" ? ref.value("version_id").toString() : QString{},
+                            required);
             }
             if (release.dependencyRefs.isEmpty())
                 for (const auto &project : release.requiredDependencies)
-                    add("project:" + release.provider + ':' + project, true);
+                    addProvider(project, {}, true);
         }
         if (row.value("category") == "mods")
             for (const auto &value : row.value("runtimeDependencies").toList()) {

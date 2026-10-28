@@ -88,6 +88,21 @@ class FeatureTests : public QObject {
         QVERIFY(evaluate().value("disabled-required-content").toMap().value("fixes").toList().isEmpty());
         snapshot.pack["loader"] = "neoforge";
         QVERIFY(!evaluate().contains("incompatible-loader"));
+        Release release;
+        release.provider = "curseforge";
+        release.projectId = "root";
+        release.id = "root-version";
+        release.sha1 = sha;
+        release.dependencyRefs = {QJsonObject{{"modId", 22}, {"relationType", 3}},
+                                  QJsonObject{{"modId", 33}, {"relationType", 3}}};
+        root["installedRelease"] = release.toVariant();
+        snapshot.files = {root};
+        const auto absent = evaluate().value("missing-required-content").toMap();
+        QVERIFY(absent.value("message").toString().contains("2 missing"));
+        const auto review = absent.value("fixes").toList();
+        QCOMPARE(review.size(), 1);
+        QCOMPARE(review.first().toMap().value("kind").toString(), QString("review-dependencies"));
+        QCOMPARE(review.first().toMap().value("pack").toMap(), snapshot.pack);
     }
     void globalProjectLinksOpenEvenWhenAnotherInstanceIsLoaded() {
         QTemporaryDir temp;

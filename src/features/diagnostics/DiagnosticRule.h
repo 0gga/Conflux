@@ -9,4 +9,6 @@ class IDiagnosticRule {
     virtual QVariantList evaluate(const ContentSnapshot &) const = 0;
 };
 std::vector<std::unique_ptr<IDiagnosticRule>> defaultDiagnosticRules();
+// Pure rules only: safe to memoize over an indexed inventory snapshot.
+QVariantList actionableContentIssues(const ContentSnapshot &);
 } // namespace studio

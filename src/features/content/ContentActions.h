@@ -22,6 +22,7 @@ namespace studio {
 class ContentActions final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantList rows READ rows NOTIFY rowsChanged)
+    Q_PROPERTY(QVariantList diagnosticIssues READ diagnosticIssues NOTIFY changed)
     Q_PROPERTY(QAbstractItemModel *model READ model CONSTANT)
     Q_PROPERTY(studio::OperationHistory *operations READ operations CONSTANT)
     Q_PROPERTY(int lockRevision READ lockRevision NOTIFY changed)
@@ -57,6 +58,7 @@ class ContentActions final : public QObject {
     QVariantList rows() const {
         return m_visibleRows;
     }
+    QVariantList diagnosticIssues() const;
     QAbstractItemModel *model() {
         return &m_model;
     }
@@ -193,6 +195,7 @@ class ContentActions final : public QObject {
     void operationFailed(QString message);
     void contentChanged();
     void copyRequested(QString text);
+    void dependencyReviewRequested(QVariantMap pack, QVariantList files, QVariantList references);
     void installationFinished(QString packPath, QVariantList releases, QVariantList files, QString error);
     void removalFinished(QVariantMap pack, QVariantList before, QVariantList current, QStringList targets,
                          QString error, bool cleanup);
@@ -236,6 +239,9 @@ class ContentActions final : public QObject {
     ContentListModel m_model;
     std::shared_ptr<ContentLockRegistry> m_locks;
     QHash<QString, ContentFileState> m_states;
+    mutable QVariantMap m_diagnosticContext;
+    mutable QVariantList m_diagnosticRows, m_diagnosticIssues;
+    mutable bool m_diagnosticsReady = false;
     SourceLockIndex m_sourceLocks;
     QList<ContentOperation> m_pendingOperations;
     ContentOperationReservations m_reservations;

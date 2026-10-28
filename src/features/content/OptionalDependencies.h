@@ -19,6 +19,7 @@ class IOptionalDependencySource {
 class OptionalDependencies final : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool visible READ visible NOTIFY changed)
+    Q_PROPERTY(bool requiredReview READ requiredReview NOTIFY changed)
     Q_PROPERTY(QVariantMap pack READ pack NOTIFY changed)
     Q_PROPERTY(QVariantList rows READ rows NOTIFY changed)
     Q_PROPERTY(QAbstractItemModel *model READ model CONSTANT)
@@ -28,6 +29,9 @@ class OptionalDependencies final : public QObject {
                          std::shared_ptr<PackReleasePolicy>, QObject *parent = nullptr);
     bool visible() const {
         return !m_rows.isEmpty();
+    }
+    bool requiredReview() const {
+        return m_requiredReview;
     }
     QVariantMap pack() const {
         return m_pack;
@@ -40,6 +44,7 @@ class OptionalDependencies final : public QObject {
         m_install = std::move(install);
     }
     void offer(const QVariantMap &, const QVariantList &, const QVariantList &);
+    void review(const QVariantMap &, const QVariantList &, const QVariantList &);
     void installationFinished(const QString &, const QVariantList &releases, const QVariantList &files,
                               const QString &error);
     Q_INVOKABLE void install(const QString &key);
@@ -59,6 +64,7 @@ class OptionalDependencies final : public QObject {
     struct Offer {
         QVariantMap pack;
         QVariantList files, references;
+        bool requiredReview = false;
     };
     ContentListModel m_model;
     std::shared_ptr<IOptionalDependencySource> m_source;
@@ -71,8 +77,10 @@ class OptionalDependencies final : public QObject {
     QList<Offer> m_offers;
     quint64 m_generation = 0;
     bool m_resolving = false;
+    bool m_requiredReview = false;
     qsizetype find(const QString &) const;
     void append(const QVariantList &);
+    void enqueueOffer(const QVariantMap &, const QVariantList &, const QVariantList &, bool);
     void later();
     void pump();
     void nextOffer();

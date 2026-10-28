@@ -78,6 +78,8 @@ DesktopSession::DesktopSession(QObject *parent, QString settingsFile, QString ba
     m_optionalDependencies.setInstaller([this](QVariantMap release, QVariantMap project) {
         return m_content.installRelease(release, project);
     });
+    connect(&m_content, &ContentActions::dependencyReviewRequested, &m_optionalDependencies,
+            &OptionalDependencies::review);
     connect(m_dependencyInstaller.get(), &ContentDependencyInstaller::optionalDependencies,
             &m_optionalDependencies, &OptionalDependencies::offer);
     connect(&m_content, &ContentActions::installationFinished, &m_optionalDependencies,

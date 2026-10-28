@@ -10,6 +10,7 @@ FocusDialog {
     required property var suggestions
     property bool removalMode: false
     property bool selectionMode: false
+    readonly property bool requiredReview: !removalMode && !selectionMode && suggestions.requiredReview === true
     property bool editingInput: true
     property bool presentationEnabled: true
     readonly property bool compactLayout: height < 360
@@ -37,7 +38,7 @@ FocusDialog {
             Icon { name: "content"; size: 23; color: Theme.colors.accent }
             ColumnLayout {
                 Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: 3
-                Text { Layout.fillWidth: true; text: root.selectionMode ? "Add content" : root.removalMode ? "Remove dependencies?" : "Optional content"; color: Theme.colors.text; font.pixelSize: 20; font.weight: Font.DemiBold; elide: Text.ElideRight }
+                Text { Layout.fillWidth: true; text: root.selectionMode ? "Add content" : root.removalMode ? "Remove dependencies?" : root.requiredReview ? "Required content" : "Optional content"; color: Theme.colors.text; font.pixelSize: 20; font.weight: Font.DemiBold; elide: Text.ElideRight }
                 Text { Layout.fillWidth: true; text: root.suggestions.pack.name || root.suggestions.pack.title || ""; color: Theme.colors.muted; font.pixelSize: 12; elide: Text.ElideRight; textFormat: Text.PlainText }
             }
             ActionButton { objectName: "editBulkContentList"; visible: root.selectionMode && !root.editingInput; text: root.width < 440 ? "" : "Edit list"; iconName: "search"; hint: "Edit list"; subtle: true; compact: true; onClicked: { root.editingInput = true; pastedNames.forceActiveFocus() } }

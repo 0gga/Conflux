@@ -1,9 +1,11 @@
 #include "ContentActions.h"
+#include "ContentDependencyGraph.h"
 #include "ContentLockIntent.h"
 #include "domain/ContentCompatibility.h"
 #include "domain/ContentTypes.h"
 #include "domain/ReleaseStages.h"
 #include "domain/TextSearch.h"
+#include "features/diagnostics/DiagnosticRule.h"
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
@@ -393,6 +395,21 @@ void ContentActions::freeze(const QString &path, bool value) {
         m_preferences->setFrozen(m_pack.value("path").toString(), row.value("sha1").toString(), value);
     applyPreferences();
     emit changed();
+}
+QVariantList ContentActions::diagnosticIssues() const {
+    const QVariantMap context{{"path", m_pack.value("path")},
+                              {"minecraft", m_pack.value("minecraft")},
+                              {"loader", m_pack.value("loader")}};
+    if (!m_diagnosticsReady || context != m_diagnosticContext || m_rows != m_diagnosticRows) {
+        ContentSnapshot snapshot;
+        snapshot.pack = context;
+        snapshot.files = m_rows;
+        m_diagnosticIssues = actionableContentIssues(snapshot);
+        m_diagnosticRows = m_rows;
+        m_diagnosticContext = context;
+        m_diagnosticsReady = true;
+    }
+    return m_diagnosticIssues;
 }
 void ContentActions::syncVisibleRows() {
     const auto visible = filteredRows();
@@ -796,7 +813,7 @@ void ContentActions::setEnabled(const QString &path, bool value) {
 }
 bool ContentActions::applyDiagnosticAction(const QVariantMap &action) {
     const auto kind = action.value("kind").toString();
-    if (kind != "enable" && kind != "disable" && kind != "remove")
+    if (kind != "enable" && kind != "disable" && kind != "remove" && kind != "review-dependencies")
         return false;
     const auto pack = action.value("pack").toMap();
     const auto path = pack.value("path").toString();
@@ -832,6 +849,20 @@ bool ContentActions::applyDiagnosticAction(const QVariantMap &action) {
         target.value("sha1").toString().compare(hash, Qt::CaseInsensitive) != 0) {
         reject("This content has changed. Refresh the instance before trying again.");
         return false;
+    }
+    if (kind == "review-dependencies") {
+        const auto rows = withPreferences(state->pack, state->rows);
+        QVariantList references;
+        for (const auto &value : ContentDependencyGraph(rows).missingRequirements()) {
+            const auto entry = value.toMap();
+            if (entry.value("parent").toMap().value("relativePath") == relativePath)
+                references << entry.value("reference");
+        }
+        if (references.isEmpty())
+            return false;
+        const auto originalPack = state->pack;
+        emit dependencyReviewRequested(originalPack, rows, references);
+        return true;
     }
     if (target.value("locked").toBool()) {
         reject("Unlock this content before changing it.", target.value("title").toString());

@@ -92,6 +92,49 @@ class ContentActionsTests : public QObject {
                 {"updateRelease", next.toVariant()}};
     }
   private slots:
+    void dependencyReviewCapturesOriginalInstanceWithoutChangingLockedParent() {
+        QTemporaryDir temp;
+        auto installer = std::make_shared<ContentInstallerFixture>();
+        ContentActions content(std::make_shared<ContentFileFixture>(),
+                               std::make_shared<ContentCatalogueFixture>(), installer,
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        const QVariantMap pack{
+            {"path", temp.path() + "/original"}, {"loader", "fabric"}, {"minecraft", "1.21.1"}};
+        auto item = row("root", "Author");
+        item["sha1"] = hash("original");
+        Release release;
+        release.provider = "modrinth";
+        release.projectId = "root";
+        release.id = "root-version";
+        release.sha1 = item.value("sha1").toString();
+        release.dependencyRefs = {QJsonObject{{"project_id", "dependency"}, {"dependency_type", "required"}}};
+        item["installedRelease"] = release.toVariant();
+        content.setContext(pack, {item});
+        QTRY_VERIFY(!content.busy());
+        content.setLocked("mods/root.jar", true);
+        content.setContext({{"path", temp.path() + "/other"}, {"loader", "fabric"}, {"minecraft", "1.21.1"}},
+                           {});
+        QTRY_VERIFY(!content.busy());
+        QSignalSpy review(&content, &ContentActions::dependencyReviewRequested);
+        QVariantMap action{
+            {"kind", "review-dependencies"},
+            {"pack", pack},
+            {"relativePath", "mods/root.jar"},
+            {"sha1", release.sha1},
+            {"references", QVariantList{QVariantMap{{"provider", "untrusted"}, {"projectId", "wrong"}}}}};
+        QVERIFY(content.applyDiagnosticAction(action));
+        QCOMPARE(review.size(), 1);
+        QCOMPARE(review.first()[0].toMap().value("path"), pack.value("path"));
+        const auto refs = review.first()[2].toList();
+        QCOMPARE(refs.size(), 1);
+        QCOMPARE(refs.first().toMap().value("projectId").toString(), QString("dependency"));
+        QVERIFY(review.first()[1].toList().first().toMap().value("locked").toBool());
+        QVERIFY(installer->requested.isEmpty());
+        QCOMPARE(content.operations()->failedCount(), 0);
+        action["sha1"] = hash("stale");
+        QVERIFY(!content.applyDiagnosticAction(action));
+        QCOMPARE(review.size(), 1);
+    }
     void diagnosticActionsKeepOriginalInstanceAndRejectStaleReviews_data() {
         QTest::addColumn<QString>("kind");
         QTest::addColumn<QString>("fault");

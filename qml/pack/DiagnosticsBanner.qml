@@ -39,7 +39,7 @@ Rectangle {
                                     required property var modelData
                                     objectName: "diagnosticAction-" + modelData.kind
                                     text: modelData.label
-                                    iconName: modelData.kind === "remove" ? "trash" : modelData.kind === "enable" ? "check" : "close"
+                                    iconName: modelData.kind === "review-dependencies" ? "content" : modelData.kind === "remove" ? "trash" : modelData.kind === "enable" ? "check" : "close"
                                     onClicked: root.fixRequested(modelData)
                                 }
                             }

@@ -96,6 +96,38 @@ QString state(const OptionalDependencies &model, qsizetype index = 0) {
 class OptionalDependencyTests final : public QObject {
     Q_OBJECT
   private slots:
+    void explicitRequiredReviewIgnoresOnlyAutomaticPromptPreference() {
+        Harness h;
+        h.preferences->setPromptOptionalDependencies(false);
+        h.model.offer(pack(), {}, {reference("automatic")});
+        QVERIFY(!h.model.visible());
+        h.model.review(pack(), {}, {reference("required")});
+        QTRY_COMPARE(state(h.model), "ready");
+        QVERIFY(h.model.requiredReview());
+        QCOMPARE(h.source->calls.size(), 1);
+        int installed = 0;
+        h.model.setInstaller([&](auto, auto project) {
+            ++installed;
+            return project.value("targetPack").toMap() == pack();
+        });
+        QCOMPARE(installed, 0);
+        h.preferences->setPromptOptionalDependencies(true);
+        h.model.offer(pack("automatic-b"), {}, {reference("automatic-b")});
+        h.model.review(pack("required-b"), {}, {reference("required-b")});
+        h.preferences->setPromptOptionalDependencies(false);
+        QVERIFY(h.model.visible());
+        QCOMPARE(state(h.model), "ready");
+        h.model.install(key(h.model));
+        QCOMPARE(installed, 1);
+        h.model.dismiss();
+        QTRY_COMPARE(h.model.pack().value("path").toString(), QString("required-b"));
+        QTRY_COMPARE(state(h.model), "ready");
+        QVERIFY(h.model.requiredReview());
+        QCOMPARE(h.source->calls.size(), 2);
+        h.model.dismiss();
+        QVERIFY(!h.model.visible());
+        QVERIFY(!h.model.requiredReview());
+    }
     void completedRootOffersOptionalContentThroughTheSamePerItemQueue() {
         class Files final : public IContentFileStore {
           public:

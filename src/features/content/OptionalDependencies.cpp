@@ -50,8 +50,9 @@ OptionalDependencies::OptionalDependencies(std::shared_ptr<IOptionalDependencySo
     connect(this, &OptionalDependencies::changed, this, [this] { m_model.setRows(rows()); });
     connect(m_preferences.get(), &InstallationPreferences::changed, this, [this] {
         if (!m_preferences->promptOptionalDependencies()) {
-            m_offers.clear();
-            dismiss();
+            m_offers.removeIf([](const Offer &offer) { return !offer.requiredReview; });
+            if (!m_requiredReview)
+                dismiss();
         }
     });
     connect(m_policy.get(), &PackReleasePolicy::policyChanged, this, [this](const QString &path) {
@@ -124,10 +125,18 @@ void OptionalDependencies::append(const QVariantList &references) {
 }
 void OptionalDependencies::offer(const QVariantMap &pack, const QVariantList &files,
                                  const QVariantList &references) {
-    if (!m_preferences->promptOptionalDependencies() || pack.value("path").toString().isEmpty() ||
-        references.isEmpty())
+    if (m_preferences->promptOptionalDependencies())
+        enqueueOffer(pack, files, references, false);
+}
+void OptionalDependencies::review(const QVariantMap &pack, const QVariantList &files,
+                                  const QVariantList &references) {
+    enqueueOffer(pack, files, references, true);
+}
+void OptionalDependencies::enqueueOffer(const QVariantMap &pack, const QVariantList &files,
+                                        const QVariantList &references, bool requiredReview) {
+    if (pack.value("path").toString().isEmpty() || references.isEmpty())
         return;
-    if (visible() &&
+    if (visible() && m_requiredReview == requiredReview &&
         PackReleasePolicy::sameInstance(m_pack.value("path").toString(), pack.value("path").toString())) {
         m_files = files;
         append(references);
@@ -138,21 +147,25 @@ void OptionalDependencies::offer(const QVariantMap &pack, const QVariantList &fi
         return;
     }
     for (auto &offer : m_offers)
-        if (PackReleasePolicy::sameInstance(offer.pack.value("path").toString(),
+        if (offer.requiredReview == requiredReview &&
+            PackReleasePolicy::sameInstance(offer.pack.value("path").toString(),
                                             pack.value("path").toString())) {
             offer.files = files;
             offer.references += references;
             return;
         }
-    m_offers << Offer{pack, files, references};
+    m_offers << Offer{pack, files, references, requiredReview};
     if (!visible())
         nextOffer();
 }
 void OptionalDependencies::nextOffer() {
-    if (!m_preferences->promptOptionalDependencies() || visible())
+    if (visible())
         return;
     while (!m_offers.isEmpty()) {
         auto next = m_offers.takeFirst();
+        if (!next.requiredReview && !m_preferences->promptOptionalDependencies())
+            continue;
+        m_requiredReview = next.requiredReview;
         m_pack = std::move(next.pack);
         m_files = std::move(next.files);
         append(next.references);
@@ -166,6 +179,7 @@ void OptionalDependencies::nextOffer() {
     }
     m_pack.clear();
     m_files.clear();
+    m_requiredReview = false;
 }
 void OptionalDependencies::later() {
     const auto generation = m_generation;
@@ -212,7 +226,7 @@ void OptionalDependencies::pump() {
              !sharesLoader(release.loaders,
                            compatibleLoaders(guard->m_pack.value("loader").toString(), guard->m_files)) ||
              !guard->m_policy->allows(guard->m_pack.value("path").toString(), release.channel)))
-            error = "No compatible optional version is available.";
+            error = "No compatible version is available.";
         auto &row = guard->m_rows[index];
         row.request = std::move(request);
         row.project = std::move(project);
@@ -230,7 +244,7 @@ void OptionalDependencies::pump() {
     } catch (const std::exception &error) {
         callback({}, {}, QString::fromUtf8(error.what()));
     } catch (...) {
-        callback({}, {}, "Could not load optional content.");
+        callback({}, {}, "Could not load content.");
     }
 }
 void OptionalDependencies::retry(const QString &key) {
@@ -308,7 +322,7 @@ void OptionalDependencies::installationFinished(const QString &path, const QVari
         const bool installed = hashes.contains(hashKey(row.request));
         row.state = installed ? "installed" : "error";
         row.error = installed         ? QString{}
-                    : error.isEmpty() ? QString("The optional content was not installed.")
+                    : error.isEmpty() ? QString("The content was not installed.")
                                       : error;
         changedRows = true;
     }
@@ -328,6 +342,7 @@ void OptionalDependencies::dismiss() {
     m_rows.clear();
     m_pack.clear();
     m_files.clear();
+    m_requiredReview = false;
     emit changed();
     if (guard)
         QTimer::singleShot(0, this, &OptionalDependencies::nextOffer);

@@ -209,9 +209,15 @@ ApplicationWindow {
         input->setProperty("text", "modabc");
         QTRY_COMPARE(model.input(), QString("modabc"));
         auto click = [&](QQuickItem *item) {
-            QVERIFY(item);
-            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
-                              item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+            QPointer<QQuickItem> target(item);
+            QVERIFY(target);
+            QSignalSpy frames(window, &QQuickWindow::frameSwapped);
+            window->requestUpdate();
+            QTRY_VERIFY(!frames.isEmpty());
+            QVERIFY(target && target->isVisible());
+            QTest::mouseClick(
+                window, Qt::LeftButton, Qt::NoModifier,
+                target->mapToScene(QPointF(target->width() / 2, target->height() / 2)).toPoint());
         };
         click(findItem(window->contentItem(), "findBulkContent"));
         QTRY_VERIFY(!model.busy());

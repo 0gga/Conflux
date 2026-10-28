@@ -3,8 +3,8 @@
 #include "features/content/ContentDependencyGraph.h"
 #include <QDir>
 #include <QFileInfo>
+#include <QHash>
 #include <QRegularExpression>
-#include <QSet>
 namespace studio {
 static QVariantMap issue(const QString &category, const QString &message, const QString &path = {}) {
     return {{"category", category}, {"message", message}, {"relativePath", path}};
@@ -17,9 +17,10 @@ static QVariantList fixes(const ContentSnapshot &snapshot, const QVariantMap &ro
     QVariantList result;
     for (const auto &kind : kinds)
         result << QVariantMap{{"kind", kind},
-                              {"label", kind == "enable"    ? "Enable"
-                                        : kind == "disable" ? "Disable"
-                                                            : "Remove"},
+                              {"label", kind == "review-dependencies" ? "Review"
+                                        : kind == "enable"            ? "Enable"
+                                        : kind == "disable"           ? "Disable"
+                                                                      : "Remove"},
                               {"pack", QVariantMap{{"path", snapshot.pack.value("path")},
                                                    {"minecraft", snapshot.pack.value("minecraft")},
                                                    {"loader", snapshot.pack.value("loader")}}},
@@ -27,10 +28,12 @@ static QVariantList fixes(const ContentSnapshot &snapshot, const QVariantMap &ro
                               {"sha1", row.value("sha1")}};
     return result;
 }
-class DisabledRequiredContentRule final : public IDiagnosticRule {
+class RequiredContentRule final : public IDiagnosticRule {
+  public:
     QVariantList evaluate(const ContentSnapshot &snapshot) const override {
         QVariantList result;
-        for (const auto &value : ContentDependencyGraph(snapshot.files).disabledRequirements()) {
+        const ContentDependencyGraph graph(snapshot.files);
+        for (const auto &value : graph.disabledRequirements()) {
             const auto relation = value.toMap();
             const auto row = relation.value("dependency").toMap();
             auto entry =
@@ -40,6 +43,31 @@ class DisabledRequiredContentRule final : public IDiagnosticRule {
                       row.value("relativePath").toString());
             entry["code"] = "disabled-required-content";
             entry["fixes"] = fixes(snapshot, row, {"enable"});
+            result << entry;
+        }
+        QHash<QString, QVariantMap> parents;
+        QStringList order;
+        QHash<QString, int> counts;
+        for (const auto &value : graph.missingRequirements()) {
+            const auto row = value.toMap().value("parent").toMap();
+            const auto path = row.value("relativePath").toString();
+            if (!parents.contains(path)) {
+                parents.insert(path, row);
+                order << path;
+            }
+            ++counts[path];
+        }
+        for (const auto &path : order) {
+            const auto row = parents.value(path);
+            const auto count = counts.value(path);
+            auto entry =
+                issue("missing",
+                      row.value("title", row.value("fileName")).toString() +
+                          (count == 1 ? " has a missing required dependency."
+                                      : " has " + QString::number(count) + " missing required dependencies."),
+                      path);
+            entry["code"] = "missing-required-content";
+            entry["fixes"] = fixes(snapshot, row, {"review-dependencies"});
             result << entry;
         }
         return result;
@@ -70,6 +98,7 @@ class DuplicateModRule final : public IDiagnosticRule {
     }
 };
 class LoaderCompatibilityRule final : public IDiagnosticRule {
+  public:
     QVariantList evaluate(const ContentSnapshot &snapshot) const override {
         QVariantList result;
         const auto loader = snapshot.pack.value("loader").toString().toLower();
@@ -113,10 +142,7 @@ class LoaderCompatibilityRule final : public IDiagnosticRule {
 class ManagedPinRule final : public IDiagnosticRule {
     QVariantList evaluate(const ContentSnapshot &snapshot) const override {
         QVariantList result;
-        QSet<QString> projects;
         const auto mods = snapshot.pack.value("mods").toList();
-        for (const auto &item : mods)
-            projects.insert(item.toMap().value("projectId").toString());
         for (const auto &item : mods) {
             const auto pin = item.toMap();
             const auto path = pin.value("installPath").toString();
@@ -130,14 +156,6 @@ class ManagedPinRule final : public IDiagnosticRule {
                 (!loaders.isEmpty() && !loaders.contains(snapshot.pack.value("loader").toString())))
                 result.append(
                     issue("loader", title + " is pinned for a different Minecraft version or loader.", path));
-            for (const auto &dep : pin.value("dependencyRefs").toList()) {
-                const auto dependency = dep.toMap();
-                const auto id = dependency.value("project_id").toString();
-                if (dependency.value("dependency_type") == "required" && !id.isEmpty() &&
-                    !projects.contains(id))
-                    result.append(issue("missing",
-                                        title + ": required pinned dependency " + id + " is missing.", path));
-            }
         }
         return result;
     }
@@ -177,11 +195,16 @@ class ScanCoverageRule final : public IDiagnosticRule {
         return result;
     }
 };
+QVariantList actionableContentIssues(const ContentSnapshot &snapshot) {
+    RequiredContentRule required;
+    LoaderCompatibilityRule loader;
+    return required.evaluate(snapshot) + loader.evaluate(snapshot);
+}
 std::vector<std::unique_ptr<IDiagnosticRule>> defaultDiagnosticRules() {
     std::vector<std::unique_ptr<IDiagnosticRule>> result;
     result.emplace_back(std::make_unique<DuplicateModRule>());
     result.emplace_back(std::make_unique<LoaderCompatibilityRule>());
-    result.emplace_back(std::make_unique<DisabledRequiredContentRule>());
+    result.emplace_back(std::make_unique<RequiredContentRule>());
     result.emplace_back(std::make_unique<ManagedPinRule>());
     result.emplace_back(std::make_unique<OrphanConfigRule>());
     result.emplace_back(std::make_unique<ScanCoverageRule>());

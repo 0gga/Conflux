@@ -13,7 +13,9 @@ Item {
     readonly property var workspace: session.workspace
     readonly property var route: session.navigation.route
     readonly property string section: route.section || "content"
-    readonly property var visibleIssues: workspace.issues.filter(function(issue) { return root.session.warnings.enabledCategories.indexOf(issue.category) !== -1 })
+    readonly property var visibleIssues: workspace.issues.filter(function(issue) {
+        return ["incompatible-loader", "disabled-required-content", "missing-required-content"].indexOf(issue.code) === -1 && issue.category !== "bridge"
+    }).concat(session.content.diagnosticIssues || []).filter(function(issue) { return root.session.warnings.enabledCategories.indexOf(issue.category) !== -1 })
     signal createRequested()
     signal discoverRequested()
     signal sectionRequested(string key)

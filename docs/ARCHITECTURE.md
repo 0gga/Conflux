@@ -518,3 +518,8 @@ Titles, words and details are normalized once per rebuilt snapshot. Exact title,
 Selected identity belongs to the model, separately from positional ListView selection. Metadata changes preserve its stable key. If the chosen result disappears, Enter rejects rather than activating a replacement; explicit movement or a new query establishes selection again. Queries reset to the first match. QML keeps input drafts independent of result publication, restores the previous eligible focus on dismissal, and preserves unsaved-guard focus after activation. Rejected stale activation resets its presentation flag. The shared SearchField is explicitly qualified to avoid Qt6.10 Controls' similarly named type.
 
 This is the first local PW-09 slice. Explicit online lookup, full-text file search and configurable keymaps remain separate planned work.
+
+
+## Diagnostic snapshot storage sharing
+
+ContentActions.diagnosticIssues retains the latest m_rows list even when a refresh produces equal values in new storage. Semantic row/context changes still recompute the pure diagnostics; an equal refresh preserves the cached output and shares the new input storage so following reads use QList's shared-data equality shortcut. This removes repeated full-inventory comparisons after an unchanged refresh while keeping captured file/loader descriptors current. The existing ContentViewIndex already uses a shared-list identity guard.

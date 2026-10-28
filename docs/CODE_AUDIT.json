@@ -284,7 +284,7 @@
     },
     "src/features/content/ContentActions.cpp": {
       "phase": "non-ui",
-      "sha256": "ccf93da26b6f92c31c30223b5d41906f4bee84fbb6f06291db05d99e334e0986",
+      "sha256": "059096440ebf05d08a403513042e5d14771e9d113cf236d0659ccffcdc07d38b",
       "status": "reviewed",
       "checks": [
         "Complete1100-line coordinator reviewed: captured context, metadata/update generations, literal filtered index, lock preferences/source state, optimistic projection, claims, queue/history and per-item installation",
@@ -293,7 +293,8 @@
         "Context/filter-reset and refresh/busy notifications revalidate captured lifetime/generation before continuing publication or worker dispatch. Original2 redundant-read failures and2 disposal access violations reproduced;142 content-action outcomes pass. Remaining queue/history/metadata continuations remain AUD-07.",
         "27 October2026 scoped progress:1000 broad notifications/1033ms for3000 rows reproduced, same-storage replacement-owner stale notification plus access violation reproduced. QPointer protects the original owner and statusChanged scopes busy/cancellable/activity/activityText. Initial cancellation-notify omission reproduced/corrected. Final4 filtering/5 action outcomes pass with zero broad notifications, below1ms bursts, phase notifications and safe late completion; remaining AUD-07 continuations stay pending.",
         "27 October2026 actionable diagnostics: exact required/disabled graph policy, typed original-instance commands,21 native success/lock/stale/external-change cases and620/320px action containment pass; all51 Release suites pass. Exhaustive measured/UI audit remains open.",
-        "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open."
+        "28 October2026 explicit required dependency review and indexed pure diagnostic snapshot: provider namespaces/verified parents, disabled-vs-missing, original-instance/locked-parent review, prompt-setting independence and scaled shared overlay verified. Real JAR/native Enable integration and memoized getters pass; full run50/51 passed with snapshot budget miss retained, isolated/full-pipeline reruns pass. Exhaustive coverage/UI phase remains open.",
+        "28 October2026 equal-valued refresh regression: identical values/distinct storage reproduced84/826ms for1000 reads at310/3000 rows, fixed1/11ms, unchanged diagnostics/no notifications/provider calls and real file/context invalidation pass. All53 Release suites pass222.20s; measured100% remains open."
       ],
       "findings": [
         "AUD-07",

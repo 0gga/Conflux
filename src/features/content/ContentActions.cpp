@@ -405,10 +405,12 @@ QVariantList ContentActions::diagnosticIssues() const {
         snapshot.pack = context;
         snapshot.files = m_rows;
         m_diagnosticIssues = actionableContentIssues(snapshot);
-        m_diagnosticRows = m_rows;
         m_diagnosticContext = context;
         m_diagnosticsReady = true;
     }
+    // Equal-valued refreshes can replace storage. Share the newest list so later
+    // reads use QList's constant-time shared-data equality check.
+    m_diagnosticRows = m_rows;
     return m_diagnosticIssues;
 }
 void ContentActions::syncVisibleRows() {

@@ -278,3 +278,14 @@ Final backend18/UI5 outcomes pass, counts include init/cleanup. Tests cover exac
 Artifacts: command-palette-{first-unit,first-ui,unit,ui}-tests.txt, command-palette-selection-reset-repro.txt, command-palette-{pre-lazy,pre-selection,release}-tests.log, command-palette-lint.log and command-palette-*.png. Online search, broader file content indexing and customizable keymaps remain PW-09 work.
 
 Palette delivery28 October2026: packaged smoke passes without Qt on PATH. All1405 deployed files match build SHA256`816D83E41B62B7290058DE19AE0D7796A9D1E916CB9BFF5727F1CB4CF6A57D59`; native PID3188 responds minimized on non-primary DISPLAY2. Narrow native-open and wider deployment foreground comparisons both pass.
+
+
+## Equal-valued diagnostic refresh performance
+
+28 October2026: an equal-valued refresh replaced the inventory's list storage while the diagnostic cache retained its old list. Each later diagnostic getter repeated a complete semantic comparison. A pre-fix benchmark reproduces84ms/826ms for1000 reads at310/3000 rows; the large case fails the unchanged250ms budget (3pass/1fail receipt retained). The cache now retains the current shared list even on a semantic cache hit. Following reads take1ms/11ms on the same final fixtures.
+
+The test asserts that refresh values are identical but storage differs, compares every returned warning, and verifies zero publication or provider-identify/update calls during the reads. A separate file/compatibility test proves real loader metadata and pack-loader changes still invalidate output and captured descriptors. Focused5 outcomes pass, including init/cleanup. All53 Release suites pass222.20s; ContentActions has170 passing outcomes. Formatting/UTF8/diff checks pass. QML is unchanged from the linted command-palette delivery; no fresh QML lint or full instrumented percentage is claimed. Source reviews remain183/183;108 exhaustive UI entries pending.
+
+Artifacts: diagnostic-sharing-before.txt, diagnostic-sharing-after.txt and diagnostic-sharing-release-tests.log. This fixes the memoized diagnostic-read workload; the earlier NativeContentStore filesystem timing-variance follow-up remains separate.
+
+Diagnostic-sharing delivery28 October2026: standalone packaged smoke without Qt on PATH passes; all1405 deployed files match SHA256`DAD306846F43C94F073FF20D3028012968FAB0653A33B15F038B71AC6318D626`. Native PID2500 responds minimized on non-primary DISPLAY2; narrow/wider foreground checks both pass.

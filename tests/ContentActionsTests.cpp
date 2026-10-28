@@ -92,6 +92,97 @@ class ContentActionsTests : public QObject {
                 {"updateRelease", next.toVariant()}};
     }
   private slots:
+    void equalValuedRefreshKeepsDiagnosticReadsConstant_data() {
+        QTest::addColumn<int>("count");
+        QTest::newRow("owner-sized-310") << 310;
+        QTest::newRow("large-3000") << 3000;
+    }
+    void equalValuedRefreshKeepsDiagnosticReadsConstant() {
+        QFETCH(int, count);
+        QTemporaryDir temp;
+        auto catalogue = std::make_shared<ContentCatalogueFixture>();
+        ContentActions content(std::make_shared<ContentFileFixture>(), catalogue,
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        QVariantList rows;
+        for (int i = 0; i < count; ++i) {
+            auto item = row("Mod " + QString::number(i), "Author");
+            item["sha1"] = hash(QByteArray::number(i));
+            item["loaders"] = QStringList{"neoforge"};
+            rows << item;
+        }
+        const QVariantMap pack{{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "fabric"}};
+        content.setContext(pack, rows);
+        QTRY_VERIFY(!content.busy());
+        const auto before = content.inventory();
+        const auto expected = content.diagnosticIssues();
+        QCOMPARE(expected.size(), count);
+        catalogue->metadataTransform = [](const QVariantList &source) {
+            QVariantList result;
+            for (const auto &value : source) {
+                QVariantMap copy;
+                const auto item = value.toMap();
+                for (auto it = item.cbegin(); it != item.cend(); ++it)
+                    copy.insert(it.key(), it.value());
+                result << copy;
+            }
+            return result;
+        };
+        content.refresh(false);
+        QTRY_VERIFY(!content.busy());
+        const auto after = content.inventory();
+        QCOMPARE(after, before);
+        QVERIFY(!after.isSharedWith(before));
+        const auto identified = catalogue->identifyCount, refreshed = catalogue->refreshCount;
+        QSignalSpy published(&content, &ContentActions::changed);
+        QElapsedTimer timer;
+        timer.start();
+        for (int i = 0; i < 1000; ++i)
+            QCOMPARE(content.diagnosticIssues(), expected);
+        const auto elapsed = timer.elapsed();
+        qInfo() << "Equal-valued diagnostic refresh rows/1000 reads ms" << count << elapsed;
+        QCOMPARE(published.size(), 0);
+        QCOMPARE(catalogue->identifyCount, identified);
+        QCOMPARE(catalogue->refreshCount, refreshed);
+        QVERIFY2(
+            test_performance::releaseBudgetMet(elapsed, 250),
+            qPrintable(
+                QString("Diagnostic reads took %1ms after %2 equal-valued rows").arg(elapsed).arg(count)));
+    }
+    void diagnosticCacheInvalidatesForFileAndCompatibilityChanges() {
+        QTemporaryDir temp;
+        ContentActions content(std::make_shared<ContentFileFixture>(),
+                               std::make_shared<ContentCatalogueFixture>(),
+                               std::make_shared<ContentInstallerFixture>(),
+                               std::make_shared<SettingsContentPreferences>(temp.path() + "/prefs.ini"));
+        auto item = row("Mod", "Author");
+        item["sha1"] = hash("original");
+        item["loaders"] = QStringList{"neoforge"};
+        QVariantMap pack{{"path", temp.path()}, {"minecraft", "1.21.1"}, {"loader", "fabric"}};
+        content.setContext(pack, {item});
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(content.diagnosticIssues().size(), 1);
+        item["loaders"] = QStringList{"fabric"};
+        content.setContext(pack, {item}, true);
+        QTRY_VERIFY(!content.busy());
+        QVERIFY(content.diagnosticIssues().isEmpty());
+        pack["loader"] = "neoforge";
+        content.setContext(pack, {item}, true);
+        QTRY_VERIFY(!content.busy());
+        QCOMPARE(content.diagnosticIssues().size(), 1);
+        QCOMPARE(content.diagnosticIssues()
+                     .first()
+                     .toMap()
+                     .value("fixes")
+                     .toList()
+                     .first()
+                     .toMap()
+                     .value("pack")
+                     .toMap()
+                     .value("loader")
+                     .toString(),
+                 QString("neoforge"));
+    }
     void dependencyReviewCapturesOriginalInstanceWithoutChangingLockedParent() {
         QTemporaryDir temp;
         auto installer = std::make_shared<ContentInstallerFixture>();
